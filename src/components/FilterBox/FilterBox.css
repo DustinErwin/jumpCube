@@ -1,0 +1,26 @@
+.filterBox {
+  display: flex;
+  gap: 40px;
+  padding: 20px;
+  background: #1a1a1a;
+  border-radius: 12px;
+  margin-bottom: 20px;
+}
+
+.filterSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filterSection h3 {
+  margin: 0 0 8px;
+  color: white;
+}
+
+.filterSection label {
+  color: #ddd;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
