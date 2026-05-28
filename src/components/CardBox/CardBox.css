@@ -1,23 +1,24 @@
 .cardGrid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 150px));
+  justify-content: center;
+  gap: 18px;
   padding: 20px;
   max-width: 1100px;
   margin: 0 auto;
 }
 
 .cardBox {
-  background: #1b1b1b;
-  border: 1px solid #333;
-  border-radius: 12px;
-  padding: 8px;
-  text-align: center;
+  position: relative;
+  width: 150px;
+  overflow: hidden;
 }
 
-.cardImage {
+.cardBox img {
   width: 100%;
-  border-radius: 8px;
+  height: auto;
+  display: block;
+  border-radius: 12px;
 }
 
 .cardName {
@@ -30,4 +31,16 @@
   margin: 0;
   font-size: 0.8rem;
   color: #aaa;
+}
+
+.cardPreview {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.cardPreview img {
+  width: 360px;
+  border-radius: 16px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.85);
 }

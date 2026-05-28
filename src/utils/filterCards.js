@@ -32,13 +32,16 @@ export function filterCards({
         matchesFormat(card, formats)
       );
     })
-    .slice(0, 50);
+    .slice(0, 200);
 }
 
 function matchesFormat(card, formats) {
   if (formats.length === 0) return true;
 
-  return formats.some((format) => card.legalities?.[format] === "legal");
+  return formats.some((format) => {
+    const key = format.toLowerCase();
+    return card.legalities?.[key] === "legal";
+  });
 }
 
 function matchesRarity(card, rarities) {
@@ -66,14 +69,16 @@ function matchesType(card, types) {
 
   const typeLine = card.type_line?.toLowerCase() || "";
 
-  return types.some((type) => typeLine.includes(type.toLowerCase()));
+  return types.every((type) => typeLine.includes(type.toLowerCase()));
 }
 
 function matchesManaValue(card, manaValues) {
   if (manaValues.length === 0) return true;
 
   return manaValues.some((mv) =>
-    mv === "7" ? Number(card.cmc) >= 7 : Number(card.cmc) === Number(mv),
+    mv === "7"
+      ? Number(card.mana_value) >= 7
+      : Number(card.mana_value) === Number(mv),
   );
 }
 
@@ -82,13 +87,20 @@ function matchesColor(card, colors, colorMode) {
 
   const cardColors = card.colors || [];
 
-  return colors.some((color) => {
-    if (color === "C") {
-      return cardColors.length === 0;
+  if (colors.includes("C")) {
+    if (colorMode === "and") {
+      return colors.length === 1 && cardColors.length === 0;
     }
 
-    return colorMode === "inclusive"
-      ? cardColors.includes(color)
-      : cardColors.length === 1 && cardColors.includes(color);
-  });
+    return (
+      cardColors.length === 0 ||
+      colors.some((color) => cardColors.includes(color))
+    );
+  }
+
+  if (colorMode === "and") {
+    return colors.every((color) => cardColors.includes(color));
+  }
+
+  return colors.some((color) => cardColors.includes(color));
 }

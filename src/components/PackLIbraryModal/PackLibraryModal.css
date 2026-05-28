@@ -1,0 +1,106 @@
+.packModalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.packModal {
+  width: min(520px, 92vw);
+  max-height: 70vh;
+  background: #151515;
+  border: 1px solid #333;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.85);
+}
+
+.packModalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.packModalHeader h2 {
+  margin: 0;
+}
+
+.packModalHeader button {
+  background: #252525;
+  color: white;
+  border: 1px solid #444;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.2rem;
+}
+
+.packModalList {
+  max-height: 52vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.packModalItem {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  background: #202020;
+  border: 1px solid #333;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.packModalItem:hover {
+  background: #2b2b2b;
+}
+
+.packModalItem span {
+  display: block;
+  font-weight: 600;
+}
+
+.packModalItem small {
+  display: block;
+  color: #aaa;
+  margin-top: 4px;
+}
+
+.emptyPackList {
+  color: #aaa;
+}
+
+.packModalOpen {
+  flex: 1;
+  text-align: left;
+  padding: 10px;
+  background: transparent;
+  color: white;
+  border: 0;
+  cursor: pointer;
+}
+
+.packDeleteButton {
+  flex-shrink: 0;
+  padding: 0 12px;
+  background: #351818;
+  color: #ffb4b4;
+  border: 0;
+  cursor: pointer;
+  transition: 0.15s ease;
+}
+
+.packDeleteButton:hover {
+  background: #4a2020;
+}
+
+.packDeleteButton.confirming {
+  background: #7a1f1f;
+  color: white;
+  font-weight: 600;
+}

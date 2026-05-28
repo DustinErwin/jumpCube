@@ -1,4 +1,5 @@
 import "./FilterBox.css";
+import { useState } from "react";
 
 export default function FilterBox({
   manaValues,
@@ -7,8 +8,6 @@ export default function FilterBox({
   setColors,
   colorMode,
   setColorMode,
-  search,
-  updateResults,
   rarities,
   setRarities,
   types,
@@ -16,22 +15,14 @@ export default function FilterBox({
   formats,
   setFormats,
 }) {
+  const [isOpen, setIsOpen] = useState(false);
+
   function toggleFormat(value) {
     const updated = formats.includes(value)
       ? formats.filter((v) => v !== value)
       : [...formats, value];
 
     setFormats(updated);
-
-    updateResults(
-      search,
-      manaValues,
-      colors,
-      colorMode,
-      rarities,
-      types,
-      updated,
-    );
   }
 
   function toggleManaValue(value) {
@@ -40,8 +31,6 @@ export default function FilterBox({
       : [...manaValues, value];
 
     setManaValues(updated);
-
-    updateResults(search, updated, colors, colorMode, rarities);
   }
 
   function toggleColor(value) {
@@ -50,8 +39,6 @@ export default function FilterBox({
       : [...colors, value];
 
     setColors(updated);
-
-    updateResults(search, manaValues, updated, colorMode, rarities);
   }
 
   function toggleType(value) {
@@ -60,8 +47,6 @@ export default function FilterBox({
       : [...types, value];
 
     setTypes(updated);
-
-    updateResults(search, manaValues, colors, colorMode, rarities, updated);
   }
 
   function toggleRarity(value) {
@@ -70,147 +55,139 @@ export default function FilterBox({
       : [...rarities, value];
 
     setRarities(updated);
-
-    updateResults(search, manaValues, colors, colorMode, updated);
-  }
-
-  function handleColorModeChange(e) {
-    const value = e.target.value;
-
-    setColorMode(value);
-
-    updateResults(search, manaValues, colors, rarities, value);
   }
 
   return (
     <section className="filterBox">
-      <div className="filterSection">
-        <h3>Mana Value</h3>
+      <button className="filterToggle" onClick={() => setIsOpen(!isOpen)}>
+        {isOpen ? "Hide Filters ▲" : "Show Filters ▼"}
+      </button>
 
-        {[0, 1, 2, 3, 4, 5, 6, 7].map((mv) => (
-          <label key={mv}>
-            <input
-              type="checkbox"
-              checked={manaValues.includes(String(mv))}
-              onChange={() => toggleManaValue(String(mv))}
-            />
-            {mv === 7 ? "7+" : mv}
-          </label>
-        ))}
-      </div>
+      {isOpen && (
+        <div className="filterContent">
+          <div className="filterSection">
+            <h3>Mana Value</h3>
 
-      <div className="filterSection">
-        <h3>Color</h3>
+            {[0, 1, 2, 3, 4, 5, 6, 7].map((mv) => (
+              <label key={mv}>
+                <input
+                  type="checkbox"
+                  checked={manaValues.includes(String(mv))}
+                  onChange={() => toggleManaValue(String(mv))}
+                />
+                {mv === 7 ? "7+" : mv}
+              </label>
+            ))}
+          </div>
+          <div className="filterSection">
+            <h3>Color</h3>
 
-        {[
-          ["W", "White"],
-          ["U", "Blue"],
-          ["B", "Black"],
-          ["R", "Red"],
-          ["G", "Green"],
-          ["C", "Colorless"],
-        ].map(([value, label]) => (
-          <label key={value}>
-            <input
-              type="checkbox"
-              checked={colors.includes(value)}
-              onChange={() => toggleColor(value)}
-            />
-            {label}
-          </label>
-        ))}
-      </div>
+            {[
+              ["W", "White"],
+              ["U", "Blue"],
+              ["B", "Black"],
+              ["R", "Red"],
+              ["G", "Green"],
+              ["C", "Colorless"],
+            ].map(([value, label]) => (
+              <label key={value}>
+                <input
+                  type="checkbox"
+                  checked={colors.includes(value)}
+                  onChange={() => toggleColor(value)}
+                />
+                {label}
+              </label>
+            ))}
 
-      <div className="filterSection">
-        <h3>Color Match</h3>
+            <label className="colorModeOption">
+              <input
+                type="radio"
+                value="or"
+                checked={colorMode === "or"}
+                onChange={(e) => setColorMode(e.target.value)}
+              />
+              Or
+            </label>
 
-        <label>
-          <input
-            type="radio"
-            value="inclusive"
-            checked={colorMode === "inclusive"}
-            onChange={handleColorModeChange}
-          />
-          Inclusive
-        </label>
+            <label className="colorModeOption">
+              <input
+                type="radio"
+                value="and"
+                checked={colorMode === "and"}
+                onChange={(e) => setColorMode(e.target.value)}
+              />
+              And
+            </label>
+          </div>
+          <div className="filterSection">
+            <h3>Rarity</h3>
 
-        <label>
-          <input
-            type="radio"
-            value="exclusive"
-            checked={colorMode === "exclusive"}
-            onChange={handleColorModeChange}
-          />
-          Exclusive
-        </label>
-      </div>
+            {[
+              ["common", "Common"],
+              ["uncommon", "Uncommon"],
+              ["rare", "Rare"],
+              ["mythic", "Mythic"],
+            ].map(([value, label]) => (
+              <label key={value}>
+                <input
+                  type="checkbox"
+                  checked={rarities.includes(value)}
+                  onChange={() => toggleRarity(value)}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+          <div className="filterSection">
+            <h3>Type</h3>
 
-      <div className="filterSection">
-        <h3>Rarity</h3>
+            {[
+              "Creature",
+              "Artifact",
+              "Enchantment",
+              "Instant",
+              "Sorcery",
+              "Planeswalker",
+              "Land",
+              "Battle",
+              "Legendary",
+            ].map((type) => (
+              <label key={type}>
+                <input
+                  type="checkbox"
+                  checked={types.includes(type)}
+                  onChange={() => toggleType(type)}
+                />
+                {type}
+              </label>
+            ))}
+          </div>
+          <div className="filterSection">
+            <h3>Format Legal</h3>
 
-        {[
-          ["common", "Common"],
-          ["uncommon", "Uncommon"],
-          ["rare", "Rare"],
-          ["mythic", "Mythic"],
-        ].map(([value, label]) => (
-          <label key={value}>
-            <input
-              type="checkbox"
-              checked={rarities.includes(value)}
-              onChange={() => toggleRarity(value)}
-            />
-            {label}
-          </label>
-        ))}
-      </div>
-      <div className="filterSection">
-        <h3>Type</h3>
-
-        {[
-          "Creature",
-          "Artifact",
-          "Enchantment",
-          "Instant",
-          "Sorcery",
-          "Planeswalker",
-          "Land",
-          "Battle",
-          "Legendary",
-        ].map((type) => (
-          <label key={type}>
-            <input
-              type="checkbox"
-              checked={types.includes(type)}
-              onChange={() => toggleType(type)}
-            />
-            {type}
-          </label>
-        ))}
-      </div>
-      <div className="filterSection">
-        <h3>Format Legal</h3>
-
-        {[
-          ["standard", "Standard"],
-          ["pioneer", "Pioneer"],
-          ["modern", "Modern"],
-          ["legacy", "Legacy"],
-          ["vintage", "Vintage"],
-          ["commander", "Commander"],
-          ["pauper", "Pauper"],
-          ["brawl", "Brawl"],
-        ].map(([value, label]) => (
-          <label key={value}>
-            <input
-              type="checkbox"
-              checked={formats.includes(value)}
-              onChange={() => toggleFormat(value)}
-            />
-            {label}
-          </label>
-        ))}
-      </div>
+            {[
+              ["standard", "Standard"],
+              ["pioneer", "Pioneer"],
+              ["modern", "Modern"],
+              ["legacy", "Legacy"],
+              ["vintage", "Vintage"],
+              ["commander", "Commander"],
+              ["pauper", "Pauper"],
+              ["brawl", "Brawl"],
+            ].map(([value, label]) => (
+              <label key={value}>
+                <input
+                  type="checkbox"
+                  checked={formats.includes(value)}
+                  onChange={() => toggleFormat(value)}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

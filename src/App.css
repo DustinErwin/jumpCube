@@ -54,6 +54,21 @@
     transform: perspective(2000px) rotateZ(300deg) rotateX(40deg) rotateY(39deg)
       scale(0.8);
   }
+
+  .app {
+    padding-right: 320px;
+  }
+
+  .appLayout {
+    display: block;
+    gap: 24px;
+    align-items: flex-start;
+  }
+
+  .cardArea {
+    flex: 1;
+    width: 100%;
+  }
 }
 
 #center {

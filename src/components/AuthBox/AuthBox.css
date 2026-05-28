@@ -1,0 +1,23 @@
+.authBox {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.authBox input {
+  padding: 8px;
+  background: #202020;
+  color: white;
+  border: 1px solid #444;
+  border-radius: 8px;
+}
+
+.authBox button {
+  padding: 8px 10px;
+  background: #252525;
+  color: white;
+  border: 1px solid #444;
+  border-radius: 8px;
+  cursor: pointer;
+}
