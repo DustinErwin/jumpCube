@@ -2,10 +2,17 @@
   position: fixed;
   z-index: 9999;
   pointer-events: none;
+
+  display: flex;
+  gap: 12px;
 }
 
 .cardPreview img {
   width: 360px;
   border-radius: 16px;
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.85);
+}
+
+.cardPreview.hasBackFace {
+  align-items: flex-start;
 }

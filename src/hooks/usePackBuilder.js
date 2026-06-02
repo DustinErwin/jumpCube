@@ -79,7 +79,7 @@ export function usePackBuilder(user, refreshPacks) {
   }
 
   function newPack() {
-    setPackName("Current Pack");
+    setPackName("Unnamed Pack");
     setPackDescription("");
     setSelectedCards([]);
     setSavedPackId(null);
@@ -152,6 +152,65 @@ export function usePackBuilder(user, refreshPacks) {
     setTimeout(() => setSaveStatus(""), 2000);
   }
 
+  async function duplicatePack(packId) {
+    if (!packId || !user) return;
+
+    const { data: originalPack, error: packError } = await supabase
+      .from("packs")
+      .select("*")
+      .eq("id", packId)
+      .single();
+
+    if (packError) {
+      console.error("Error loading pack to duplicate:", packError);
+      return;
+    }
+
+    const { data: originalCards, error: cardsError } = await supabase
+      .from("pack_cards")
+      .select("card_id, quantity")
+      .eq("pack_id", packId);
+
+    if (cardsError) {
+      console.error("Error loading pack cards to duplicate:", cardsError);
+      return;
+    }
+
+    const { data: newPack, error: newPackError } = await supabase
+      .from("packs")
+      .insert({
+        name: `${originalPack.name} Copy`,
+        description: originalPack.description,
+        user_id: user.id,
+      })
+      .select()
+      .single();
+
+    if (newPackError) {
+      console.error("Error creating duplicate pack:", newPackError);
+      return;
+    }
+
+    const copiedCards = originalCards.map((card) => ({
+      pack_id: newPack.id,
+      card_id: card.card_id,
+      quantity: card.quantity,
+    }));
+
+    if (copiedCards.length > 0) {
+      const { error: insertCardsError } = await supabase
+        .from("pack_cards")
+        .insert(copiedCards);
+
+      if (insertCardsError) {
+        console.error("Error copying pack cards:", insertCardsError);
+        return;
+      }
+    }
+
+    await refreshPacks?.();
+  }
+
   async function deletePack(packId) {
     if (!packId) return;
 
@@ -163,6 +222,24 @@ export function usePackBuilder(user, refreshPacks) {
     }
 
     newPack();
+  }
+
+  function moveCard(draggedCardId, targetCardId) {
+    if (!draggedCardId || draggedCardId === targetCardId) return;
+
+    setSelectedCards((prev) => {
+      const draggedIndex = prev.findIndex((card) => card.id === draggedCardId);
+      const targetIndex = prev.findIndex((card) => card.id === targetCardId);
+
+      if (draggedIndex === -1 || targetIndex === -1) return prev;
+
+      const updated = [...prev];
+      const [draggedCard] = updated.splice(draggedIndex, 1);
+
+      updated.splice(targetIndex, 0, draggedCard);
+
+      return updated;
+    });
   }
 
   async function savePack() {
@@ -214,5 +291,7 @@ export function usePackBuilder(user, refreshPacks) {
     savePack,
     loadPack,
     deletePack,
+    duplicatePack,
+    moveCard,
   };
 }

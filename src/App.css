@@ -54,21 +54,57 @@
     transform: perspective(2000px) rotateZ(300deg) rotateX(40deg) rotateY(39deg)
       scale(0.8);
   }
+}
 
-  .app {
-    padding-right: 320px;
-  }
+/* APP BACKGROUND */
 
-  .appLayout {
-    display: block;
-    gap: 24px;
-    align-items: flex-start;
-  }
+.app {
+  min-height: 100vh;
+  position: relative;
+  background-color: #0b0d14;
+  color: white;
+}
 
-  .cardArea {
-    flex: 1;
-    width: 100%;
-  }
+/* frog background */
+.app::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+
+  background: url("/images/frogCube.png") center center / 620px no-repeat;
+
+  opacity: 0.12;
+  filter: blur(2px);
+
+  pointer-events: none;
+  z-index: 0;
+}
+
+.appLayout {
+  position: relative;
+  z-index: 1;
+
+  width: 100%;
+  min-height: calc(100vh - 58px);
+
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.cardArea {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  text-align: center;
+}
+/* keep content above background */
+
+.appLayout,
+.cardArea,
+.packBox,
+.navBar {
+  position: relative;
+  z-index: 1;
 }
 
 #center {
@@ -196,4 +232,10 @@
     right: 0;
     border-right-color: var(--border);
   }
+}
+
+.cardArea {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
 }

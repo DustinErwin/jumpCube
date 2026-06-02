@@ -7,8 +7,21 @@ export default function PackLibraryModal({
   onClose,
   onOpenPack,
   onDeletePack,
+  onDuplicatePack,
 }) {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [packSearch, setPackSearch] = useState("");
+
+  const filteredPacks = packs.filter((pack) => {
+    const query = packSearch.toLowerCase().trim();
+
+    if (!query) return true;
+
+    const name = pack.name?.toLowerCase() || "";
+    const description = pack.description?.toLowerCase() || "";
+
+    return name.includes(query) || description.includes(query);
+  });
 
   if (!isOpen) return null;
 
@@ -17,15 +30,21 @@ export default function PackLibraryModal({
       <div className="packModal" onClick={(e) => e.stopPropagation()}>
         <div className="packModalHeader">
           <h2>My Packs</h2>
-
+          <input
+            className="packSearchInput"
+            type="text"
+            placeholder="Search packs..."
+            value={packSearch}
+            onChange={(e) => setPackSearch(e.target.value)}
+          />
           <button onClick={onClose}>×</button>
         </div>
 
-        {packs.length === 0 ? (
+        {filteredPacks.length === 0 ? (
           <p className="emptyPackList">No saved packs yet.</p>
         ) : (
           <div className="packModalList">
-            {packs.map((pack) => (
+            {filteredPacks.map((pack) => (
               <div className="packModalItem" key={pack.id}>
                 <button
                   className="packModalOpen"
@@ -35,7 +54,12 @@ export default function PackLibraryModal({
 
                   <small>{pack.description || "No description"}</small>
                 </button>
-
+                <button
+                  className="packDuplicateButton"
+                  onClick={() => onDuplicatePack(pack.id)}
+                >
+                  Duplicate
+                </button>
                 <button
                   className={`packDeleteButton ${
                     confirmDeleteId === pack.id ? "confirming" : ""

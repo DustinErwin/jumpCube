@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import CardPreview from "../CardPreview/CardPreview";
 import { useCardPreview } from "../../hooks/useCardPreview";
 import "./PackBox.css";
@@ -17,10 +17,22 @@ export default function PackBox({
   saveStatus,
   showRenameChoice,
   pendingSaveAction,
+  moveCard,
+  isDraggingCard,
+  setIsDraggingCard,
+  isOpen,
+  setIsOpen,
 }) {
+  // Drag state constants
+  const [draggedCardId, setDraggedCardId] = useState(null);
+  const [dragOverCardId, setDragOverCardId] = useState(null);
+  const [suppressStackHover, setSuppressStackHover] = useState(false);
+  const droppedInsidePackRef = useRef(false);
+  const [isDragOverPack, setIsDragOverPack] = useState(false);
+
   const [editingName, setEditingName] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
-  const [showManaCurve, setShowManaCurve] = useState(false);
+  // const [showManaCurve, setShowManaCurve] = useState(false);
   const { preview, startPreview, movePreview, stopPreview } =
     useCardPreview(250);
 
@@ -29,8 +41,68 @@ export default function PackBox({
     0,
   );
 
+  const packColorIdentity = [
+    ...new Set(selectedCards.flatMap((card) => card.color_identity || [])),
+  ];
+
+  const colorOrder = ["W", "U", "B", "R", "G"];
+
+  const sortedPackColors = colorOrder.filter((color) =>
+    packColorIdentity.includes(color),
+  );
+
+  const displayedCards = selectedCards.flatMap((card) =>
+    Array.from({ length: card.quantity }, (_, index) => ({
+      ...card,
+      stackId: `${card.id}-${index}`,
+      copyNumber: index + 1,
+    })),
+  );
+
+  function getManaClass(color) {
+    const classes = {
+      W: "ms-w",
+      U: "ms-u",
+      B: "ms-b",
+      R: "ms-r",
+      G: "ms-g",
+      C: "ms-c",
+    };
+
+    return classes[color] || "";
+  }
   return (
-    <aside className="packBox">
+    <aside
+      className={`packBox 
+        ${isDragOverPack ? "dragOverPack" : ""}
+        ${isDraggingCard ? "isDragging" : ""}
+        ${isOpen ? "open" : "closed"}
+        ${suppressStackHover ? "suppressStackHover" : ""}`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setSuppressStackHover(true);
+      }}
+      onDragLeave={() => {
+        setIsDragOverPack(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setSuppressStackHover(false);
+
+        const cardData = e.dataTransfer.getData("application/json");
+
+        if (!cardData) return;
+
+        addCard(JSON.parse(cardData));
+      }}
+    >
+      <button
+        className="packBoxToggle"
+        onClick={() => setIsOpen((prev) => !prev)}
+        title={isOpen ? "Hide pack" : "Show pack"}
+      >
+        {isOpen ? "›" : "‹"}
+      </button>
       {editingName ? (
         <input
           className="packNameInput"
@@ -69,8 +141,64 @@ export default function PackBox({
           )}
         </p>
       )}
+      <div className="packMetadata">
+        <div className="packColorIdentity">
+          {sortedPackColors.length === 0 ? (
+            <i className="ms ms-c manaSymbol manaSymbolC" title="Colorless" />
+          ) : (
+            sortedPackColors.map((color) => (
+              <i
+                className={`ms ${getManaClass(color)} manaSymbol manaSymbol${color}`}
+                key={color}
+                title={color}
+              />
+            ))
+          )}
+        </div>
+      </div>
       <p className="packCount">{totalCards} cards selected</p>
       <button
+        className={`savePackButton ${saveStatus === "saving" ? "saving" : ""}`}
+        onClick={savePack}
+        disabled={selectedCards.length === 0 || saveStatus === "saving"}
+      >
+        {saveStatus === "saving" ? "Saving..." : "Save Pack"}
+      </button>
+
+      {saveStatus === "saved" && (
+        <p className="saveMessage success">Pack saved ✓</p>
+      )}
+
+      {saveStatus === "error" && (
+        <p className="saveMessage error">Save failed</p>
+      )}
+      {showRenameChoice && (
+        <div className="renameChoiceBox">
+          <p className="renameTitle">Pack name changed</p>
+
+          <p className="renameText">
+            Update existing pack or create a new version?
+          </p>
+
+          <button
+            className="renameButton"
+            onClick={pendingSaveAction?.renameExisting}
+          >
+            Update Existing
+          </button>
+
+          <button
+            className="renameButton secondary"
+            onClick={pendingSaveAction?.saveAsNew}
+          >
+            Save As New
+          </button>
+        </div>
+      )}
+      <button className="newPackButton" onClick={newPack}>
+        New Pack
+      </button>
+      {/* <button
         className="manaCurveToggle"
         onClick={() => setShowManaCurve((prev) => !prev)}
       >
@@ -117,81 +245,97 @@ export default function PackBox({
             );
           })}
         </div>
-      )}
-      {selectedCards.length === 0 ? (
-        <p className="emptyPack">Click cards to add them here.</p>
-      ) : (
-        <div className="packList">
-          {selectedCards.map((card) => (
-            <div
-              className="packCard"
-              key={card.id}
-              onMouseEnter={(e) => startPreview(card, e)}
-              onMouseMove={movePreview}
-              onMouseLeave={stopPreview}
-            >
-              <img src={card.image_url} alt={card.name} />
+      )} */}
+      <div className="packCardScrollArea">
+        {selectedCards.length === 0 ? (
+          <p className="emptyPack">Click cards to add them here.</p>
+        ) : (
+          <div className="stackedPackCards">
+            {displayedCards.map((card) => (
+              <div
+                className={`stackedPackCard ${
+                  dragOverCardId === card.id ? "dragOver" : ""
+                }`}
+                key={card.stackId}
+                draggable
+                onDragStart={(e) => {
+                  setDraggedCardId(card.id);
+                  setSuppressStackHover(true);
 
-              <div>
-                <p className="packCardName">{card.name}</p>
-                <p className="packQuantity">Qty: {card.quantity}</p>
+                  droppedInsidePackRef.current = false;
 
-                <div className="packButtons">
-                  <button onClick={() => decreaseCardQuantity(card.id)}>
-                    -
-                  </button>
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/pack-card", String(card.id));
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOverCardId(card.id);
+                }}
+                onDragLeave={() => setDragOverCardId(null)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setSuppressStackHover(false);
+                  droppedInsidePackRef.current = true;
 
-                  <button onClick={() => addCard(card)}>+</button>
+                  const internalPackCard =
+                    e.dataTransfer.getData("text/pack-card");
+                  if (internalPackCard) return;
 
-                  <button onClick={() => removeCard(card.id)}>Remove</button>
-                </div>
+                  const cardData = e.dataTransfer.getData("application/json");
+                  if (!cardData) return;
+
+                  addCard(JSON.parse(cardData));
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  droppedInsidePackRef.current = true;
+
+                  const internalPackCard =
+                    e.dataTransfer.getData("text/pack-card");
+                  const externalCardData =
+                    e.dataTransfer.getData("application/json");
+
+                  // Reordering an existing card already in the pack
+                  if (internalPackCard) {
+                    moveCard(draggedCardId, card.id);
+                    setDraggedCardId(null);
+                    setDragOverCardId(null);
+                    setSuppressStackHover(false);
+                    return;
+                  }
+
+                  // Dragging a card from the search/card grid into the pack
+                  if (externalCardData) {
+                    addCard(JSON.parse(externalCardData));
+                    setDraggedCardId(null);
+                    setDragOverCardId(null);
+                    setSuppressStackHover(false);
+                    return;
+                  }
+                }}
+                onDragEnd={() => {
+                  if (!droppedInsidePackRef.current) {
+                    decreaseCardQuantity(card.id);
+                  }
+
+                  droppedInsidePackRef.current = false;
+                  setDraggedCardId(null);
+                  setDragOverCardId(null);
+                  setSuppressStackHover(false);
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  decreaseCardQuantity(card.id);
+                }}
+              >
+                <img src={card.image_url} alt={card.name} />
               </div>
-            </div>
-          ))}
-          <button
-            className={`savePackButton ${saveStatus === "saving" ? "saving" : ""}`}
-            onClick={savePack}
-            disabled={selectedCards.length === 0 || saveStatus === "saving"}
-          >
-            {saveStatus === "saving" ? "Saving..." : "Save Pack"}
-          </button>
-
-          {saveStatus === "saved" && (
-            <p className="saveMessage success">Pack saved ✓</p>
-          )}
-
-          {saveStatus === "error" && (
-            <p className="saveMessage error">Save failed</p>
-          )}
-          {showRenameChoice && (
-            <div className="renameChoiceBox">
-              <p className="renameTitle">Pack name changed</p>
-
-              <p className="renameText">
-                Update existing pack or create a new version?
-              </p>
-
-              <button
-                className="renameButton"
-                onClick={pendingSaveAction?.renameExisting}
-              >
-                Update Existing
-              </button>
-
-              <button
-                className="renameButton secondary"
-                onClick={pendingSaveAction?.saveAsNew}
-              >
-                Save As New
-              </button>
-            </div>
-          )}
-          <button className="newPackButton" onClick={newPack}>
-            New Pack
-          </button>
-        </div>
-      )}
-      <CardPreview preview={preview} />
+            ))}
+          </div>
+        )}
+      </div>
+      {!isDraggingCard && <CardPreview preview={preview} />}
     </aside>
   );
 }

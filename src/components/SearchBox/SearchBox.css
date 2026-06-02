@@ -1,3 +1,15 @@
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(100%, 520px);
+}
+
 .searchInput {
-  width: 18%;
+  min-width: 0;
+  flex: 1;
+}
+
+.searchButton {
+  flex: 0 0 auto;
 }

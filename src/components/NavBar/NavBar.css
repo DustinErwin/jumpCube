@@ -1,0 +1,77 @@
+.navBar {
+  position: sticky;
+  top: 0;
+  z-index: 9000;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  box-sizing: border-box;
+  height: 58px;
+  padding: 10px 22px;
+  background: rgba(15, 15, 18, 0.92);
+  border-bottom: 1px solid #333;
+  backdrop-filter: blur(10px);
+}
+
+.navBrand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.navBrand img {
+  width: 42px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 10px;
+  opacity: 0.9;
+}
+
+.navBrand h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.navActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.navUser {
+  color: #aaa;
+  font-size: 0.85rem;
+}
+
+.navActions button {
+  padding: 7px 10px;
+  background: #252525;
+  color: white;
+  border: 1px solid #444;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.navBrand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: white;
+  text-decoration: none;
+}
+
+.navLoginButton {
+  padding: 7px 12px;
+  background: #252525;
+  color: white;
+  border: 1px solid #444;
+  border-radius: 8px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.navLoginButton:hover {
+  background: #303030;
+}

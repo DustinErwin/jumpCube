@@ -69,3 +69,176 @@
   margin: 0;
   flex-shrink: 0;
 }
+
+.setFilterSection {
+  min-width: 220px;
+}
+
+.setSymbolFallback {
+  width: 22px;
+  font-size: 0.65rem;
+  color: #aaa;
+  text-transform: uppercase;
+}
+.setName {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.compactFilterBox {
+  margin: 10px auto 16px;
+  max-width: 1100px;
+}
+
+.filterChipBar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filterChipWrap {
+  position: relative;
+}
+
+.filterChip,
+.clearFiltersButton {
+  padding: 7px 10px;
+
+  background: #202020;
+  color: white;
+
+  border: 1px solid #444;
+  border-radius: 999px;
+
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+
+  transition:
+    background 0.12s ease,
+    transform 0.08s ease,
+    border-color 0.12s ease;
+}
+
+.filterChip:hover,
+.clearFiltersButton:hover {
+  background: #2a2a2a;
+  border-color: #666;
+}
+
+.filterChip:active,
+.clearFiltersButton:active {
+  transform: translateY(1px) scale(0.97);
+}
+
+.filterChip.active {
+  background: #243343;
+  border-color: #6aa4d8;
+}
+
+.filterDropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+
+  min-width: 180px;
+
+  padding: 10px;
+
+  background: #151515;
+  border: 1px solid #333;
+  border-radius: 12px;
+
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.65);
+
+  z-index: 5000;
+}
+
+.filterOptionsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(60px, 1fr));
+  gap: 6px 10px;
+}
+
+.filterOptionsList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.filterOption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  color: #ddd;
+  font-size: 0.85rem;
+  white-space: nowrap;
+
+  cursor: pointer;
+}
+
+.colorModeOptions {
+  margin-top: 10px;
+  padding-top: 8px;
+
+  border-top: 1px solid #333;
+
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+
+  color: #ddd;
+  font-size: 0.85rem;
+}
+
+.setDropdown {
+  width: 320px;
+}
+
+.setFilterList {
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 4px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.setFilterOption {
+  display: grid;
+  grid-template-columns: 18px 22px 1fr;
+  align-items: center;
+  gap: 7px;
+
+  color: #ddd;
+  font-size: 0.82rem;
+  line-height: 1.2;
+
+  cursor: pointer;
+}
+
+.setSymbol {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  display: block;
+
+  filter: brightness(0) invert(1);
+  opacity: 0.9;
+}
+
+.setName {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.clearFiltersButton {
+  color: #ccc;
+}

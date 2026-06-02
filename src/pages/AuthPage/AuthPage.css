@@ -1,0 +1,118 @@
+.authPage {
+  min-height: calc(100vh - 64px);
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+}
+
+.authCard {
+  width: min(420px, 100%);
+  padding: 28px;
+  background: rgba(18, 20, 25, 0.94);
+  border: 1px solid #343941;
+  border-radius: 18px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+.authBackLink {
+  color: #aab3c0;
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.authMascot {
+  display: block;
+  width: 92px;
+  margin: 12px auto 8px;
+  border-radius: 16px;
+}
+
+.authCard h1 {
+  margin: 8px 0;
+  text-align: center;
+}
+
+.authSubtitle {
+  margin: 0 0 20px;
+  color: #aab3c0;
+  text-align: center;
+}
+
+.googleAuthButton,
+.emailAuthButton {
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: 10px;
+  border: 1px solid #414851;
+  background: #252a31;
+  color: white;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.googleAuthButton:hover,
+.emailAuthButton:hover:not(:disabled) {
+  background: #303741;
+}
+
+.authDivider {
+  display: flex;
+  align-items: center;
+  margin: 18px 0;
+  color: #747e8b;
+}
+
+.authDivider::before,
+.authDivider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #343941;
+}
+
+.authDivider span {
+  padding: 0 12px;
+}
+
+.authForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.authForm label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: #c4cad3;
+  font-size: 0.9rem;
+}
+
+.authForm input {
+  padding: 10px;
+  background: #1d2127;
+  color: white;
+  border: 1px solid #414851;
+  border-radius: 9px;
+}
+
+.authError {
+  margin: 0;
+  color: #ff9c9c;
+  font-size: 0.9rem;
+}
+
+.authMessage {
+  margin: 0;
+  color: #95e59d;
+  font-size: 0.9rem;
+}
+
+.authModeToggle {
+  display: block;
+  margin: 18px auto 0;
+  color: #a7ccff;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}

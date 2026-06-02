@@ -2,7 +2,12 @@ import "./CardBox.css";
 import CardPreview from "../CardPreview/CardPreview";
 import { useCardPreview } from "../../hooks/useCardPreview";
 
-export default function CardBox({ cards, onCardSelect }) {
+export default function CardBox({
+  cards,
+  onCardSelect,
+  isDraggingCard,
+  setIsDraggingCard,
+}) {
   const { preview, startPreview, movePreview, stopPreview } =
     useCardPreview(250);
 
@@ -18,16 +23,34 @@ export default function CardBox({ cards, onCardSelect }) {
   return (
     <>
       <div className="cardGrid">
-        {cards.map((card) => {
+        {cards.map((card, index) => {
           const image = getImage(card);
 
           return (
             <div
               className="cardBox"
-              key={card.id || card.scryfall_id || card.name}
+              key={`${card.scryfall_id || card.id || card.name}-${index}`}
+              draggable
+              onDragStart={(e) => {
+                stopPreview();
+                setIsDraggingCard(true);
+
+                e.dataTransfer.effectAllowed = "copy";
+                e.dataTransfer.setData(
+                  "application/json",
+                  JSON.stringify(card),
+                );
+              }}
+              onDragEnd={() => {
+                setIsDraggingCard(false);
+              }}
               onClick={() => onCardSelect?.(card)}
-              onMouseEnter={(e) => startPreview(card, e)}
-              onMouseMove={movePreview}
+              onMouseEnter={(e) => {
+                if (!isDraggingCard) startPreview(card, e);
+              }}
+              onMouseMove={(e) => {
+                if (!isDraggingCard) movePreview(e);
+              }}
               onMouseLeave={stopPreview}
             >
               {image && <img src={image} alt={card.name} loading="lazy" />}
@@ -40,7 +63,7 @@ export default function CardBox({ cards, onCardSelect }) {
         })}
       </div>
 
-      <CardPreview preview={preview} />
+      {!isDraggingCard && <CardPreview preview={preview} />}
     </>
   );
 }
