@@ -30,8 +30,111 @@ const CARD_COLUMNS = `
   has_back_face
 `;
 
+const SCRYFALL_AUTOCOMPLETE_LIMIT = 20;
+const TEXT_SEARCH_CANDIDATE_LIMIT = 200;
+const SCRYFALL_SEARCH_PAGE_LIMIT = 2;
+const EXACT_NAME_BATCH_SIZE = 50;
+const SCRYFALL_FORMAT_ALIASES = {
+  Standard: "standard",
+  Pioneer: "pioneer",
+  Modern: "modern",
+  Legacy: "legacy",
+  Vintage: "vintage",
+  Commander: "commander",
+};
+
+function uniqueValues(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function quoteScryfallTerm(term) {
+  return `"${term.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+}
+
+async function getScryfallNameSuggestions(search) {
+  const params = new URLSearchParams({
+    q: search,
+    include_extras: "false",
+  });
+
+  try {
+    const response = await fetch(
+      `https://api.scryfall.com/cards/autocomplete?${params}`,
+    );
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const payload = await response.json();
+
+    return (payload.data || []).slice(0, SCRYFALL_AUTOCOMPLETE_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+function getScryfallFormatTerms(formats) {
+  return formats
+    .map((format) => SCRYFALL_FORMAT_ALIASES[format] || format.toLowerCase())
+    .map((format) => `f:${format}`)
+    .join(" ");
+}
+
+async function getScryfallTextSearchNames(search, formats) {
+  const quotedSearch = quoteScryfallTerm(search);
+  const formatTerms = getScryfallFormatTerms(formats);
+  const params = new URLSearchParams({
+    q: `(name:${quotedSearch} or type:${quotedSearch} or oracle:${quotedSearch}) ${formatTerms}`.trim(),
+    unique: "cards",
+    order: "name",
+    include_extras: "false",
+  });
+
+  let nextPage = `https://api.scryfall.com/cards/search?${params}`;
+  const names = [];
+
+  try {
+    for (
+      let pageCount = 0;
+      nextPage && pageCount < SCRYFALL_SEARCH_PAGE_LIMIT;
+      pageCount += 1
+    ) {
+      const response = await fetch(nextPage);
+
+      if (!response.ok) {
+        return names;
+      }
+
+      const payload = await response.json();
+
+      names.push(...(payload.data || []).map((card) => card.name));
+      nextPage = payload.has_more ? payload.next_page : null;
+    }
+  } catch {
+    return names;
+  }
+
+  return uniqueValues(names).slice(0, TEXT_SEARCH_CANDIDATE_LIMIT);
+}
+
 function sortCardsByName(cards) {
   return [...cards].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function getCardImageUrl(card) {
+  return (
+    card.image_url ||
+    card.raw?.image_uris?.normal ||
+    card.raw?.image_uris?.small ||
+    card.raw?.small?.normal ||
+    card.raw?.small?.small ||
+    card.raw?.card_faces?.[0]?.image_uris?.normal ||
+    card.raw?.card_faces?.[0]?.image_uris?.small ||
+    card.raw?.card_faces?.[0]?.small?.normal ||
+    card.raw?.card_faces?.[0]?.small?.small ||
+    null
+  );
 }
 
 function getCardUniqueKey(card, showAllPrintings) {
@@ -43,7 +146,7 @@ function getCardUniqueKey(card, showAllPrintings) {
 }
 
 function shouldReplaceCardVersion(currentCard, candidateCard) {
-  if (!currentCard.image_url && candidateCard.image_url) {
+  if (!getCardImageUrl(currentCard) && getCardImageUrl(candidateCard)) {
     return true;
   }
 
@@ -105,7 +208,11 @@ export function useCards({
     selectedSets.length > 0;
 
   const buildCardsQuery = useCallback(
-    (start, end, searchField = null) => {
+    (
+      start,
+      end,
+      { includeTextSearch = true, searchField = null, searchPattern = null } = {},
+    ) => {
       const hasSplitSearchField = Boolean(searchField);
       let query = supabase
         .from("cards")
@@ -114,11 +221,10 @@ export function useCards({
         .eq("nonfoil", true)
         .eq("is_token", false)
         .eq("is_funny", false)
-        .eq("is_planechase", false);
+        .eq("is_planechase", false)
+        .neq("layout", "art_series");
 
-      if (!hasSplitSearchField) {
-        query = query.order("name", { ascending: true });
-      }
+      query = query.order("name", { ascending: true });
 
       query = query.range(start, end);
 
@@ -138,11 +244,11 @@ export function useCards({
 
       const trimmedSearch = search.trim();
 
-      if (trimmedSearch) {
+      if (trimmedSearch && includeTextSearch) {
         const safeSearch = trimmedSearch.replaceAll(",", " ");
 
         if (hasSplitSearchField) {
-          query = query.ilike(searchField, `%${safeSearch}%`);
+          query = query.ilike(searchField, searchPattern || `%${safeSearch}%`);
         } else if (safeSearch.length < 3) {
           query = query.ilike("name", `%${safeSearch}%`);
         } else {
@@ -248,22 +354,41 @@ export function useCards({
       let error;
 
       if (trimmedSearch.length >= 3) {
-        const [nameResult, typeResult] = await Promise.all([
-          buildCardsQuery(0, limit - 1, "name"),
-          buildCardsQuery(0, limit - 1, "type_line"),
+        const safeSearch = trimmedSearch.replaceAll(",", " ");
+        const [suggestedNames, scryfallSearchNames] = await Promise.all([
+          getScryfallNameSuggestions(safeSearch),
+          getScryfallTextSearchNames(safeSearch, formats),
         ]);
+        const exactNames = uniqueValues([
+          ...suggestedNames,
+          ...scryfallSearchNames,
+        ]);
+        const nameBatches = [];
 
-        const successfulResults = [nameResult, typeResult].filter(
-          (result) => !result.error,
+        for (
+          let index = 0;
+          index < exactNames.length;
+          index += EXACT_NAME_BATCH_SIZE
+        ) {
+          nameBatches.push(exactNames.slice(index, index + EXACT_NAME_BATCH_SIZE));
+        }
+
+        const searchResults = await Promise.all(
+          nameBatches.map((nameBatch) =>
+            buildCardsQuery(0, TEXT_SEARCH_CANDIDATE_LIMIT - 1, {
+              includeTextSearch: false,
+            }).in("name", nameBatch),
+          ),
         );
+        const successfulResults = searchResults.filter((result) => !result.error);
 
-        if (successfulResults.length === 0) {
-          error = nameResult.error || typeResult.error;
+        if (exactNames.length > 0 && successfulResults.length === 0) {
+          error = searchResults.find((result) => result.error)?.error;
         } else {
           data = mergeUniqueCards(
             successfulResults.map((result) => result.data || []),
             showAllPrintings,
-          ).slice(0, limit);
+          ).slice(0, TEXT_SEARCH_CANDIDATE_LIMIT);
         }
       } else {
         const result = await buildCardsQuery(0, limit - 1);
@@ -295,7 +420,14 @@ export function useCards({
         requestIdRef.current += 1;
       }
     };
-  }, [buildCardsQuery, hasActiveFilters, limit]);
+  }, [
+    buildCardsQuery,
+    formats,
+    hasActiveFilters,
+    limit,
+    search,
+    showAllPrintings,
+  ]);
 
   const loadMoreCards = useCallback(async () => {
     if (loadingCards || loadingMoreCards || !hasMoreCards) return;
@@ -333,6 +465,7 @@ export function useCards({
     limit,
     loadingCards,
     loadingMoreCards,
+    showAllPrintings,
   ]);
 
   return {

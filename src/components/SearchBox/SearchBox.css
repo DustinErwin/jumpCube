@@ -3,6 +3,7 @@
   align-items: center;
   gap: 8px;
   width: min(100%, 520px);
+  margin: 0 auto;
 }
 
 .searchInput {
@@ -12,4 +13,21 @@
 
 .searchButton {
   flex: 0 0 auto;
+}
+
+@media (max-width: 540px) {
+  .searchBox {
+    width: 100%;
+    gap: 6px;
+  }
+
+  .searchInput,
+  .searchButton {
+    min-height: 44px;
+    box-sizing: border-box;
+  }
+
+  .searchButton {
+    padding: 0 12px;
+  }
 }

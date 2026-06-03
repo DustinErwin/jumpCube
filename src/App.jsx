@@ -5,6 +5,7 @@ import { useCards } from "./hooks/useCards";
 import { usePackBuilder } from "./hooks/usePackBuilder";
 import { useAuth } from "./hooks/useAuth";
 import { useUserPacks } from "./hooks/useUserPacks";
+import { useUserCubes } from "./hooks/useUserCubes";
 import { useSets } from "./hooks/useSets";
 import AuthPage from "./pages/AuthPage/AuthPage";
 import SearchBox from "./components/SearchBox/SearchBox";
@@ -12,17 +13,28 @@ import FilterBox from "./components/FilterBox/FilterBox";
 import CardBox from "./components/CardBox/CardBox";
 import PackBox from "./components/PackBox/PackBox";
 import PackLibraryModal from "./components/PackLibraryModal/PackLibraryModal";
+import CubeLibraryModal from "./components/CubeLibraryModal/CubeLibraryModal";
 import JumpCubeBox from "./components/JumpCubeBox/JumpCubeBox";
 import NavBar from "./components/NavBar/NavBar";
 
 import "./App.css";
 
+const TITLE_MAX_LENGTH = 40;
+
+function normalizeTitle(title, fallback) {
+  const trimmedTitle = (title || "").trim().slice(0, TITLE_MAX_LENGTH);
+
+  return trimmedTitle || fallback;
+}
+
 function App() {
   const { user } = useAuth();
   const { sets } = useSets();
   const { packs, loadPacks } = useUserPacks(user);
+  const userCubes = useUserCubes(user);
 
   const [isPackLibraryOpen, setIsPackLibraryOpen] = useState(false);
+  const [isCubeLibraryOpen, setIsCubeLibraryOpen] = useState(false);
 
   const [isDraggingCard, setIsDraggingCard] = useState(false);
   const [searchInput, setSearchInput] = useState("");
@@ -38,7 +50,8 @@ function App() {
   const [cubeName, setCubeName] = useState("Current Jump Cube");
   const [cubeDescription, setCubeDescription] = useState("");
   const [selectedPacks, setSelectedPacks] = useState([]);
-  const [cubeSaveStatus] = useState("");
+  const [savedCubeId, setSavedCubeId] = useState(null);
+  const [cubeSaveStatus, setCubeSaveStatus] = useState("");
   const [selectedSets, setSelectedSets] = useState([]);
 
   const {
@@ -71,11 +84,109 @@ function App() {
     }
 
     setIsPackLibraryOpen(false);
+    setIsCubeLibraryOpen(false);
     pack.newPack();
   }
 
   function submitSearch() {
     setSearch(searchInput.trim());
+  }
+
+  async function addCurrentPackToCube() {
+    if (pack.selectedCards.length === 0) return;
+
+    const savedPackId = await pack.savePack({ promptOnRename: false });
+
+    if (!savedPackId) return;
+
+    const colorIdentity = [
+      ...new Set(
+        pack.selectedCards.flatMap((card) => card.color_identity || []),
+      ),
+    ];
+    const cardCount = pack.selectedCards.reduce(
+      (sum, card) => sum + card.quantity,
+      0,
+    );
+    const packSummary = {
+      id: savedPackId,
+      name: normalizeTitle(pack.packName, "Unnamed Pack"),
+      description: pack.packDescription.trim(),
+      cardCount,
+      colorIdentity,
+      savedPackId,
+      cards: pack.selectedCards,
+    };
+
+    setSelectedPacks((currentPacks) => {
+      const existingIndex = currentPacks.findIndex(
+        (selectedPack) =>
+          selectedPack.id === savedPackId ||
+          selectedPack.id === "current-pack",
+      );
+
+      if (existingIndex === -1) {
+        return [...currentPacks, packSummary];
+      }
+
+      return currentPacks.map((selectedPack, index) =>
+        index === existingIndex ? packSummary : selectedPack,
+      );
+    });
+  }
+
+  function removePackFromCube(packId) {
+    setSelectedPacks((currentPacks) =>
+      currentPacks.filter((selectedPack) => selectedPack.id !== packId),
+    );
+  }
+
+  async function openCubePack(packId) {
+    await pack.loadPack(packId);
+    setIsPackBoxOpen(true);
+  }
+
+  function newCube() {
+    setCubeName("Current Jump Cube");
+    setCubeDescription("");
+    setSelectedPacks([]);
+    setSavedCubeId(null);
+    setCubeSaveStatus("");
+  }
+
+  async function saveCurrentCube() {
+    if (selectedPacks.length === 0) return;
+
+    setCubeSaveStatus("saving");
+
+    const cubeId = await userCubes.saveCube({
+      cubeId: savedCubeId,
+      name: normalizeTitle(cubeName, "Unnamed Cube"),
+      description: cubeDescription.trim(),
+      packs: selectedPacks,
+    });
+
+    if (!cubeId) {
+      setCubeSaveStatus("error");
+      return;
+    }
+
+    setSavedCubeId(cubeId);
+    setCubeSaveStatus("saved");
+
+    setTimeout(() => setCubeSaveStatus(""), 2000);
+  }
+
+  async function openCube(cubeId) {
+    const cube = await userCubes.loadCube(cubeId);
+
+    if (!cube) return;
+
+    setSavedCubeId(cube.id);
+    setCubeName(normalizeTitle(cube.name, "Current Jump Cube"));
+    setCubeDescription(cube.description || "");
+    setSelectedPacks(cube.packs || []);
+    setIsCubeLibraryOpen(false);
   }
 
   useEffect(() => {
@@ -95,11 +206,45 @@ function App() {
     };
   }, [loadMoreCards]);
 
+  useEffect(() => {
+    let animationFrame = null;
+
+    function updateSidePanelTop() {
+      if (animationFrame) return;
+
+      animationFrame = window.requestAnimationFrame(() => {
+        const navBar = document.querySelector(".navBar");
+        const navBottom = navBar?.getBoundingClientRect().bottom || 0;
+        const visibleNavBottom = Math.max(0, Math.round(navBottom));
+
+        document.documentElement.style.setProperty(
+          "--side-panel-top",
+          `${visibleNavBottom}px`,
+        );
+
+        animationFrame = null;
+      });
+    }
+
+    updateSidePanelTop();
+    window.addEventListener("scroll", updateSidePanelTop, { passive: true });
+    window.addEventListener("resize", updateSidePanelTop);
+
+    return () => {
+      if (animationFrame) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+
+      window.removeEventListener("scroll", updateSidePanelTop);
+      window.removeEventListener("resize", updateSidePanelTop);
+      document.documentElement.style.removeProperty("--side-panel-top");
+    };
+  }, []);
+
   return (
     <main className="app">
       <NavBar
         user={user}
-        onOpenPacks={() => setIsPackLibraryOpen(true)}
         onLogout={handleLogout}
       />
 
@@ -172,15 +317,17 @@ function App() {
                   selectedCards={pack.selectedCards}
                   addCard={pack.addCardToPack}
                   decreaseCardQuantity={pack.decreaseCardQuantity}
-                  removeCard={pack.removeCardFromPack}
                   savePack={pack.savePack}
+                  addCurrentPackToCube={addCurrentPackToCube}
+                  onOpenPacks={() => setIsPackLibraryOpen(true)}
+                  deletePack={pack.deletePack}
+                  savedPackId={pack.savedPackId}
                   newPack={pack.newPack}
                   saveStatus={pack.saveStatus}
                   showRenameChoice={pack.showRenameChoice}
                   pendingSaveAction={pack.pendingSaveAction}
                   moveCard={pack.moveCard}
                   isDraggingCard={isDraggingCard}
-                  setIsDraggingCard={setIsDraggingCard}
                   isOpen={isPackBoxOpen}
                   setIsOpen={setIsPackBoxOpen}
                 />
@@ -190,14 +337,11 @@ function App() {
                   cubeDescription={cubeDescription}
                   setCubeDescription={setCubeDescription}
                   selectedPacks={selectedPacks}
-                  saveCube={() => {
-                    console.log("Save cube later");
-                  }}
-                  newCube={() => {
-                    setCubeName("Current Jump Cube");
-                    setCubeDescription("");
-                    setSelectedPacks([]);
-                  }}
+                  saveCube={saveCurrentCube}
+                  onOpenCubes={() => setIsCubeLibraryOpen(true)}
+                  onOpenPack={openCubePack}
+                  removePackFromCube={removePackFromCube}
+                  newCube={newCube}
                   saveStatus={cubeSaveStatus}
                 />
               </div>
@@ -216,6 +360,20 @@ function App() {
                 }}
                 onDuplicatePack={async (packId) => {
                   await pack.duplicatePack(packId);
+                }}
+              />
+
+              <CubeLibraryModal
+                isOpen={isCubeLibraryOpen}
+                cubes={userCubes.cubes}
+                onClose={() => setIsCubeLibraryOpen(false)}
+                onOpenCube={openCube}
+                onDeleteCube={async (cubeId) => {
+                  await userCubes.deleteCube(cubeId);
+
+                  if (savedCubeId === cubeId) {
+                    newCube();
+                  }
                 }}
               />
             </>

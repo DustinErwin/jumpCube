@@ -183,3 +183,59 @@
 .packSearchInput::placeholder {
   color: #777;
 }
+
+@media (max-width: 640px) {
+  .packModalOverlay {
+    align-items: flex-end;
+  }
+
+  .packModal {
+    width: 100%;
+    max-height: 88svh;
+    padding: 12px;
+    box-sizing: border-box;
+    background: #111;
+    border-top: 1px solid #333;
+  }
+
+  .packModalHeader {
+    display: grid;
+    grid-template-columns: 1fr 44px;
+    gap: 8px;
+  }
+
+  .packModalHeader h2 {
+    grid-column: 1;
+  }
+
+  .packModalHeader button {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .packSearchInput {
+    grid-column: 1 / -1;
+    min-height: 44px;
+    box-sizing: border-box;
+  }
+
+  .packModalItem {
+    display: grid;
+    grid-template-columns: 1fr 92px;
+    gap: 6px;
+    min-height: auto;
+  }
+
+  .packModalOpen {
+    grid-row: span 2;
+    min-height: 72px;
+  }
+
+  .packDuplicateButton,
+  .packDeleteButton {
+    min-height: 44px;
+    padding: 0 8px;
+  }
+}

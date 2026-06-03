@@ -14,8 +14,10 @@
     "clarinet": "^0.12.6",
     "dotenv": "^17.4.2",
     "fs-extra": "^11.3.5",
+    "mana-font": "^1.18.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "react-router-dom": "^7.16.0",
     "stream-json": "^3.1.0"
   },
   "devDependencies": {

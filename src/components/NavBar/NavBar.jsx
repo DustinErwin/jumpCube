@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import "./NavBar.css";
 
-export default function NavBar({ user, onOpenPacks, onLogout }) {
+export default function NavBar({ user, onLogout }) {
   return (
     <header className="navBar">
       <Link className="navBrand" to="/">
@@ -13,10 +13,6 @@ export default function NavBar({ user, onOpenPacks, onLogout }) {
         {user ? (
           <>
             <span className="navUser">{user.email}</span>
-
-            <button onClick={onOpenPacks}>
-              My Packs
-            </button>
 
             <button onClick={onLogout}>
               Log Out

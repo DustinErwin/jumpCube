@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
-import CardPreview from "../CardPreview/CardPreview";
-import { useCardPreview } from "../../hooks/useCardPreview";
 import "./PackBox.css";
+
+const PACK_TITLE_MAX_LENGTH = 40;
 
 export default function PackBox({
   packName,
@@ -9,8 +9,11 @@ export default function PackBox({
   selectedCards,
   addCard,
   decreaseCardQuantity,
-  removeCard,
   savePack,
+  addCurrentPackToCube,
+  onOpenPacks,
+  deletePack,
+  savedPackId,
   packDescription,
   setPackDescription,
   newPack,
@@ -19,7 +22,6 @@ export default function PackBox({
   pendingSaveAction,
   moveCard,
   isDraggingCard,
-  setIsDraggingCard,
   isOpen,
   setIsOpen,
 }) {
@@ -32,9 +34,8 @@ export default function PackBox({
 
   const [editingName, setEditingName] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
+  const [confirmingDeletePack, setConfirmingDeletePack] = useState(false);
   // const [showManaCurve, setShowManaCurve] = useState(false);
-  const { preview, startPreview, movePreview, stopPreview } =
-    useCardPreview(250);
 
   const totalCards = selectedCards.reduce(
     (sum, card) => sum + card.quantity,
@@ -71,6 +72,14 @@ export default function PackBox({
 
     return classes[color] || "";
   }
+
+  function deleteConfirmedPack() {
+    if (!savedPackId) return;
+
+    deletePack(savedPackId);
+    setConfirmingDeletePack(false);
+  }
+
   return (
     <aside
       className={`packBox 
@@ -100,6 +109,8 @@ export default function PackBox({
         className="packBoxToggle"
         onClick={() => setIsOpen((prev) => !prev)}
         title={isOpen ? "Hide pack" : "Show pack"}
+        aria-label={isOpen ? "Hide pack" : "Show pack"}
+        aria-expanded={isOpen}
       >
         {isOpen ? "›" : "‹"}
       </button>
@@ -107,8 +118,11 @@ export default function PackBox({
         <input
           className="packNameInput"
           value={packName}
+          maxLength={PACK_TITLE_MAX_LENGTH}
           autoFocus
-          onChange={(e) => setPackName(e.target.value)}
+          onChange={(e) =>
+            setPackName(e.target.value.slice(0, PACK_TITLE_MAX_LENGTH))
+          }
           onBlur={() => setEditingName(false)}
           onKeyDown={(e) => {
             if (e.key === "Enter") setEditingName(false);
@@ -157,13 +171,106 @@ export default function PackBox({
         </div>
       </div>
       <p className="packCount">{totalCards} cards selected</p>
-      <button
-        className={`savePackButton ${saveStatus === "saving" ? "saving" : ""}`}
-        onClick={savePack}
-        disabled={selectedCards.length === 0 || saveStatus === "saving"}
+
+      <div className="packActionToolbar" aria-label="Pack actions">
+        <button
+          className="packActionButton openPacksButton"
+          type="button"
+          onClick={() => {
+            setConfirmingDeletePack(false);
+            onOpenPacks();
+          }}
+          title="Open my packs"
+          aria-label="Open my packs"
+        >
+          <svg
+            aria-hidden="true"
+            className="actionIcon"
+            viewBox="0 0 24 24"
+            focusable="false"
+          >
+            <path d="M3.5 6.5h6l2 2h10v2h-18z" />
+            <path d="M2.5 9.5h21l-2 11h-19z" />
+          </svg>
+        </button>
+
+        <button
+          className={`packActionButton savePackButton ${
+            saveStatus === "saving" ? "saving" : ""
+          }`}
+          type="button"
+          onClick={() => {
+            setConfirmingDeletePack(false);
+            savePack();
+          }}
+          disabled={selectedCards.length === 0 || saveStatus === "saving"}
+          title={saveStatus === "saving" ? "Saving pack" : "Save pack"}
+          aria-label={saveStatus === "saving" ? "Saving pack" : "Save pack"}
+        >
+          <svg
+            aria-hidden="true"
+            className="actionIcon"
+            viewBox="0 0 24 24"
+            focusable="false"
+          >
+            <path d="M4 3h14l2 2v16H4z" />
+            <path d="M7 3h10v7H7z" className="actionIconInset" />
+            <path d="M8 15h8v6H8z" className="actionIconInset" />
+            <path d="M14 4h3v5h-3z" />
+          </svg>
+        </button>
+
+        <button
+          className="packActionButton newPackButton"
+          type="button"
+          onClick={() => {
+            setConfirmingDeletePack(false);
+            newPack();
+          }}
+          title="New pack"
+          aria-label="New pack"
+        >
+          <span aria-hidden="true">+</span>
+        </button>
+
+        <button
+          className="packActionButton deletePackButton"
+          type="button"
+          onClick={() => setConfirmingDeletePack((current) => !current)}
+          disabled={!savedPackId}
+          title={savedPackId ? "Delete pack" : "Save this pack before deleting"}
+          aria-label={
+            savedPackId ? "Delete pack" : "Save this pack before deleting"
+          }
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+
+        <button
+          className="packActionButton addPackToCubeButton"
+          type="button"
+          onClick={() => {
+            setConfirmingDeletePack(false);
+            addCurrentPackToCube();
+          }}
+          disabled={selectedCards.length === 0 || saveStatus === "saving"}
+          title="Save and add pack to cube"
+          aria-label="Save and add pack to cube"
+        >
+          <span aria-hidden="true">⊞</span>
+        </button>
+      </div>
+
+      {confirmingDeletePack && (
+        <button
+        className="confirmDeletePackButton"
+        type="button"
+        onClick={deleteConfirmedPack}
+        aria-label={`Confirm delete ${packName}`}
       >
-        {saveStatus === "saving" ? "Saving..." : "Save Pack"}
-      </button>
+          Delete {packName}
+        </button>
+      )}
 
       {saveStatus === "saved" && (
         <p className="saveMessage success">Pack saved ✓</p>
@@ -195,9 +302,6 @@ export default function PackBox({
           </button>
         </div>
       )}
-      <button className="newPackButton" onClick={newPack}>
-        New Pack
-      </button>
       {/* <button
         className="manaCurveToggle"
         onClick={() => setShowManaCurve((prev) => !prev)}
@@ -330,12 +434,24 @@ export default function PackBox({
                 }}
               >
                 <img src={card.image_url} alt={card.name} />
+                <button
+                  className="mobileRemoveCardButton"
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    decreaseCardQuantity(card.id);
+                  }}
+                  aria-label={`Remove one ${card.name} from pack`}
+                  title={`Remove one ${card.name}`}
+                >
+                  <span aria-hidden="true">×</span>
+                </button>
               </div>
             ))}
           </div>
         )}
       </div>
-      {!isDraggingCard && <CardPreview preview={preview} />}
     </aside>
   );
 }

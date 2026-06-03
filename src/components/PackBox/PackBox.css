@@ -93,14 +93,6 @@
   font-size: 0.9rem;
 }
 
-.savePackButton {
-  width: 100%;
-  margin: 10px 0 16px;
-  padding: 10px;
-  cursor: pointer;
-  border-radius: 8px;
-}
-
 .packDescription {
   margin: 0 0 10px;
   min-height: 34px;
@@ -184,40 +176,100 @@
   display: none;
 }
 
-.newPackButton:hover {
-  background: #2a2a2a;
+.packActionToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+
+  margin: 0 0 10px;
 }
 
-.savePackButton,
-.newPackButton {
-  width: 100%;
+.packActionButton {
+  width: 34px;
+  height: 34px;
   box-sizing: border-box;
-
-  margin: 0 0 8px;
-  padding: 9px 10px;
 
   background: #252525;
   color: white;
   border: 1px solid #444;
-  border-radius: 9px;
+  border-radius: 7px;
 
   cursor: pointer;
-  font-weight: 600;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    transform 0.08s ease;
 }
 
-.savePackButton:hover:not(:disabled),
-.newPackButton:hover {
+.packActionButton:hover:not(:disabled) {
   background: #303030;
+  border-color: #555;
 }
 
-.savePackButton:active:not(:disabled),
-.newPackButton:active {
+.packActionButton:active:not(:disabled) {
   transform: translateY(1px) scale(0.98);
 }
 
-.savePackButton:disabled {
+.packActionButton:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.actionIcon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  fill: currentColor;
+}
+
+.actionIconInset {
+  fill: #252525;
+}
+
+.addPackToCubeButton {
+  color: #bce6ff;
+}
+
+.deletePackButton {
+  color: #ffb8b8;
+}
+
+.confirmDeletePackButton {
+  width: 100%;
+  min-height: 34px;
+  margin: 0 0 10px;
+  padding: 7px 10px;
+
+  background: #7a1f1f;
+  color: white;
+  border: 1px solid #b84a4a;
+  border-radius: 7px;
+
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.15;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.confirmDeletePackButton:hover {
+  background: #932525;
+}
+
+.confirmDeletePackButton:active {
+  transform: translateY(1px) scale(0.99);
 }
 
 .emptyPack {
@@ -311,7 +363,7 @@
 .packBox {
   position: fixed !important;
 
-  top: 58px !important;
+  top: var(--side-panel-top, 58px) !important;
   right: 0 !important;
   bottom: 0 !important;
   left: auto !important;
@@ -323,7 +375,9 @@
 
   border-radius: 0;
 
-  transition: transform 0.22s ease;
+  transition:
+    top 0.12s ease,
+    transform 0.22s ease;
 }
 
 .packBox.open {
@@ -472,6 +526,36 @@
   pointer-events: none;
 }
 
+.mobileRemoveCardButton {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 130;
+
+  width: 34px;
+  height: 34px;
+
+  display: none;
+  align-items: center;
+  justify-content: center;
+
+  background: rgba(122, 31, 31, 0.94);
+  color: white;
+  border: 1px solid rgba(255, 184, 184, 0.72);
+  border-radius: 7px;
+
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.mobileRemoveCardButton:focus-visible {
+  display: inline-flex;
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+
 .stackedCardTitle {
   position: absolute;
   inset: 0;
@@ -578,4 +662,81 @@
 
 .manaSymbolC {
   background: #c9c9c9;
+}
+
+@media (max-width: 760px) {
+  .packBox {
+    top: var(--side-panel-top, 64px) !important;
+    right: 0 !important;
+    bottom: 0 !important;
+
+    width: min(92vw, 380px) !important;
+    padding: 12px !important;
+
+    z-index: 220 !important;
+  }
+
+  .packBoxToggle {
+    left: -44px;
+    top: 10px;
+    width: 44px;
+    height: 56px;
+    font-size: 1.35rem;
+  }
+
+  .packTitle {
+    font-size: 1.05rem;
+  }
+
+  .packDescription {
+    min-height: 28px;
+    margin-bottom: 8px;
+  }
+
+  .packActionToolbar {
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .packActionButton {
+    width: 44px;
+    height: 44px;
+  }
+
+  .actionIcon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .confirmDeletePackButton {
+    min-height: 44px;
+  }
+
+  .packCardScrollArea {
+    margin-top: 6px;
+  }
+
+  .stackedPackCard {
+    height: 58px;
+    margin-bottom: -28px;
+  }
+
+  .stackedPackCard:hover {
+    transform: none;
+  }
+
+  .stackedPackCard:hover img {
+    position: static;
+    box-shadow: none;
+  }
+
+  .mobileRemoveCardButton {
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+  }
+
+  .mobileRemoveCardButton:active {
+    transform: scale(0.96);
+  }
 }

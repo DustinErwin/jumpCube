@@ -6,12 +6,15 @@ export default function CardPreview({ preview }) {
   const frontImage =
     preview.card.image_url ||
     preview.card.raw?.image_uris?.normal ||
+    preview.card.raw?.small?.normal ||
     preview.card.raw?.card_faces?.[0]?.image_uris?.normal ||
+    preview.card.raw?.card_faces?.[0]?.small?.normal ||
     null;
 
   const possibleBackImage =
     preview.card.back_image_url ||
     preview.card.raw?.card_faces?.[1]?.image_uris?.normal ||
+    preview.card.raw?.card_faces?.[1]?.small?.normal ||
     null;
 
   const hasRealBackFace =

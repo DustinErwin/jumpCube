@@ -1,6 +1,5 @@
 .navBar {
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 9000;
 
   display: flex;
@@ -74,4 +73,48 @@
 
 .navLoginButton:hover {
   background: #303030;
+}
+
+@media (max-width: 760px) {
+  .navBar {
+    min-height: 64px;
+    height: auto;
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .navBrand {
+    min-width: 0;
+    gap: 8px;
+  }
+
+  .navBrand img {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+  }
+
+  .navBrand h1 {
+    font-size: 1.1rem;
+    white-space: nowrap;
+  }
+
+  .navActions {
+    min-width: 0;
+    gap: 6px;
+  }
+
+  .navUser {
+    max-width: 34vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.72rem;
+  }
+
+  .navActions button,
+  .navLoginButton {
+    min-height: 44px;
+    padding: 8px 10px;
+  }
 }

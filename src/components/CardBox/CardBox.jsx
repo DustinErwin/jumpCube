@@ -14,8 +14,14 @@ export default function CardBox({
   function getImage(card) {
     return (
       card.image_url ||
+      card.raw?.image_uris?.normal ||
+      card.raw?.image_uris?.small ||
       card.raw?.small?.normal ||
+      card.raw?.small?.small ||
+      card.raw?.card_faces?.[0]?.image_uris?.normal ||
+      card.raw?.card_faces?.[0]?.image_uris?.small ||
       card.raw?.card_faces?.[0]?.small?.normal ||
+      card.raw?.card_faces?.[0]?.small?.small ||
       null
     );
   }
@@ -31,6 +37,7 @@ export default function CardBox({
               className="cardBox"
               key={`${card.scryfall_id || card.id || card.name}-${index}`}
               draggable
+              title={card.name}
               onDragStart={(e) => {
                 stopPreview();
                 setIsDraggingCard(true);
@@ -54,10 +61,6 @@ export default function CardBox({
               onMouseLeave={stopPreview}
             >
               {image && <img src={image} alt={card.name} loading="lazy" />}
-
-              <p className="cardName">{card.name}</p>
-              <p className="cardPrice">${card.price_usd ?? "--"}</p>
-              <p className="cardPrice">Foil: ${card.price_usd_foil ?? "--"}</p>
             </div>
           );
         })}

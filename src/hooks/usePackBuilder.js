@@ -1,6 +1,14 @@
 import { useState } from "react";
 import { supabase } from "../utils/supabase";
 
+const PACK_TITLE_MAX_LENGTH = 40;
+
+function normalizePackName(name, fallback = "Unnamed Pack") {
+  const trimmedName = (name || "").trim().slice(0, PACK_TITLE_MAX_LENGTH);
+
+  return trimmedName || fallback;
+}
+
 export function usePackBuilder(user, refreshPacks) {
   const [selectedCards, setSelectedCards] = useState([]);
   const [packName, setPackName] = useState("Current Pack");
@@ -57,7 +65,7 @@ export function usePackBuilder(user, refreshPacks) {
       quantity: row.quantity,
     }));
 
-    setPackName(pack.name || "Current Pack");
+    setPackName(normalizePackName(pack.name, "Current Pack"));
     setPackDescription(pack.description || "");
     setSelectedCards(hydratedCards);
     setSavedPackId(pack.id);
@@ -90,6 +98,11 @@ export function usePackBuilder(user, refreshPacks) {
   }
 
   async function finishSave(packId) {
+    if (!user?.id) {
+      setSaveStatus("error");
+      return null;
+    }
+
     setSaveStatus("saving");
 
     let actualPackId = packId;
@@ -98,7 +111,7 @@ export function usePackBuilder(user, refreshPacks) {
       const { data: pack, error: packError } = await supabase
         .from("packs")
         .insert({
-          name: packName,
+          name: normalizePackName(packName),
           description: packDescription,
           user_id: user.id,
         })
@@ -108,7 +121,7 @@ export function usePackBuilder(user, refreshPacks) {
       if (packError) {
         console.error("Error saving pack:", packError);
         setSaveStatus("error");
-        return;
+        return null;
       }
 
       actualPackId = pack.id;
@@ -117,7 +130,7 @@ export function usePackBuilder(user, refreshPacks) {
       const { error: updateError } = await supabase
         .from("packs")
         .update({
-          name: packName,
+          name: normalizePackName(packName),
           description: packDescription,
         })
         .eq("id", actualPackId);
@@ -125,7 +138,7 @@ export function usePackBuilder(user, refreshPacks) {
       if (updateError) {
         console.error("Error updating pack:", updateError);
         setSaveStatus("error");
-        return;
+        return null;
       }
     }
 
@@ -142,14 +155,16 @@ export function usePackBuilder(user, refreshPacks) {
     if (cardsError) {
       console.error("Error saving pack cards:", cardsError);
       setSaveStatus("error");
-      return;
+      return null;
     }
 
-    setSavedPackName(packName);
+    setSavedPackName(normalizePackName(packName));
     await refreshPacks?.();
     setSaveStatus("saved");
 
     setTimeout(() => setSaveStatus(""), 2000);
+
+    return actualPackId;
   }
 
   async function duplicatePack(packId) {
@@ -179,7 +194,7 @@ export function usePackBuilder(user, refreshPacks) {
     const { data: newPack, error: newPackError } = await supabase
       .from("packs")
       .insert({
-        name: `${originalPack.name} Copy`,
+        name: normalizePackName(`${originalPack.name} Copy`),
         description: originalPack.description,
         user_id: user.id,
       })
@@ -242,32 +257,33 @@ export function usePackBuilder(user, refreshPacks) {
     });
   }
 
-  async function savePack() {
-    if (selectedCards.length === 0) return;
+  async function savePack({ promptOnRename = true } = {}) {
+    if (selectedCards.length === 0) return null;
 
     if (
+      promptOnRename &&
       savedPackId &&
       savedPackName &&
-      packName.trim() !== savedPackName.trim()
+      normalizePackName(packName) !== normalizePackName(savedPackName)
     ) {
       setShowRenameChoice(true);
 
       setPendingSaveAction(() => ({
         renameExisting: async () => {
           setShowRenameChoice(false);
-          await finishSave(savedPackId);
+          return finishSave(savedPackId);
         },
 
         saveAsNew: async () => {
           setShowRenameChoice(false);
-          await finishSave(null);
+          return finishSave(null);
         },
       }));
 
-      return;
+      return null;
     }
 
-    await finishSave(savedPackId);
+    return finishSave(savedPackId);
   }
 
   return {

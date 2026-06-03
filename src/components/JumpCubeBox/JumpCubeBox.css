@@ -1,7 +1,7 @@
 .jumpCubeBox {
   position: fixed;
 
-  top: 58px;
+  top: var(--side-panel-top, 58px);
   left: 0;
   bottom: 0;
 
@@ -20,7 +20,9 @@
   overflow: visible;
   z-index: 100;
 
-  transition: transform 0.22s ease;
+  transition:
+    top 0.12s ease,
+    transform 0.22s ease;
 }
 
 .jumpCubeBox.open {
@@ -28,7 +30,7 @@
 }
 
 .jumpCubeBox.closed {
-  transform: translateX(calc(-100% + 34px));
+  transform: translateX(-100%);
 }
 
 .jumpCubeToggle {
@@ -110,36 +112,67 @@
   resize: vertical;
 }
 
-.saveCubeButton,
-.newCubeButton {
-  width: 100%;
-  box-sizing: border-box;
+.cubeActionToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
 
-  margin: 0 0 8px;
-  padding: 9px 10px;
+  margin: 0 0 10px;
+}
+
+.cubeActionButton {
+  width: 34px;
+  height: 34px;
+  box-sizing: border-box;
 
   background: #252525;
   color: white;
   border: 1px solid #444;
-  border-radius: 9px;
+  border-radius: 7px;
 
   cursor: pointer;
-  font-weight: 600;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    transform 0.08s ease;
 }
 
-.saveCubeButton:hover:not(:disabled),
-.newCubeButton:hover {
+.cubeActionButton:hover:not(:disabled) {
   background: #303030;
+  border-color: #555;
 }
 
-.saveCubeButton:active:not(:disabled),
-.newCubeButton:active {
+.cubeActionButton:active:not(:disabled) {
   transform: translateY(1px) scale(0.98);
 }
 
-.saveCubeButton:disabled {
+.cubeActionButton:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.actionIcon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  fill: currentColor;
+}
+
+.actionIconInset {
+  fill: #252525;
+}
+
+.deleteCubeButton {
+  color: #ffb8b8;
 }
 
 .cubePackScrollArea {
@@ -147,10 +180,10 @@
   min-height: 0;
 
   margin-top: 10px;
-  padding: 4px;
+  padding: 4px 4px 8px;
 
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: visible;
 }
 
 .emptyCube {
@@ -161,31 +194,176 @@
 }
 
 .cubePackList {
+  width: 100%;
+  margin-top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .cubePackItem {
-  padding: 10px;
+  position: relative;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 100%;
+  height: 34px;
+  margin-bottom: 0;
+  padding: 0 14px;
+  box-sizing: border-box;
+
   background: #202020;
   border: 1px solid #333;
-  border-radius: 10px;
+  border-radius: 0;
+  color: white;
+  cursor: pointer;
+  overflow: hidden;
+
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 2px 8px rgba(0, 0, 0, 0.38);
+
+  transition:
+    transform 0.1s ease,
+    outline-color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .cubePackItem span {
   display: block;
+  width: 100%;
+  min-width: 0;
+
   font-weight: 600;
+  font-size: 0.82rem;
+  line-height: 1.15;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.cubePackItem small {
-  display: block;
-  margin-top: 4px;
-  color: #aaa;
-  font-size: 0.78rem;
+.cubePackItem:hover {
+  transform: translateX(4px);
+  z-index: 20;
+}
+
+.cubePackItem.pendingRemove {
+  outline: 2px solid rgba(255, 80, 80, 0.95);
+  outline-offset: 2px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 0 0 2px rgba(255, 80, 80, 0.18),
+    0 0 18px rgba(255, 80, 80, 0.38);
+  z-index: 30;
+}
+
+.cubePackColorless {
+  background: linear-gradient(135deg, #8f9498, #565c61);
+  border-color: #a9adb0;
+  color: #111;
+}
+
+.cubePackWhite {
+  background: linear-gradient(135deg, #f3e6b6, #c9ad72);
+  border-color: #f8edc7;
+  color: #1b1711;
+}
+
+.cubePackBlue {
+  background: linear-gradient(135deg, #4fa5d5, #1e5f9e);
+  border-color: #86c8ee;
+}
+
+.cubePackBlack {
+  background: linear-gradient(135deg, #7d4fa0, #392047);
+  border-color: #a57ac3;
+}
+
+.cubePackRed {
+  background: linear-gradient(135deg, #d65a43, #8d241c);
+  border-color: #ef8974;
+}
+
+.cubePackGreen {
+  background: linear-gradient(135deg, #4d9c58, #1e5d31);
+  border-color: #7cc986;
+}
+
+.cubePackMulticolor {
+  background: linear-gradient(135deg, #e1c45a, #9a6a18);
+  border-color: #f1dd84;
+  color: #1c1406;
+}
+
+.cubePackColorless span,
+.cubePackWhite span,
+.cubePackMulticolor span {
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.28);
 }
 
 .placeholderText {
   color: #777;
   font-style: italic;
+}
+
+@media (max-width: 760px) {
+  .jumpCubeBox {
+    top: var(--side-panel-top, 64px);
+    left: 0;
+    bottom: 0;
+
+    width: min(92vw, 380px);
+    padding: 12px;
+
+    z-index: 210;
+  }
+
+  .jumpCubeToggle {
+    right: -44px;
+    top: 10px;
+    width: 44px;
+    height: 56px;
+    font-size: 1.35rem;
+  }
+
+  .cubeTitle {
+    font-size: 1.05rem;
+  }
+
+  .cubeDescription {
+    min-height: 28px;
+    margin-bottom: 8px;
+  }
+
+  .cubeActionToolbar {
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .cubeActionButton {
+    width: 44px;
+    height: 44px;
+  }
+
+  .actionIcon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .cubePackScrollArea {
+    margin-top: 6px;
+  }
+
+  .cubePackItem {
+    min-height: 44px;
+  }
+
+  .cubePackItem:hover {
+    transform: none;
+  }
 }
