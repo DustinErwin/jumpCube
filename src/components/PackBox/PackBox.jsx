@@ -6,7 +6,7 @@ const PACK_TITLE_MAX_LENGTH = 40;
 const ARCHETYPE_COLORS = {
   Aggro: { background: "#c93f32", color: "white" },
   Control: { background: "#2f77c8", color: "white" },
-  Midrange: { background: "#d8c58f", color: "#17130b" },
+  Midrange: { background: "#d8c58f", color: "white" },
   Combo: { background: "#7b4aa1", color: "white" },
   Ramp: { background: "#3f9650", color: "white" },
   Tempo: { background: "#727a80", color: "white" },

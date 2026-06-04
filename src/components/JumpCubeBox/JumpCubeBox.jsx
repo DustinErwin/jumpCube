@@ -38,11 +38,10 @@ function getArchetypeBackground(tags) {
 
 function getPackArchetypeStyle(pack) {
   const tags = getPackArchetypeTags(pack);
-  const usesDarkText = tags.length === 1 && tags[0] === "Midrange";
 
   return {
     "--cube-pack-archetype-bg": getArchetypeBackground(tags),
-    "--cube-pack-text": usesDarkText ? "#17130b" : "white",
+    "--cube-pack-text": "white",
   };
 }
 
