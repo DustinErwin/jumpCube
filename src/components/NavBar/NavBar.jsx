@@ -5,7 +5,10 @@ export default function NavBar({ user, onLogout }) {
   return (
     <header className="navBar">
       <Link className="navBrand" to="/">
-        <img src="/images/frogCube.png" alt="Jump Cube mascot" />
+        <img
+          src={`${import.meta.env.BASE_URL}images/frogCube.png`}
+          alt="Jump Cube mascot"
+        />
         <h1>Jump Cube</h1>
       </Link>
 

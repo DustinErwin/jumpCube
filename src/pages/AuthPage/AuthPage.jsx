@@ -5,6 +5,8 @@ import "./AuthPage.css";
 
 export default function AuthPage() {
   const navigate = useNavigate();
+  const authRedirectUrl = new URL(import.meta.env.BASE_URL, window.location.origin)
+    .href;
 
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
@@ -25,7 +27,7 @@ export default function AuthPage() {
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/`,
+          emailRedirectTo: authRedirectUrl,
         },
       });
 
@@ -64,7 +66,7 @@ export default function AuthPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/`,
+        redirectTo: authRedirectUrl,
       },
     });
 
@@ -82,7 +84,7 @@ export default function AuthPage() {
 
         <img
           className="authMascot"
-          src="/images/frogCube.png"
+          src={`${import.meta.env.BASE_URL}images/frogCube.png`}
           alt="Jump Cube frog mascot"
         />
 
