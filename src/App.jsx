@@ -186,7 +186,10 @@ function App() {
     await saveCurrentPackBeforeLeaving();
     await pack.loadPack(packId);
     setIsPackBoxOpen(true);
-    setIsJumpCubeBoxOpen(false);
+
+    if (window.matchMedia(MOBILE_PANEL_QUERY).matches) {
+      setIsJumpCubeBoxOpen(false);
+    }
   }
 
   async function startNewPack() {
