@@ -15,10 +15,11 @@ export default function JumpCubeBox({
   removePackFromCube,
   newCube,
   saveStatus,
+  isOpen,
+  setIsOpen,
 }) {
   const [editingName, setEditingName] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
-  const [isOpen, setIsOpen] = useState(true);
   const [pendingRemovePackId, setPendingRemovePackId] = useState(null);
 
   useEffect(() => {

@@ -20,6 +20,7 @@ import NavBar from "./components/NavBar/NavBar";
 import "./App.css";
 
 const TITLE_MAX_LENGTH = 40;
+const MOBILE_PANEL_QUERY = "(max-width: 760px)";
 
 function normalizeTitle(title, fallback) {
   const trimmedTitle = (title || "").trim().slice(0, TITLE_MAX_LENGTH);
@@ -46,7 +47,16 @@ function App() {
   const [types, setTypes] = useState([]);
   const [formats, setFormats] = useState([]);
   const [showAllPrintings, setShowAllPrintings] = useState(false);
-  const [isPackBoxOpen, setIsPackBoxOpen] = useState(true);
+  const [isPackBoxOpen, setIsPackBoxOpen] = useState(
+    () =>
+      typeof window === "undefined" ||
+      !window.matchMedia(MOBILE_PANEL_QUERY).matches,
+  );
+  const [isJumpCubeBoxOpen, setIsJumpCubeBoxOpen] = useState(
+    () =>
+      typeof window === "undefined" ||
+      !window.matchMedia(MOBILE_PANEL_QUERY).matches,
+  );
   const [cubeName, setCubeName] = useState("Current Jump Cube");
   const [cubeDescription, setCubeDescription] = useState("");
   const [selectedPacks, setSelectedPacks] = useState([]);
@@ -144,6 +154,7 @@ function App() {
   async function openCubePack(packId) {
     await pack.loadPack(packId);
     setIsPackBoxOpen(true);
+    setIsJumpCubeBoxOpen(false);
   }
 
   function newCube() {
@@ -214,12 +225,16 @@ function App() {
 
       animationFrame = window.requestAnimationFrame(() => {
         const navBar = document.querySelector(".navBar");
+        const mobilePanelNav = document.querySelector(".mobilePanelNav");
         const navBottom = navBar?.getBoundingClientRect().bottom || 0;
-        const visibleNavBottom = Math.max(0, Math.round(navBottom));
+        const mobilePanelNavBottom =
+          mobilePanelNav?.getBoundingClientRect().bottom || 0;
+        const sidePanelTop = Math.max(navBottom, mobilePanelNavBottom);
+        const visibleSidePanelTop = Math.max(0, Math.round(sidePanelTop));
 
         document.documentElement.style.setProperty(
           "--side-panel-top",
-          `${visibleNavBottom}px`,
+          `${visibleSidePanelTop}px`,
         );
 
         animationFrame = null;
@@ -247,6 +262,32 @@ function App() {
         user={user}
         onLogout={handleLogout}
       />
+
+      <nav className="mobilePanelNav" aria-label="Builder panels">
+        <button
+          type="button"
+          className={isJumpCubeBoxOpen ? "active" : ""}
+          onClick={() => {
+            setIsJumpCubeBoxOpen((current) => !current);
+            setIsPackBoxOpen(false);
+          }}
+          aria-pressed={isJumpCubeBoxOpen}
+        >
+          Cube
+        </button>
+
+        <button
+          type="button"
+          className={isPackBoxOpen ? "active" : ""}
+          onClick={() => {
+            setIsPackBoxOpen((current) => !current);
+            setIsJumpCubeBoxOpen(false);
+          }}
+          aria-pressed={isPackBoxOpen}
+        >
+          Pack
+        </button>
+      </nav>
 
       <Routes>
         <Route
@@ -343,6 +384,8 @@ function App() {
                   removePackFromCube={removePackFromCube}
                   newCube={newCube}
                   saveStatus={cubeSaveStatus}
+                  isOpen={isJumpCubeBoxOpen}
+                  setIsOpen={setIsJumpCubeBoxOpen}
                 />
               </div>
 

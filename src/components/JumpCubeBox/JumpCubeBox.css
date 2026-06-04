@@ -315,20 +315,26 @@
   .jumpCubeBox {
     top: var(--side-panel-top, 64px);
     left: 0;
+    right: 0;
     bottom: 0;
 
-    width: min(92vw, 380px);
+    width: 100vw;
     padding: 12px;
 
     z-index: 210;
+    overflow: hidden;
   }
 
   .jumpCubeToggle {
-    right: -44px;
-    top: 10px;
-    width: 44px;
-    height: 56px;
-    font-size: 1.35rem;
+    display: none;
+  }
+
+  .jumpCubeBox.open {
+    transform: translateX(0);
+  }
+
+  .jumpCubeBox.closed {
+    transform: translateX(-100%);
   }
 
   .cubeTitle {

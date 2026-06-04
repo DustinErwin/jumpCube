@@ -91,6 +91,10 @@
   box-sizing: border-box;
 }
 
+.mobilePanelNav {
+  display: none;
+}
+
 .cardArea {
   width: 100%;
   max-width: 1200px;
@@ -241,6 +245,33 @@
 }
 
 @media (max-width: 760px) {
+  .mobilePanelNav {
+    position: sticky;
+    top: 0;
+    z-index: 8500;
+
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1px;
+
+    background: #111;
+    border-bottom: 1px solid #333;
+  }
+
+  .mobilePanelNav button {
+    min-height: 42px;
+    background: #202020;
+    color: #ddd;
+    border: 0;
+    cursor: pointer;
+    font-weight: 700;
+  }
+
+  .mobilePanelNav button.active {
+    background: #303744;
+    color: white;
+  }
+
   .app::before {
     background-size: 420px;
     opacity: 0.08;
