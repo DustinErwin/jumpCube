@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import { supabase } from "./utils/supabase";
 import { useCards } from "./hooks/useCards";
@@ -33,6 +33,7 @@ function App() {
   const { sets } = useSets();
   const { packs, loadPacks } = useUserPacks(user);
   const userCubes = useUserCubes(user);
+  const { saveCube: saveUserCube } = userCubes;
 
   const [isPackLibraryOpen, setIsPackLibraryOpen] = useState(false);
   const [isCubeLibraryOpen, setIsCubeLibraryOpen] = useState(false);
@@ -165,12 +166,12 @@ function App() {
     setCubeSaveStatus("");
   }
 
-  async function saveCurrentCube() {
-    if (selectedPacks.length === 0) return;
+  const saveCurrentCube = useCallback(async function saveCurrentCube() {
+    if (selectedPacks.length === 0 && !savedCubeId) return;
 
     setCubeSaveStatus("saving");
 
-    const cubeId = await userCubes.saveCube({
+    const cubeId = await saveUserCube({
       cubeId: savedCubeId,
       name: normalizeTitle(cubeName, "Unnamed Cube"),
       description: cubeDescription.trim(),
@@ -186,7 +187,13 @@ function App() {
     setCubeSaveStatus("saved");
 
     setTimeout(() => setCubeSaveStatus(""), 2000);
-  }
+  }, [
+    cubeDescription,
+    cubeName,
+    savedCubeId,
+    saveUserCube,
+    selectedPacks,
+  ]);
 
   async function openCube(cubeId) {
     const cube = await userCubes.loadCube(cubeId);
@@ -199,6 +206,18 @@ function App() {
     setSelectedPacks(cube.packs || []);
     setIsCubeLibraryOpen(false);
   }
+
+  useEffect(() => {
+    if (selectedPacks.length === 0 && !savedCubeId) return undefined;
+
+    const timeoutId = window.setTimeout(() => {
+      saveCurrentCube();
+    }, 800);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [cubeDescription, cubeName, savedCubeId, saveCurrentCube, selectedPacks]);
 
   useEffect(() => {
     function handleScroll() {
@@ -358,7 +377,6 @@ function App() {
                   selectedCards={pack.selectedCards}
                   addCard={pack.addCardToPack}
                   decreaseCardQuantity={pack.decreaseCardQuantity}
-                  savePack={pack.savePack}
                   addCurrentPackToCube={addCurrentPackToCube}
                   onOpenPacks={() => setIsPackLibraryOpen(true)}
                   deletePack={pack.deletePack}
@@ -378,7 +396,6 @@ function App() {
                   cubeDescription={cubeDescription}
                   setCubeDescription={setCubeDescription}
                   selectedPacks={selectedPacks}
-                  saveCube={saveCurrentCube}
                   onOpenCubes={() => setIsCubeLibraryOpen(true)}
                   onOpenPack={openCubePack}
                   removePackFromCube={removePackFromCube}

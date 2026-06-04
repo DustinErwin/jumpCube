@@ -51,8 +51,13 @@ export function useUserCubes(user) {
     setLoadingCubes(false);
   }, [user]);
 
-  async function saveCube({ cubeId, name, description, packs }) {
-    if (!user?.id || packs.length === 0) return null;
+  const saveCube = useCallback(async function saveCube({
+    cubeId,
+    name,
+    description,
+    packs,
+  }) {
+    if (!user?.id || (!cubeId && packs.length === 0)) return null;
 
     let actualCubeId = cubeId;
 
@@ -120,7 +125,7 @@ export function useUserCubes(user) {
     await loadCubes();
 
     return actualCubeId;
-  }
+  }, [loadCubes, user]);
 
   async function loadCube(cubeId) {
     const { data: cube, error: cubeError } = await supabase

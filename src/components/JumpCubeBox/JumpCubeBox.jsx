@@ -9,7 +9,6 @@ export default function JumpCubeBox({
   cubeDescription,
   setCubeDescription,
   selectedPacks,
-  saveCube,
   onOpenCubes,
   onOpenPack,
   removePackFromCube,
@@ -174,32 +173,6 @@ export default function JumpCubeBox({
         </button>
 
         <button
-          className={`cubeActionButton saveCubeButton ${
-            saveStatus === "saving" ? "saving" : ""
-          }`}
-          type="button"
-          onClick={() => {
-            setConfirmingDeleteCube(false);
-            saveCube();
-          }}
-          disabled={selectedPacks.length === 0 || saveStatus === "saving"}
-          title={saveStatus === "saving" ? "Saving cube" : "Save cube"}
-          aria-label={saveStatus === "saving" ? "Saving cube" : "Save cube"}
-        >
-          <svg
-            aria-hidden="true"
-            className="actionIcon"
-            viewBox="0 0 24 24"
-            focusable="false"
-          >
-            <path d="M4 3h14l2 2v16H4z" />
-            <path d="M7 3h10v7H7z" className="actionIconInset" />
-            <path d="M8 15h8v6H8z" className="actionIconInset" />
-            <path d="M14 4h3v5h-3z" />
-          </svg>
-        </button>
-
-        <button
           className="cubeActionButton newCubeButton"
           type="button"
           onClick={() => {
@@ -234,6 +207,8 @@ export default function JumpCubeBox({
           Clear {cubeName}
         </button>
       )}
+
+      {saveStatus === "saving" && <p className="saveMessage">Saving...</p>}
 
       {saveStatus === "saved" && (
         <p className="saveMessage success">Cube saved ✓</p>

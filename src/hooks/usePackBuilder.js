@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../utils/supabase";
 
 const PACK_TITLE_MAX_LENGTH = 40;
@@ -97,7 +97,7 @@ export function usePackBuilder(user, refreshPacks) {
     localStorage.removeItem("jumpCubeCurrentPack");
   }
 
-  async function finishSave(packId) {
+  const finishSave = useCallback(async function finishSave(packId) {
     if (!user?.id) {
       setSaveStatus("error");
       return null;
@@ -148,14 +148,27 @@ export function usePackBuilder(user, refreshPacks) {
       quantity: card.quantity,
     }));
 
-    const { error: cardsError } = await supabase
+    const { error: deleteCardsError } = await supabase
       .from("pack_cards")
-      .upsert(packCards, { onConflict: "pack_id,card_id" });
+      .delete()
+      .eq("pack_id", actualPackId);
 
-    if (cardsError) {
-      console.error("Error saving pack cards:", cardsError);
+    if (deleteCardsError) {
+      console.error("Error clearing pack cards:", deleteCardsError);
       setSaveStatus("error");
       return null;
+    }
+
+    if (packCards.length > 0) {
+      const { error: cardsError } = await supabase
+        .from("pack_cards")
+        .insert(packCards);
+
+      if (cardsError) {
+        console.error("Error saving pack cards:", cardsError);
+        setSaveStatus("error");
+        return null;
+      }
     }
 
     setSavedPackName(normalizePackName(packName));
@@ -165,7 +178,7 @@ export function usePackBuilder(user, refreshPacks) {
     setTimeout(() => setSaveStatus(""), 2000);
 
     return actualPackId;
-  }
+  }, [packDescription, packName, refreshPacks, selectedCards, user]);
 
   async function duplicatePack(packId) {
     if (!packId || !user) return;
@@ -285,6 +298,26 @@ export function usePackBuilder(user, refreshPacks) {
 
     return finishSave(savedPackId);
   }
+
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    if (selectedCards.length === 0 && !savedPackId) return undefined;
+
+    const timeoutId = window.setTimeout(() => {
+      finishSave(savedPackId);
+    }, 800);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    finishSave,
+    packDescription,
+    packName,
+    savedPackId,
+    selectedCards,
+    user,
+  ]);
 
   return {
     selectedCards,

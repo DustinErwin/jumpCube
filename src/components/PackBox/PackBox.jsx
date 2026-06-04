@@ -9,7 +9,6 @@ export default function PackBox({
   selectedCards,
   addCard,
   decreaseCardQuantity,
-  savePack,
   addCurrentPackToCube,
   onOpenPacks,
   deletePack,
@@ -195,32 +194,6 @@ export default function PackBox({
         </button>
 
         <button
-          className={`packActionButton savePackButton ${
-            saveStatus === "saving" ? "saving" : ""
-          }`}
-          type="button"
-          onClick={() => {
-            setConfirmingDeletePack(false);
-            savePack();
-          }}
-          disabled={selectedCards.length === 0 || saveStatus === "saving"}
-          title={saveStatus === "saving" ? "Saving pack" : "Save pack"}
-          aria-label={saveStatus === "saving" ? "Saving pack" : "Save pack"}
-        >
-          <svg
-            aria-hidden="true"
-            className="actionIcon"
-            viewBox="0 0 24 24"
-            focusable="false"
-          >
-            <path d="M4 3h14l2 2v16H4z" />
-            <path d="M7 3h10v7H7z" className="actionIconInset" />
-            <path d="M8 15h8v6H8z" className="actionIconInset" />
-            <path d="M14 4h3v5h-3z" />
-          </svg>
-        </button>
-
-        <button
           className="packActionButton newPackButton"
           type="button"
           onClick={() => {
@@ -263,14 +236,16 @@ export default function PackBox({
 
       {confirmingDeletePack && (
         <button
-        className="confirmDeletePackButton"
-        type="button"
-        onClick={deleteConfirmedPack}
-        aria-label={`Confirm delete ${packName}`}
-      >
+          className="confirmDeletePackButton"
+          type="button"
+          onClick={deleteConfirmedPack}
+          aria-label={`Confirm delete ${packName}`}
+        >
           Delete {packName}
         </button>
       )}
+
+      {saveStatus === "saving" && <p className="saveMessage">Saving...</p>}
 
       {saveStatus === "saved" && (
         <p className="saveMessage success">Pack saved ✓</p>
