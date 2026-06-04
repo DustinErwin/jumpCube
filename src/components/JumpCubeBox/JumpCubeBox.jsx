@@ -2,6 +2,49 @@ import { useEffect, useState } from "react";
 import "./JumpCubeBox.css";
 
 const CUBE_TITLE_MAX_LENGTH = 40;
+const ARCHETYPE_COLORS = {
+  Aggro: "#c93f32",
+  Control: "#2f77c8",
+  Midrange: "#d8c58f",
+  Combo: "#7b4aa1",
+  Ramp: "#3f9650",
+  Tempo: "#4fa5d5",
+};
+const GOLD_ARCHETYPE_BACKGROUND = "linear-gradient(90deg, #e1c45a, #9a6a18)";
+
+function getPackArchetypeTags(pack) {
+  if (Array.isArray(pack.archetypeTags)) return pack.archetypeTags;
+  if (pack.archetypeTag) return [pack.archetypeTag];
+
+  return [];
+}
+
+function getArchetypeBackground(tags) {
+  if (tags.length === 0) return "#202020";
+  if (tags.length > 3) return GOLD_ARCHETYPE_BACKGROUND;
+  if (tags.length === 1) return ARCHETYPE_COLORS[tags[0]] || "#202020";
+
+  const segmentSize = 100 / tags.length;
+  const segments = tags.flatMap((tag, index) => {
+    const color = ARCHETYPE_COLORS[tag] || "#202020";
+    const start = `${index * segmentSize}%`;
+    const end = `${(index + 1) * segmentSize}%`;
+
+    return [`${color} ${start}`, `${color} ${end}`];
+  });
+
+  return `linear-gradient(90deg, ${segments.join(", ")})`;
+}
+
+function getPackArchetypeStyle(pack) {
+  const tags = getPackArchetypeTags(pack);
+  const usesDarkText = tags.length === 1 && tags[0] === "Midrange";
+
+  return {
+    "--cube-pack-archetype-bg": getArchetypeBackground(tags),
+    "--cube-pack-text": usesDarkText ? "#17130b" : "white",
+  };
+}
 
 export default function JumpCubeBox({
   cubeName,
@@ -55,21 +98,17 @@ export default function JumpCubeBox({
     return [...new Set(colors)].sort();
   }
 
-  function getPackColorClass(pack) {
-    const colors = getPackColorIdentity(pack);
-
-    if (colors.length === 0) return "cubePackColorless";
-    if (colors.length > 1) return "cubePackMulticolor";
-
-    const colorClassBySymbol = {
-      W: "cubePackWhite",
-      U: "cubePackBlue",
-      B: "cubePackBlack",
-      R: "cubePackRed",
-      G: "cubePackGreen",
+  function getManaClass(color) {
+    const classes = {
+      W: "ms-w",
+      U: "ms-u",
+      B: "ms-b",
+      R: "ms-r",
+      G: "ms-g",
+      C: "ms-c",
     };
 
-    return colorClassBySymbol[colors[0]] || "cubePackColorless";
+    return classes[color] || "";
   }
 
   function handlePackContextMenu(event, packId) {
@@ -226,9 +265,10 @@ export default function JumpCubeBox({
             {selectedPacks.map((pack) => (
               <button
                 type="button"
-                className={`cubePackItem ${getPackColorClass(pack)} ${
+                className={`cubePackItem ${
                   pendingRemovePackId === pack.id ? "pendingRemove" : ""
                 }`}
+                style={getPackArchetypeStyle(pack)}
                 data-pack-id={pack.id}
                 key={pack.id}
                 onClick={() => handlePackClick(pack)}
@@ -241,7 +281,23 @@ export default function JumpCubeBox({
                     : pack.name
                 }
               >
-                <span>{pack.name}</span>
+                <span className="cubePackName">{pack.name}</span>
+                <span className="cubePackPips" aria-label="Color identity">
+                  {getPackColorIdentity(pack).length === 0 ? (
+                    <i
+                      className="ms ms-c cubeManaSymbol cubeManaSymbolC"
+                      title="Colorless"
+                    />
+                  ) : (
+                    getPackColorIdentity(pack).map((color) => (
+                      <i
+                        className={`ms ${getManaClass(color)} cubeManaSymbol cubeManaSymbol${color}`}
+                        key={color}
+                        title={color}
+                      />
+                    ))
+                  )}
+                </span>
               </button>
             ))}
           </div>

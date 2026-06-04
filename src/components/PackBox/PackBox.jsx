@@ -1,7 +1,16 @@
 import { useRef, useState } from "react";
+import { PACK_ARCHETYPE_TAGS } from "../../hooks/usePackBuilder";
 import "./PackBox.css";
 
 const PACK_TITLE_MAX_LENGTH = 40;
+const ARCHETYPE_COLORS = {
+  Aggro: { background: "#c93f32", color: "white" },
+  Control: { background: "#2f77c8", color: "white" },
+  Midrange: { background: "#d8c58f", color: "#17130b" },
+  Combo: { background: "#7b4aa1", color: "white" },
+  Ramp: { background: "#3f9650", color: "white" },
+  Tempo: { background: "#4fa5d5", color: "white" },
+};
 
 function getCardPrice(card) {
   const price = card.price_usd ?? card.prices?.usd ?? 0;
@@ -17,6 +26,18 @@ function formatUsd(value) {
   }).format(value);
 }
 
+function getArchetypeTagStyle(tag) {
+  const colors = ARCHETYPE_COLORS[tag] || {
+    background: "#252525",
+    color: "white",
+  };
+
+  return {
+    "--archetype-tag-bg": colors.background,
+    "--archetype-tag-text": colors.color,
+  };
+}
+
 export default function PackBox({
   packName,
   setPackName,
@@ -29,6 +50,8 @@ export default function PackBox({
   savedPackId,
   packDescription,
   setPackDescription,
+  packArchetypeTags = [],
+  setPackArchetypeTags,
   newPack,
   saveStatus,
   showRenameChoice,
@@ -48,6 +71,7 @@ export default function PackBox({
   const [editingName, setEditingName] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
   const [confirmingDeletePack, setConfirmingDeletePack] = useState(false);
+  const [isArchetypeMenuOpen, setIsArchetypeMenuOpen] = useState(false);
   // const [showManaCurve, setShowManaCurve] = useState(false);
 
   const totalCards = selectedCards.reduce(
@@ -95,6 +119,16 @@ export default function PackBox({
 
     deletePack(savedPackId);
     setConfirmingDeletePack(false);
+  }
+
+  function toggleArchetypeTag(tag) {
+    setPackArchetypeTags((currentTags) => {
+      if (currentTags.includes(tag)) {
+        return currentTags.filter((currentTag) => currentTag !== tag);
+      }
+
+      return [...currentTags, tag];
+    });
   }
 
   return (
@@ -250,7 +284,62 @@ export default function PackBox({
         >
           <span aria-hidden="true">⊞</span>
         </button>
+        <button
+          className="packActionButton archetypeMenuButton"
+          type="button"
+          onClick={() => {
+            setConfirmingDeletePack(false);
+            setIsArchetypeMenuOpen((current) => !current);
+          }}
+          title="Add archetype tag"
+          aria-label="Add archetype tag"
+          aria-expanded={isArchetypeMenuOpen}
+        >
+          <span aria-hidden="true">#</span>
+        </button>
       </div>
+
+      {packArchetypeTags.length > 0 && (
+        <div className="packArchetypeTags" aria-label="Selected archetypes">
+          {packArchetypeTags.map((tag) => (
+            <span
+              className="packArchetypeTag"
+              key={tag}
+              style={getArchetypeTagStyle(tag)}
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {isArchetypeMenuOpen && (
+        <div className="archetypeMenu" aria-label="Archetype tags">
+          <div className="archetypeMenuHeader">
+            <span>Archetypes</span>
+            <button
+              type="button"
+              onClick={() => setPackArchetypeTags([])}
+              disabled={packArchetypeTags.length === 0}
+            >
+              Clear
+            </button>
+          </div>
+
+          <div className="archetypeOptions">
+            {PACK_ARCHETYPE_TAGS.map((tag) => (
+              <label className="archetypeOption" key={tag}>
+                <input
+                  type="checkbox"
+                  checked={packArchetypeTags.includes(tag)}
+                  onChange={() => toggleArchetypeTag(tag)}
+                />
+                {tag}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
 
       <p className="packTotalPrice">Total: {formatUsd(totalPrice)}</p>
 

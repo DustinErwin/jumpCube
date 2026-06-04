@@ -152,6 +152,7 @@ function App() {
       id: savedPackId,
       name: normalizeTitle(pack.packName, "Unnamed Pack"),
       description: pack.packDescription.trim(),
+      archetypeTags: pack.packArchetypeTags,
       cardCount,
       colorIdentity,
       savedPackId,
@@ -468,6 +469,8 @@ function App() {
                   setPackName={pack.setPackName}
                   packDescription={pack.packDescription}
                   setPackDescription={pack.setPackDescription}
+                  packArchetypeTags={pack.packArchetypeTags}
+                  setPackArchetypeTags={pack.setPackArchetypeTags}
                   selectedCards={pack.selectedCards}
                   addCard={pack.addCardToPack}
                   decreaseCardQuantity={pack.decreaseCardQuantity}

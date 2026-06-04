@@ -1,9 +1,9 @@
 import { supabase } from "../lib/supabaseClient";
 
-export async function createPack({ name, description }) {
+export async function createPack({ name, description, archetypeTags }) {
   const { data, error } = await supabase
     .from("packs")
-    .insert({ name, description })
+    .insert({ name, description, archetype_tags: archetypeTags || [] })
     .select()
     .single();
 
@@ -11,10 +11,10 @@ export async function createPack({ name, description }) {
   return data;
 }
 
-export async function updatePack(packId, { name, description }) {
+export async function updatePack(packId, { name, description, archetypeTags }) {
   const { error } = await supabase
     .from("packs")
-    .update({ name, description })
+    .update({ name, description, archetype_tags: archetypeTags || [] })
     .eq("id", packId);
 
   if (error) throw error;

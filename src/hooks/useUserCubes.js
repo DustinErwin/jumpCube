@@ -16,6 +16,7 @@ function buildPackSummary(pack, position = 0) {
     savedPackId: pack.id,
     name: pack.name || "Unnamed Pack",
     description: pack.description || "",
+    archetypeTags: pack.archetype_tags || [],
     cardCount,
     colorIdentity,
     cards,
@@ -148,6 +149,7 @@ export function useUserCubes(user) {
             id,
             name,
             description,
+            archetype_tags,
             pack_cards (
               quantity,
               cards (*)

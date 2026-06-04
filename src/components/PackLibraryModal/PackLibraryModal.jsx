@@ -1,6 +1,13 @@
 import { useState } from "react";
 import "./PackLibraryModal.css";
 
+function getPackArchetypeTags(pack) {
+  if (Array.isArray(pack.archetype_tags)) return pack.archetype_tags;
+  if (pack.archetype_tag) return [pack.archetype_tag];
+
+  return [];
+}
+
 export default function PackLibraryModal({
   isOpen,
   packs,
@@ -19,8 +26,15 @@ export default function PackLibraryModal({
 
     const name = pack.name?.toLowerCase() || "";
     const description = pack.description?.toLowerCase() || "";
+    const archetypes = getPackArchetypeTags(pack)
+      .join(" ")
+      .toLowerCase();
 
-    return name.includes(query) || description.includes(query);
+    return (
+      name.includes(query) ||
+      description.includes(query) ||
+      archetypes.includes(query)
+    );
   });
 
   if (!isOpen) return null;
@@ -51,6 +65,14 @@ export default function PackLibraryModal({
                   onClick={() => onOpenPack(pack.id)}
                 >
                   <span>{pack.name}</span>
+
+                  <div className="packModalTags">
+                    {getPackArchetypeTags(pack).map((tag) => (
+                      <strong className="packModalTag" key={tag}>
+                        {tag}
+                      </strong>
+                    ))}
+                  </div>
 
                   <small>{pack.description || "No description"}</small>
                 </button>

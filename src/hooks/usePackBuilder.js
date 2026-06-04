@@ -2,6 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../utils/supabase";
 
 const PACK_TITLE_MAX_LENGTH = 40;
+export const PACK_ARCHETYPE_TAGS = [
+  "Aggro",
+  "Midrange",
+  "Control",
+  "Tempo",
+  "Combo",
+  "Ramp",
+];
 
 function normalizePackName(name, fallback = "Unnamed Pack") {
   const trimmedName = (name || "").trim().slice(0, PACK_TITLE_MAX_LENGTH);
@@ -9,10 +17,17 @@ function normalizePackName(name, fallback = "Unnamed Pack") {
   return trimmedName || fallback;
 }
 
-function getPackSnapshot(name, description, cards) {
+function normalizeArchetypeTags(tags) {
+  const incomingTags = Array.isArray(tags) ? tags : tags ? [tags] : [];
+
+  return PACK_ARCHETYPE_TAGS.filter((tag) => incomingTags.includes(tag));
+}
+
+function getPackSnapshot(name, description, archetypeTags, cards) {
   return JSON.stringify({
     name: normalizePackName(name),
     description: description || "",
+    archetypeTags: normalizeArchetypeTags(archetypeTags),
     cards: cards.map((card) => ({
       id: card.id,
       quantity: card.quantity,
@@ -24,6 +39,7 @@ export function usePackBuilder(user, refreshPacks) {
   const [selectedCards, setSelectedCards] = useState([]);
   const [packName, setPackName] = useState("Current Pack");
   const [packDescription, setPackDescription] = useState("");
+  const [packArchetypeTags, setPackArchetypeTags] = useState([]);
   const [savedPackId, setSavedPackId] = useState(null);
   const [savedPackName, setSavedPackName] = useState(null);
   const [saveStatus, setSaveStatus] = useState("");
@@ -79,12 +95,16 @@ export function usePackBuilder(user, refreshPacks) {
 
     setPackName(normalizePackName(pack.name, "Current Pack"));
     setPackDescription(pack.description || "");
+    setPackArchetypeTags(
+      normalizeArchetypeTags(pack.archetype_tags || pack.archetype_tag),
+    );
     setSelectedCards(hydratedCards);
     setSavedPackId(pack.id);
     setSavedPackName(pack.name || null);
     lastSavedSnapshotRef.current = getPackSnapshot(
       pack.name || "Current Pack",
       pack.description || "",
+      pack.archetype_tags || pack.archetype_tag,
       hydratedCards,
     );
   }
@@ -106,6 +126,7 @@ export function usePackBuilder(user, refreshPacks) {
   function newPack() {
     setPackName("Unnamed Pack");
     setPackDescription("");
+    setPackArchetypeTags([]);
     setSelectedCards([]);
     setSavedPackId(null);
     setSavedPackName(null);
@@ -124,6 +145,7 @@ export function usePackBuilder(user, refreshPacks) {
     const currentSnapshot = getPackSnapshot(
       packName,
       packDescription,
+      packArchetypeTags,
       selectedCards,
     );
 
@@ -141,6 +163,7 @@ export function usePackBuilder(user, refreshPacks) {
         .insert({
           name: normalizePackName(packName),
           description: packDescription,
+          archetype_tags: normalizeArchetypeTags(packArchetypeTags),
           user_id: user.id,
         })
         .select()
@@ -160,6 +183,7 @@ export function usePackBuilder(user, refreshPacks) {
         .update({
           name: normalizePackName(packName),
           description: packDescription,
+          archetype_tags: normalizeArchetypeTags(packArchetypeTags),
         })
         .eq("id", actualPackId);
 
@@ -207,7 +231,14 @@ export function usePackBuilder(user, refreshPacks) {
     setTimeout(() => setSaveStatus(""), 2000);
 
     return actualPackId;
-  }, [packDescription, packName, refreshPacks, selectedCards, user]);
+  }, [
+    packArchetypeTags,
+    packDescription,
+    packName,
+    refreshPacks,
+    selectedCards,
+    user,
+  ]);
 
   async function duplicatePack(packId) {
     if (!packId || !user) return;
@@ -238,6 +269,9 @@ export function usePackBuilder(user, refreshPacks) {
       .insert({
         name: normalizePackName(`${originalPack.name} Copy`),
         description: originalPack.description,
+        archetype_tags: normalizeArchetypeTags(
+          originalPack.archetype_tags || originalPack.archetype_tag,
+        ),
         user_id: user.id,
       })
       .select()
@@ -335,6 +369,7 @@ export function usePackBuilder(user, refreshPacks) {
     const currentSnapshot = getPackSnapshot(
       packName,
       packDescription,
+      packArchetypeTags,
       selectedCards,
     );
 
@@ -352,6 +387,7 @@ export function usePackBuilder(user, refreshPacks) {
   }, [
     finishSave,
     packDescription,
+    packArchetypeTags,
     packName,
     savedPackId,
     selectedCards,
@@ -365,6 +401,8 @@ export function usePackBuilder(user, refreshPacks) {
     setPackName,
     packDescription,
     setPackDescription,
+    packArchetypeTags,
+    setPackArchetypeTags,
     savedPackId,
     setSavedPackId,
     savedPackName,

@@ -103,6 +103,30 @@
   text-overflow: ellipsis;
 }
 
+.packModalTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.packModalTags:empty {
+  display: none;
+}
+
+.packModalTag {
+  display: inline-block;
+  padding: 2px 6px;
+
+  background: rgba(240, 217, 138, 0.14);
+  color: #f0d98a;
+  border: 1px solid rgba(240, 217, 138, 0.32);
+  border-radius: 6px;
+
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
 .packModalOpen small {
   display: block;
   margin-top: 4px;
