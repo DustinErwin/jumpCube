@@ -3,6 +3,20 @@ import "./PackBox.css";
 
 const PACK_TITLE_MAX_LENGTH = 40;
 
+function getCardPrice(card) {
+  const price = card.price_usd ?? card.prices?.usd ?? 0;
+  const numericPrice = Number(price);
+
+  return Number.isFinite(numericPrice) ? numericPrice : 0;
+}
+
+function formatUsd(value) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(value);
+}
+
 export default function PackBox({
   packName,
   setPackName,
@@ -38,6 +52,10 @@ export default function PackBox({
 
   const totalCards = selectedCards.reduce(
     (sum, card) => sum + card.quantity,
+    0,
+  );
+  const totalPrice = selectedCards.reduce(
+    (sum, card) => sum + getCardPrice(card) * card.quantity,
     0,
   );
 
@@ -233,6 +251,8 @@ export default function PackBox({
           <span aria-hidden="true">⊞</span>
         </button>
       </div>
+
+      <p className="packTotalPrice">Total: {formatUsd(totalPrice)}</p>
 
       {confirmingDeletePack && (
         <button

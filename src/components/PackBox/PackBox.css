@@ -243,6 +243,14 @@
   color: #ffb8b8;
 }
 
+.packTotalPrice {
+  margin: -2px 0 10px;
+  text-align: center;
+  color: #d8d0b8;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
 .confirmDeletePackButton {
   width: 100%;
   min-height: 34px;
