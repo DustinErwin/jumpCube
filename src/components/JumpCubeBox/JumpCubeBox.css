@@ -175,6 +175,35 @@
   color: #ffb8b8;
 }
 
+.confirmDeleteCubeButton {
+  width: 100%;
+  min-height: 34px;
+  margin: 0 0 10px;
+  padding: 7px 10px;
+
+  background: #7a1f1f;
+  color: white;
+  border: 1px solid #b84a4a;
+  border-radius: 7px;
+
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.15;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.confirmDeleteCubeButton:hover {
+  background: #932525;
+}
+
+.confirmDeleteCubeButton:active {
+  transform: translateY(1px) scale(0.99);
+}
+
 .cubePackScrollArea {
   flex: 1;
   min-height: 0;
@@ -354,6 +383,10 @@
   .cubeActionButton {
     width: 44px;
     height: 44px;
+  }
+
+  .confirmDeleteCubeButton {
+    min-height: 44px;
   }
 
   .actionIcon {

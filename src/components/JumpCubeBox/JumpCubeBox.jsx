@@ -20,6 +20,7 @@ export default function JumpCubeBox({
 }) {
   const [editingName, setEditingName] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
+  const [confirmingDeleteCube, setConfirmingDeleteCube] = useState(false);
   const [pendingRemovePackId, setPendingRemovePackId] = useState(null);
 
   useEffect(() => {
@@ -40,14 +41,9 @@ export default function JumpCubeBox({
     };
   }, [pendingRemovePackId]);
 
-  function confirmDeleteCube() {
-    const shouldDelete = window.confirm(
-      `Clear "${cubeName}"? This will remove all packs from the current cube.`,
-    );
-
-    if (shouldDelete) {
-      newCube();
-    }
+  function deleteConfirmedCube() {
+    newCube();
+    setConfirmingDeleteCube(false);
   }
 
   function getPackColorIdentity(pack) {
@@ -159,7 +155,10 @@ export default function JumpCubeBox({
         <button
           className="cubeActionButton openCubesButton"
           type="button"
-          onClick={onOpenCubes}
+          onClick={() => {
+            setConfirmingDeleteCube(false);
+            onOpenCubes();
+          }}
           title="Open my cubes"
           aria-label="Open my cubes"
         >
@@ -179,7 +178,10 @@ export default function JumpCubeBox({
             saveStatus === "saving" ? "saving" : ""
           }`}
           type="button"
-          onClick={saveCube}
+          onClick={() => {
+            setConfirmingDeleteCube(false);
+            saveCube();
+          }}
           disabled={selectedPacks.length === 0 || saveStatus === "saving"}
           title={saveStatus === "saving" ? "Saving cube" : "Save cube"}
           aria-label={saveStatus === "saving" ? "Saving cube" : "Save cube"}
@@ -200,7 +202,10 @@ export default function JumpCubeBox({
         <button
           className="cubeActionButton newCubeButton"
           type="button"
-          onClick={newCube}
+          onClick={() => {
+            setConfirmingDeleteCube(false);
+            newCube();
+          }}
           title="New cube"
           aria-label="New cube"
         >
@@ -210,7 +215,7 @@ export default function JumpCubeBox({
         <button
           className="cubeActionButton deleteCubeButton"
           type="button"
-          onClick={confirmDeleteCube}
+          onClick={() => setConfirmingDeleteCube((current) => !current)}
           disabled={selectedPacks.length === 0 && !cubeDescription.trim()}
           title="Clear cube"
           aria-label="Clear cube"
@@ -218,6 +223,17 @@ export default function JumpCubeBox({
           <span aria-hidden="true">×</span>
         </button>
       </div>
+
+      {confirmingDeleteCube && (
+        <button
+          className="confirmDeleteCubeButton"
+          type="button"
+          onClick={deleteConfirmedCube}
+          aria-label={`Confirm clear ${cubeName}`}
+        >
+          Clear {cubeName}
+        </button>
+      )}
 
       {saveStatus === "saved" && (
         <p className="saveMessage success">Cube saved ✓</p>
