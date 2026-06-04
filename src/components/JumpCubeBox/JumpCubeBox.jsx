@@ -8,7 +8,7 @@ const ARCHETYPE_COLORS = {
   Midrange: "#d8c58f",
   Combo: "#7b4aa1",
   Ramp: "#3f9650",
-  Tempo: "#4fa5d5",
+  Tempo: "#727a80",
 };
 const GOLD_ARCHETYPE_BACKGROUND = "linear-gradient(90deg, #e1c45a, #9a6a18)";
 

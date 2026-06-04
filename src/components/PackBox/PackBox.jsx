@@ -9,7 +9,7 @@ const ARCHETYPE_COLORS = {
   Midrange: { background: "#d8c58f", color: "#17130b" },
   Combo: { background: "#7b4aa1", color: "white" },
   Ramp: { background: "#3f9650", color: "white" },
-  Tempo: { background: "#4fa5d5", color: "white" },
+  Tempo: { background: "#727a80", color: "white" },
 };
 
 function getCardPrice(card) {
