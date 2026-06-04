@@ -71,7 +71,11 @@
   position: fixed;
   inset: 0;
 
-  background: url("../images/frogCube.png") center center / 620px no-repeat;
+  background: var(
+      --frog-background-image,
+      url("../images/frogCube.png")
+    )
+    center center / 620px no-repeat;
 
   opacity: 0.12;
   filter: blur(2px);

@@ -21,6 +21,7 @@ import "./App.css";
 
 const TITLE_MAX_LENGTH = 40;
 const MOBILE_PANEL_QUERY = "(max-width: 760px)";
+const FALLBACK_FROG_BACKGROUND = `${import.meta.env.BASE_URL}images/frogCube.png`;
 
 function normalizeTitle(title, fallback) {
   const trimmedTitle = (title || "").trim().slice(0, TITLE_MAX_LENGTH);
@@ -34,6 +35,16 @@ function getCubeSnapshot(name, description, packs) {
     description: description || "",
     packs: packs.map((pack) => pack.savedPackId || pack.id),
   });
+}
+
+function getCardArt(card) {
+  return (
+    card?.image_uris?.art_crop ||
+    card?.image_uris?.normal ||
+    card?.card_faces?.find((face) => face.image_uris)?.image_uris?.art_crop ||
+    card?.card_faces?.find((face) => face.image_uris)?.image_uris?.normal ||
+    null
+  );
 }
 
 function App() {
@@ -72,6 +83,9 @@ function App() {
   const [savedCubeId, setSavedCubeId] = useState(null);
   const [cubeSaveStatus, setCubeSaveStatus] = useState("");
   const [selectedSets, setSelectedSets] = useState([]);
+  const [frogBackground, setFrogBackground] = useState(
+    FALLBACK_FROG_BACKGROUND,
+  );
   const lastSavedCubeSnapshotRef = useRef(null);
 
   const {
@@ -285,6 +299,35 @@ function App() {
   }, [loadMoreCards]);
 
   useEffect(() => {
+    let isCurrent = true;
+
+    async function loadRandomFrogBackground() {
+      try {
+        const response = await fetch(
+          "https://api.scryfall.com/cards/random?q=t%3Afrog%20t%3Acreature%20-is%3Afunny",
+        );
+
+        if (!response.ok) return;
+
+        const card = await response.json();
+        const cardArt = getCardArt(card);
+
+        if (isCurrent && cardArt) {
+          setFrogBackground(cardArt);
+        }
+      } catch (error) {
+        console.error("Error loading random Frog background:", error);
+      }
+    }
+
+    loadRandomFrogBackground();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
+
+  useEffect(() => {
     let animationFrame = null;
 
     function updateSidePanelTop() {
@@ -324,7 +367,10 @@ function App() {
   }, []);
 
   return (
-    <main className="app">
+    <main
+      className="app"
+      style={{ "--frog-background-image": `url("${frogBackground}")` }}
+    >
       <NavBar
         user={user}
         onLogout={handleLogout}
