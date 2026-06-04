@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../utils/supabase";
 
 const PACK_TITLE_MAX_LENGTH = 40;
@@ -7,6 +7,17 @@ function normalizePackName(name, fallback = "Unnamed Pack") {
   const trimmedName = (name || "").trim().slice(0, PACK_TITLE_MAX_LENGTH);
 
   return trimmedName || fallback;
+}
+
+function getPackSnapshot(name, description, cards) {
+  return JSON.stringify({
+    name: normalizePackName(name),
+    description: description || "",
+    cards: cards.map((card) => ({
+      id: card.id,
+      quantity: card.quantity,
+    })),
+  });
 }
 
 export function usePackBuilder(user, refreshPacks) {
@@ -18,6 +29,7 @@ export function usePackBuilder(user, refreshPacks) {
   const [saveStatus, setSaveStatus] = useState("");
   const [showRenameChoice, setShowRenameChoice] = useState(false);
   const [pendingSaveAction, setPendingSaveAction] = useState(null);
+  const lastSavedSnapshotRef = useRef(null);
 
   function addCardToPack(card) {
     setSelectedCards((prev) => {
@@ -70,6 +82,11 @@ export function usePackBuilder(user, refreshPacks) {
     setSelectedCards(hydratedCards);
     setSavedPackId(pack.id);
     setSavedPackName(pack.name || null);
+    lastSavedSnapshotRef.current = getPackSnapshot(
+      pack.name || "Current Pack",
+      pack.description || "",
+      hydratedCards,
+    );
   }
 
   function decreaseCardQuantity(cardId) {
@@ -94,6 +111,7 @@ export function usePackBuilder(user, refreshPacks) {
     setSavedPackName(null);
     setShowRenameChoice(false);
     setPendingSaveAction(null);
+    lastSavedSnapshotRef.current = null;
     localStorage.removeItem("jumpCubeCurrentPack");
   }
 
@@ -101,6 +119,16 @@ export function usePackBuilder(user, refreshPacks) {
     if (!user?.id) {
       setSaveStatus("error");
       return null;
+    }
+
+    const currentSnapshot = getPackSnapshot(
+      packName,
+      packDescription,
+      selectedCards,
+    );
+
+    if (packId && currentSnapshot === lastSavedSnapshotRef.current) {
+      return packId;
     }
 
     setSaveStatus("saving");
@@ -172,6 +200,7 @@ export function usePackBuilder(user, refreshPacks) {
     }
 
     setSavedPackName(normalizePackName(packName));
+    lastSavedSnapshotRef.current = currentSnapshot;
     await refreshPacks?.();
     setSaveStatus("saved");
 
@@ -302,6 +331,16 @@ export function usePackBuilder(user, refreshPacks) {
   useEffect(() => {
     if (!user?.id) return undefined;
     if (selectedCards.length === 0 && !savedPackId) return undefined;
+
+    const currentSnapshot = getPackSnapshot(
+      packName,
+      packDescription,
+      selectedCards,
+    );
+
+    if (savedPackId && currentSnapshot === lastSavedSnapshotRef.current) {
+      return undefined;
+    }
 
     const timeoutId = window.setTimeout(() => {
       finishSave(savedPackId);

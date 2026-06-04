@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import { supabase } from "./utils/supabase";
 import { useCards } from "./hooks/useCards";
@@ -26,6 +26,14 @@ function normalizeTitle(title, fallback) {
   const trimmedTitle = (title || "").trim().slice(0, TITLE_MAX_LENGTH);
 
   return trimmedTitle || fallback;
+}
+
+function getCubeSnapshot(name, description, packs) {
+  return JSON.stringify({
+    name: normalizeTitle(name, "Unnamed Cube"),
+    description: description || "",
+    packs: packs.map((pack) => pack.savedPackId || pack.id),
+  });
 }
 
 function App() {
@@ -64,6 +72,7 @@ function App() {
   const [savedCubeId, setSavedCubeId] = useState(null);
   const [cubeSaveStatus, setCubeSaveStatus] = useState("");
   const [selectedSets, setSelectedSets] = useState([]);
+  const lastSavedCubeSnapshotRef = useRef(null);
 
   const {
     cardList,
@@ -176,10 +185,21 @@ function App() {
     setSelectedPacks([]);
     setSavedCubeId(null);
     setCubeSaveStatus("");
+    lastSavedCubeSnapshotRef.current = null;
   }
 
   const saveCurrentCube = useCallback(async function saveCurrentCube() {
     if (selectedPacks.length === 0 && !savedCubeId) return;
+
+    const currentSnapshot = getCubeSnapshot(
+      cubeName,
+      cubeDescription,
+      selectedPacks,
+    );
+
+    if (savedCubeId && currentSnapshot === lastSavedCubeSnapshotRef.current) {
+      return;
+    }
 
     setCubeSaveStatus("saving");
 
@@ -196,6 +216,7 @@ function App() {
     }
 
     setSavedCubeId(cubeId);
+    lastSavedCubeSnapshotRef.current = currentSnapshot;
     setCubeSaveStatus("saved");
 
     setTimeout(() => setCubeSaveStatus(""), 2000);
@@ -216,11 +237,26 @@ function App() {
     setCubeName(normalizeTitle(cube.name, "Current Jump Cube"));
     setCubeDescription(cube.description || "");
     setSelectedPacks(cube.packs || []);
+    lastSavedCubeSnapshotRef.current = getCubeSnapshot(
+      cube.name || "Current Jump Cube",
+      cube.description || "",
+      cube.packs || [],
+    );
     setIsCubeLibraryOpen(false);
   }
 
   useEffect(() => {
     if (selectedPacks.length === 0 && !savedCubeId) return undefined;
+
+    const currentSnapshot = getCubeSnapshot(
+      cubeName,
+      cubeDescription,
+      selectedPacks,
+    );
+
+    if (savedCubeId && currentSnapshot === lastSavedCubeSnapshotRef.current) {
+      return undefined;
+    }
 
     const timeoutId = window.setTimeout(() => {
       saveCurrentCube();

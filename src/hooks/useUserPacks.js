@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../utils/supabase";
 
 export function useUserPacks(user) {
   const [packs, setPacks] = useState([]);
   const [loadingPacks, setLoadingPacks] = useState(false);
 
-  async function loadPacks() {
+  const loadPacks = useCallback(async function loadPacks() {
     if (!user) {
       setPacks([]);
       return;
@@ -27,11 +27,17 @@ export function useUserPacks(user) {
 
     setPacks(data || []);
     setLoadingPacks(false);
-  }
+  }, [user]);
 
   useEffect(() => {
-    loadPacks();
-  }, [user]);
+    const timeoutId = window.setTimeout(() => {
+      loadPacks();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [loadPacks]);
 
   return {
     packs,
