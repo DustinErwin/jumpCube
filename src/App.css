@@ -75,7 +75,7 @@
       --frog-background-image,
       url("../images/frogCube.png")
     )
-    center center / 620px no-repeat;
+    center center / cover no-repeat;
 
   opacity: 0.12;
   filter: blur(2px);
