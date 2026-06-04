@@ -103,6 +103,12 @@ function App() {
     setSearch(searchInput.trim());
   }
 
+  async function saveCurrentPackBeforeLeaving() {
+    if (pack.selectedCards.length === 0) return;
+
+    await pack.savePack({ promptOnRename: false });
+  }
+
   async function addCurrentPackToCube() {
     if (pack.selectedCards.length === 0) return;
 
@@ -153,9 +159,15 @@ function App() {
   }
 
   async function openCubePack(packId) {
+    await saveCurrentPackBeforeLeaving();
     await pack.loadPack(packId);
     setIsPackBoxOpen(true);
     setIsJumpCubeBoxOpen(false);
+  }
+
+  async function startNewPack() {
+    await saveCurrentPackBeforeLeaving();
+    pack.newPack();
   }
 
   function newCube() {
@@ -381,7 +393,7 @@ function App() {
                   onOpenPacks={() => setIsPackLibraryOpen(true)}
                   deletePack={pack.deletePack}
                   savedPackId={pack.savedPackId}
-                  newPack={pack.newPack}
+                  newPack={startNewPack}
                   saveStatus={pack.saveStatus}
                   showRenameChoice={pack.showRenameChoice}
                   pendingSaveAction={pack.pendingSaveAction}
@@ -411,6 +423,7 @@ function App() {
                 packs={packs}
                 onClose={() => setIsPackLibraryOpen(false)}
                 onOpenPack={async (packId) => {
+                  await saveCurrentPackBeforeLeaving();
                   await pack.loadPack(packId);
                   setIsPackLibraryOpen(false);
                 }}
