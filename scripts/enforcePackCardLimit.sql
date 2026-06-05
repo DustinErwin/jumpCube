@@ -5,6 +5,10 @@ as $$
 declare
   total_quantity integer;
 begin
+  if new.quantity < 1 then
+    raise exception 'Pack card quantity must be at least 1';
+  end if;
+
   select coalesce(sum(quantity), 0)
     into total_quantity
   from public.pack_cards
