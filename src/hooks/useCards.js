@@ -145,9 +145,42 @@ function getCardUniqueKey(card, showAllPrintings) {
   return String(card.oracle_id || card.name || card.scryfall_id || card.id);
 }
 
+function getCollectorNumberParts(card) {
+  const collectorNumber = String(card.collector_number || "");
+  const numberMatch = collectorNumber.match(/\d+/);
+  const numericPart = numberMatch ? Number(numberMatch[0]) : Number.MAX_SAFE_INTEGER;
+
+  return {
+    numericPart,
+    textPart: collectorNumber.toLowerCase(),
+  };
+}
+
+function compareCollectorNumbers(cardA, cardB) {
+  const collectorA = getCollectorNumberParts(cardA);
+  const collectorB = getCollectorNumberParts(cardB);
+
+  if (collectorA.numericPart !== collectorB.numericPart) {
+    return collectorA.numericPart - collectorB.numericPart;
+  }
+
+  return collectorA.textPart.localeCompare(collectorB.textPart);
+}
+
 function shouldReplaceCardVersion(currentCard, candidateCard) {
   if (!getCardImageUrl(currentCard) && getCardImageUrl(candidateCard)) {
     return true;
+  }
+
+  if (currentCard.set_code === candidateCard.set_code) {
+    const collectorComparison = compareCollectorNumbers(
+      candidateCard,
+      currentCard,
+    );
+
+    if (collectorComparison !== 0) {
+      return collectorComparison < 0;
+    }
   }
 
   if (currentCard.is_variant_printing && !candidateCard.is_variant_printing) {

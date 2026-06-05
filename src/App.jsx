@@ -11,6 +11,7 @@ import AuthPage from "./pages/AuthPage/AuthPage";
 import SearchBox from "./components/SearchBox/SearchBox";
 import FilterBox from "./components/FilterBox/FilterBox";
 import CardBox from "./components/CardBox/CardBox";
+import CardModal from "./components/CardModal/CardModal";
 import PackBox from "./components/PackBox/PackBox";
 import PackLibraryModal from "./components/PackLibraryModal/PackLibraryModal";
 import CubeLibraryModal from "./components/CubeLibraryModal/CubeLibraryModal";
@@ -58,6 +59,7 @@ function App() {
   const [isCubeLibraryOpen, setIsCubeLibraryOpen] = useState(false);
 
   const [isDraggingCard, setIsDraggingCard] = useState(false);
+  const [modalCard, setModalCard] = useState(null);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [manaValues, setManaValues] = useState([]);
@@ -456,8 +458,10 @@ function App() {
 
                       <CardBox
                         cards={cardList}
-                        onCardSelect={pack.addCardToPack}
-                        isDraggingCard={isDraggingCard}
+                        onCardOpen={setModalCard}
+                        selectedCards={pack.selectedCards}
+                        onCardAdd={pack.addCardToPack}
+                        onCardDecrease={pack.decreaseCardQuantity}
                         setIsDraggingCard={setIsDraggingCard}
                         isSelectionDisabled={pack.isPackFull}
                       />
@@ -540,6 +544,15 @@ function App() {
                     newCube();
                   }
                 }}
+              />
+
+              <CardModal
+                key={modalCard?.id || "card-modal"}
+                isOpen={Boolean(modalCard)}
+                card={modalCard}
+                onClose={() => setModalCard(null)}
+                onAddToPack={pack.addCardToPack}
+                isPackFull={pack.isPackFull}
               />
             </>
           }

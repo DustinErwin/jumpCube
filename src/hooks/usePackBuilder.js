@@ -154,18 +154,23 @@ export function usePackBuilder(user, refreshPacks) {
     localStorage.removeItem("jumpCubeCurrentPack");
   }
 
-  const finishSave = useCallback(async function finishSave(packId) {
+  const finishSave = useCallback(async function finishSave(
+    packId,
+    cardsOverride = selectedCards,
+  ) {
     if (!user?.id) {
       setSaveStatus("error");
       return null;
     }
+
+    const cardsToSave = cardsOverride || selectedCards;
 
     const currentSnapshot = getPackSnapshot(
       packName,
       packDescription,
       packArchetypeTags,
       packVisibility,
-      selectedCards,
+      cardsToSave,
     );
 
     if (packId && currentSnapshot === lastSavedSnapshotRef.current) {
@@ -215,7 +220,7 @@ export function usePackBuilder(user, refreshPacks) {
       }
     }
 
-    const packCards = selectedCards.map((card) => ({
+    const packCards = cardsToSave.map((card) => ({
       pack_id: actualPackId,
       card_id: card.id,
       quantity: card.quantity,
@@ -356,8 +361,13 @@ export function usePackBuilder(user, refreshPacks) {
     });
   }
 
-  async function savePack({ promptOnRename = true } = {}) {
-    if (selectedCards.length === 0) return null;
+  async function savePack({
+    promptOnRename = true,
+    cardsOverride = selectedCards,
+  } = {}) {
+    const cardsToSave = cardsOverride || selectedCards;
+
+    if (cardsToSave.length === 0) return null;
 
     if (
       promptOnRename &&
@@ -370,19 +380,19 @@ export function usePackBuilder(user, refreshPacks) {
       setPendingSaveAction(() => ({
         renameExisting: async () => {
           setShowRenameChoice(false);
-          return finishSave(savedPackId);
+          return finishSave(savedPackId, cardsToSave);
         },
 
         saveAsNew: async () => {
           setShowRenameChoice(false);
-          return finishSave(null);
+          return finishSave(null, cardsToSave);
         },
       }));
 
       return null;
     }
 
-    return finishSave(savedPackId);
+    return finishSave(savedPackId, cardsToSave);
   }
 
   useEffect(() => {

@@ -1,0 +1,206 @@
+.cardModalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(3, 6, 12, 0.78);
+}
+
+.cardModal {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(240px, 360px) minmax(320px, 560px);
+  gap: 20px;
+  width: min(980px, 100%);
+  max-height: min(860px, calc(100svh - 40px));
+  overflow: auto;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: #10141d;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.72);
+  color: #f6f2e9;
+  text-align: left;
+}
+
+.cardModalClose {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 4px;
+  background: #1f2633;
+  color: white;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.cardModalImagePanel {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.cardModalImagePanel img,
+.cardModalMissingImage {
+  width: 100%;
+  max-width: 360px;
+  border-radius: 12px;
+}
+
+.cardModalMissingImage {
+  aspect-ratio: 5 / 7;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: #1b1f27;
+  color: #b9bdc7;
+}
+
+.cardModalDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.cardModalHeader h2 {
+  margin: 0 42px 4px 0;
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.cardModalHeader p,
+.cardLegalities p,
+.cardOracleText p {
+  margin: 0;
+}
+
+.cardModalHeader p {
+  color: #c7cbd4;
+}
+
+.cardVersionPicker {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.cardVersionPicker select {
+  min-height: 38px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 4px;
+  background: #1c2330;
+  color: white;
+  padding: 0 10px;
+}
+
+.cardModalError {
+  margin: 0;
+  color: #ff9d9d;
+}
+
+.cardDataGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.cardDataGrid div {
+  padding: 9px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.cardDataGrid dt {
+  margin-bottom: 3px;
+  color: #aeb5c3;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.cardDataGrid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cardOracleText,
+.cardLegalities {
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.18);
+  line-height: 1.45;
+}
+
+.cardOracleText {
+  display: grid;
+  gap: 8px;
+  white-space: pre-wrap;
+}
+
+.cardLegalities h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.cardModalActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.cardModalActions button {
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 4px;
+  background: #2d5dff;
+  color: white;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.cardModalActions button:last-child {
+  background: #d7a928;
+  color: #17130a;
+}
+
+.cardModalActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@media (max-width: 760px) {
+  .cardModalOverlay {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .cardModal {
+    grid-template-columns: 1fr;
+    width: 100%;
+    max-height: 100svh;
+    border-radius: 0;
+    padding: 14px;
+  }
+
+  .cardModalImagePanel img,
+  .cardModalMissingImage {
+    max-width: min(320px, 78vw);
+  }
+
+  .cardModalHeader h2 {
+    font-size: 24px;
+  }
+
+  .cardDataGrid {
+    grid-template-columns: 1fr;
+  }
+}

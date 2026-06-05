@@ -1,16 +1,18 @@
 import "./CardBox.css";
-import CardPreview from "../CardPreview/CardPreview";
-import { useCardPreview } from "../../hooks/useCardPreview";
 
 export default function CardBox({
   cards,
-  onCardSelect,
-  isDraggingCard,
+  onCardOpen,
+  selectedCards = [],
+  onCardAdd,
+  onCardDecrease,
   setIsDraggingCard,
   isSelectionDisabled = false,
 }) {
-  const { preview, startPreview, movePreview, stopPreview } =
-    useCardPreview(250);
+  function getCardQuantity(card) {
+    return selectedCards.find((selectedCard) => selectedCard.id === card.id)
+      ?.quantity || 0;
+  }
 
   function getImage(card) {
     return (
@@ -32,10 +34,11 @@ export default function CardBox({
       <div className="cardGrid">
         {cards.map((card, index) => {
           const image = getImage(card);
+          const quantity = getCardQuantity(card);
 
           return (
             <div
-              className={`cardBox ${isSelectionDisabled ? "disabled" : ""}`}
+              className="cardBox"
               key={`${card.scryfall_id || card.id || card.name}-${index}`}
               draggable={!isSelectionDisabled}
               title={
@@ -49,7 +52,6 @@ export default function CardBox({
                   return;
                 }
 
-                stopPreview();
                 setIsDraggingCard(true);
 
                 e.dataTransfer.effectAllowed = "copy";
@@ -62,25 +64,44 @@ export default function CardBox({
                 setIsDraggingCard(false);
               }}
               onClick={() => {
-                if (isSelectionDisabled) return;
-
-                onCardSelect?.(card);
+                onCardOpen?.(card);
               }}
-              onMouseEnter={(e) => {
-                if (!isDraggingCard) startPreview(card, e);
-              }}
-              onMouseMove={(e) => {
-                if (!isDraggingCard) movePreview(e);
-              }}
-              onMouseLeave={stopPreview}
             >
               {image && <img src={image} alt={card.name} loading="lazy" />}
+              <div
+                className="cardQuantityControls"
+                aria-label={`${card.name} pack quantity controls`}
+              >
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onCardDecrease?.(card.id);
+                  }}
+                  disabled={quantity === 0}
+                  aria-label={`Remove one ${card.name} from pack`}
+                >
+                  -
+                </button>
+
+                <span aria-label={`${quantity} in pack`}>{quantity}</span>
+
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onCardAdd?.(card);
+                  }}
+                  disabled={isSelectionDisabled}
+                  aria-label={`Add one ${card.name} to pack`}
+                >
+                  +
+                </button>
+              </div>
             </div>
           );
         })}
       </div>
-
-      {!isDraggingCard && <CardPreview preview={preview} />}
     </>
   );
 }
