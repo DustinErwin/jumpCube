@@ -7,6 +7,7 @@ export default function CardBox({
   onCardSelect,
   isDraggingCard,
   setIsDraggingCard,
+  isSelectionDisabled = false,
 }) {
   const { preview, startPreview, movePreview, stopPreview } =
     useCardPreview(250);
@@ -34,11 +35,20 @@ export default function CardBox({
 
           return (
             <div
-              className="cardBox"
+              className={`cardBox ${isSelectionDisabled ? "disabled" : ""}`}
               key={`${card.scryfall_id || card.id || card.name}-${index}`}
-              draggable
-              title={card.name}
+              draggable={!isSelectionDisabled}
+              title={
+                isSelectionDisabled
+                  ? "Pack limit reached"
+                  : card.name
+              }
               onDragStart={(e) => {
+                if (isSelectionDisabled) {
+                  e.preventDefault();
+                  return;
+                }
+
                 stopPreview();
                 setIsDraggingCard(true);
 
@@ -51,7 +61,11 @@ export default function CardBox({
               onDragEnd={() => {
                 setIsDraggingCard(false);
               }}
-              onClick={() => onCardSelect?.(card)}
+              onClick={() => {
+                if (isSelectionDisabled) return;
+
+                onCardSelect?.(card);
+              }}
               onMouseEnter={(e) => {
                 if (!isDraggingCard) startPreview(card, e);
               }}

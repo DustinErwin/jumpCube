@@ -458,6 +458,7 @@ function App() {
                         onCardSelect={pack.addCardToPack}
                         isDraggingCard={isDraggingCard}
                         setIsDraggingCard={setIsDraggingCard}
+                        isSelectionDisabled={pack.isPackFull}
                       />
                       {loadingMoreCards && <p>Loading more cards...</p>}
 

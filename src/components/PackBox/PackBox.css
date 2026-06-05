@@ -45,6 +45,14 @@
   font-size: 0.9rem;
 }
 
+.packLimitMessage {
+  margin: -6px 0 10px;
+  text-align: center;
+  color: #f0d98a;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .packList {
   display: flex;
   flex-direction: column;

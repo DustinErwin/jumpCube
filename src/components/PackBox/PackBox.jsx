@@ -1,5 +1,8 @@
 import { useRef, useState } from "react";
-import { PACK_ARCHETYPE_TAGS } from "../../hooks/usePackBuilder";
+import {
+  PACK_ARCHETYPE_TAGS,
+  PACK_CARD_LIMIT,
+} from "../../hooks/usePackBuilder";
 import "./PackBox.css";
 
 const PACK_TITLE_MAX_LENGTH = 40;
@@ -221,7 +224,13 @@ export default function PackBox({
           )}
         </div>
       </div>
-      <p className="packCount">{totalCards} cards selected</p>
+      <p className="packCount">
+        {totalCards} / {PACK_CARD_LIMIT} cards selected
+      </p>
+
+      {totalCards >= PACK_CARD_LIMIT && (
+        <p className="packLimitMessage">Pack limit reached</p>
+      )}
 
       <div className="packActionToolbar" aria-label="Pack actions">
         <button

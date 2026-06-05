@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../utils/supabase";
 
 const PACK_TITLE_MAX_LENGTH = 40;
+export const PACK_CARD_LIMIT = 20;
 export const PACK_ARCHETYPE_TAGS = [
   "Aggro",
   "Midrange",
@@ -35,6 +36,10 @@ function getPackSnapshot(name, description, archetypeTags, cards) {
   });
 }
 
+function getPackCardCount(cards) {
+  return cards.reduce((sum, card) => sum + card.quantity, 0);
+}
+
 export function usePackBuilder(user, refreshPacks) {
   const [selectedCards, setSelectedCards] = useState([]);
   const [packName, setPackName] = useState("Current Pack");
@@ -49,6 +54,10 @@ export function usePackBuilder(user, refreshPacks) {
 
   function addCardToPack(card) {
     setSelectedCards((prev) => {
+      if (getPackCardCount(prev) >= PACK_CARD_LIMIT) {
+        return prev;
+      }
+
       const existingCard = prev.find((c) => c.id === card.id);
 
       if (existingCard) {
@@ -396,6 +405,7 @@ export function usePackBuilder(user, refreshPacks) {
 
   return {
     selectedCards,
+    isPackFull: getPackCardCount(selectedCards) >= PACK_CARD_LIMIT,
     setSelectedCards,
     packName,
     setPackName,
