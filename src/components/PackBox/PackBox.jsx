@@ -463,7 +463,7 @@ export default function PackBox({
       )} */}
       <div className="packCardScrollArea">
         {selectedCards.length === 0 ? (
-          <p className="emptyPack">Click cards to add them here.</p>
+          <p className="emptyPack">Add cards to start your pack.</p>
         ) : (
           <div className="stackedPackCards">
             {displayedCards.map((card) => (
