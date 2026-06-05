@@ -24,11 +24,16 @@ function normalizeArchetypeTags(tags) {
   return PACK_ARCHETYPE_TAGS.filter((tag) => incomingTags.includes(tag));
 }
 
-function getPackSnapshot(name, description, archetypeTags, cards) {
+function normalizeVisibility(visibility) {
+  return visibility === "public" ? "public" : "private";
+}
+
+function getPackSnapshot(name, description, archetypeTags, visibility, cards) {
   return JSON.stringify({
     name: normalizePackName(name),
     description: description || "",
     archetypeTags: normalizeArchetypeTags(archetypeTags),
+    visibility: normalizeVisibility(visibility),
     cards: cards.map((card) => ({
       id: card.id,
       quantity: card.quantity,
@@ -45,6 +50,7 @@ export function usePackBuilder(user, refreshPacks) {
   const [packName, setPackName] = useState("Current Pack");
   const [packDescription, setPackDescription] = useState("");
   const [packArchetypeTags, setPackArchetypeTags] = useState([]);
+  const [packVisibility, setPackVisibility] = useState("private");
   const [savedPackId, setSavedPackId] = useState(null);
   const [savedPackName, setSavedPackName] = useState(null);
   const [saveStatus, setSaveStatus] = useState("");
@@ -107,6 +113,7 @@ export function usePackBuilder(user, refreshPacks) {
     setPackArchetypeTags(
       normalizeArchetypeTags(pack.archetype_tags || pack.archetype_tag),
     );
+    setPackVisibility(normalizeVisibility(pack.visibility));
     setSelectedCards(hydratedCards);
     setSavedPackId(pack.id);
     setSavedPackName(pack.name || null);
@@ -114,6 +121,7 @@ export function usePackBuilder(user, refreshPacks) {
       pack.name || "Current Pack",
       pack.description || "",
       pack.archetype_tags || pack.archetype_tag,
+      pack.visibility,
       hydratedCards,
     );
   }
@@ -136,6 +144,7 @@ export function usePackBuilder(user, refreshPacks) {
     setPackName("Unnamed Pack");
     setPackDescription("");
     setPackArchetypeTags([]);
+    setPackVisibility("private");
     setSelectedCards([]);
     setSavedPackId(null);
     setSavedPackName(null);
@@ -155,6 +164,7 @@ export function usePackBuilder(user, refreshPacks) {
       packName,
       packDescription,
       packArchetypeTags,
+      packVisibility,
       selectedCards,
     );
 
@@ -173,6 +183,7 @@ export function usePackBuilder(user, refreshPacks) {
           name: normalizePackName(packName),
           description: packDescription,
           archetype_tags: normalizeArchetypeTags(packArchetypeTags),
+          visibility: normalizeVisibility(packVisibility),
           user_id: user.id,
         })
         .select()
@@ -193,6 +204,7 @@ export function usePackBuilder(user, refreshPacks) {
           name: normalizePackName(packName),
           description: packDescription,
           archetype_tags: normalizeArchetypeTags(packArchetypeTags),
+          visibility: normalizeVisibility(packVisibility),
         })
         .eq("id", actualPackId);
 
@@ -243,6 +255,7 @@ export function usePackBuilder(user, refreshPacks) {
   }, [
     packArchetypeTags,
     packDescription,
+    packVisibility,
     packName,
     refreshPacks,
     selectedCards,
@@ -281,6 +294,7 @@ export function usePackBuilder(user, refreshPacks) {
         archetype_tags: normalizeArchetypeTags(
           originalPack.archetype_tags || originalPack.archetype_tag,
         ),
+        visibility: normalizeVisibility(originalPack.visibility),
         user_id: user.id,
       })
       .select()
@@ -379,6 +393,7 @@ export function usePackBuilder(user, refreshPacks) {
       packName,
       packDescription,
       packArchetypeTags,
+      packVisibility,
       selectedCards,
     );
 
@@ -397,6 +412,7 @@ export function usePackBuilder(user, refreshPacks) {
     finishSave,
     packDescription,
     packArchetypeTags,
+    packVisibility,
     packName,
     savedPackId,
     selectedCards,
@@ -413,6 +429,8 @@ export function usePackBuilder(user, refreshPacks) {
     setPackDescription,
     packArchetypeTags,
     setPackArchetypeTags,
+    packVisibility,
+    setPackVisibility,
     savedPackId,
     setSavedPackId,
     savedPackName,

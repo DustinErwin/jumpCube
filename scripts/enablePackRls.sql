@@ -34,7 +34,10 @@ drop policy if exists "Users can read their packs" on public.packs;
 create policy "Users can read their packs"
   on public.packs
   for select
-  using (auth.uid() = user_id);
+  using (
+    auth.uid() = user_id
+    or visibility = 'public'
+  );
 
 drop policy if exists "Users can insert their packs" on public.packs;
 create policy "Users can insert their packs"
@@ -64,7 +67,10 @@ create policy "Users can read cards in their packs"
       select 1
       from public.packs
       where packs.id = pack_cards.pack_id
-        and packs.user_id = auth.uid()
+        and (
+          packs.user_id = auth.uid()
+          or packs.visibility = 'public'
+        )
     )
   );
 

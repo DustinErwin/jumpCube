@@ -55,6 +55,8 @@ export default function PackBox({
   setPackDescription,
   packArchetypeTags = [],
   setPackArchetypeTags,
+  packVisibility = "private",
+  setPackVisibility,
   newPack,
   saveStatus,
   showRenameChoice,
@@ -231,6 +233,22 @@ export default function PackBox({
       {totalCards >= PACK_CARD_LIMIT && (
         <p className="packLimitMessage">Pack limit reached</p>
       )}
+
+      <div className="packVisibilityToggle" aria-label="Pack visibility">
+        <span>Visibility</span>
+        <button
+          type="button"
+          className={packVisibility === "public" ? "public" : "private"}
+          onClick={() =>
+            setPackVisibility((currentVisibility) =>
+              currentVisibility === "public" ? "private" : "public",
+            )
+          }
+          aria-pressed={packVisibility === "public"}
+        >
+          {packVisibility === "public" ? "Public" : "Private"}
+        </button>
+      </div>
 
       <div className="packActionToolbar" aria-label="Pack actions">
         <button

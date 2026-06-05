@@ -153,6 +153,7 @@ function App() {
       name: normalizeTitle(pack.packName, "Unnamed Pack"),
       description: pack.packDescription.trim(),
       archetypeTags: pack.packArchetypeTags,
+      visibility: pack.packVisibility,
       cardCount,
       colorIdentity,
       savedPackId,
@@ -475,6 +476,8 @@ function App() {
                   setPackDescription={pack.setPackDescription}
                   packArchetypeTags={pack.packArchetypeTags}
                   setPackArchetypeTags={pack.setPackArchetypeTags}
+                  packVisibility={pack.packVisibility}
+                  setPackVisibility={pack.setPackVisibility}
                   selectedCards={pack.selectedCards}
                   addCard={pack.addCardToPack}
                   decreaseCardQuantity={pack.decreaseCardQuantity}

@@ -53,6 +53,42 @@
   font-weight: 700;
 }
 
+.packVisibilityToggle {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+
+  margin: -2px 0 10px;
+
+  color: #ccc;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.packVisibilityToggle button {
+  min-width: 74px;
+  min-height: 32px;
+  padding: 5px 9px;
+
+  color: white;
+  border: 1px solid #444;
+  border-radius: 7px;
+
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.packVisibilityToggle button.private {
+  background: #252525;
+}
+
+.packVisibilityToggle button.public {
+  background: #244d35;
+  border-color: #4e8f64;
+}
+
 .packList {
   display: flex;
   flex-direction: column;
