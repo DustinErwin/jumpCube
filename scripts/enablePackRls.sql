@@ -1,6 +1,35 @@
 alter table public.packs enable row level security;
 alter table public.pack_cards enable row level security;
 
+do $$
+declare
+  policy_record record;
+begin
+  for policy_record in
+    select policyname
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'packs'
+  loop
+    execute format(
+      'drop policy if exists %I on public.packs',
+      policy_record.policyname
+    );
+  end loop;
+
+  for policy_record in
+    select policyname
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'pack_cards'
+  loop
+    execute format(
+      'drop policy if exists %I on public.pack_cards',
+      policy_record.policyname
+    );
+  end loop;
+end $$;
+
 drop policy if exists "Users can read their packs" on public.packs;
 create policy "Users can read their packs"
   on public.packs
