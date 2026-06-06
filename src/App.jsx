@@ -494,6 +494,7 @@ function App() {
                   showRenameChoice={pack.showRenameChoice}
                   pendingSaveAction={pack.pendingSaveAction}
                   moveCard={pack.moveCard}
+                  moveCardToMechanicBucket={pack.moveCardToMechanicBucket}
                   isDraggingCard={isDraggingCard}
                   isOpen={isPackBoxOpen}
                   setIsOpen={setIsPackBoxOpen}

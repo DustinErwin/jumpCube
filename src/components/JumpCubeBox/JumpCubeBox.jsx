@@ -2,47 +2,128 @@ import { useEffect, useState } from "react";
 import "./JumpCubeBox.css";
 
 const CUBE_TITLE_MAX_LENGTH = 40;
-const ARCHETYPE_COLORS = {
-  Aggro: "#c93f32",
-  Control: "#2f77c8",
-  Midrange: "#d8c58f",
-  Combo: "#7b4aa1",
-  Ramp: "#3f9650",
-  Tempo: "#727a80",
+const MANA_COLORS = {
+  W: "#eee0b3",
+  U: "#3560c6",
+  B: "#60086f",
+  R: "#bd1616",
+  G: "#1e8514",
+  C: "#9ea3a6",
 };
-const GOLD_ARCHETYPE_BACKGROUND = "linear-gradient(90deg, #e1c45a, #9a6a18)";
+const MANA_ORDER = ["W", "U", "B", "R", "G", "C"];
+const CUBE_COLOR_COLUMNS = [
+  { id: "W", label: "White" },
+  { id: "U", label: "Blue" },
+  { id: "B", label: "Black" },
+  { id: "R", label: "Red" },
+  { id: "G", label: "Green" },
+  { id: "C", label: "Colorless" },
+  { id: "M", label: "Multicolor" },
+];
 
-function getPackArchetypeTags(pack) {
-  if (Array.isArray(pack.archetypeTags)) return pack.archetypeTags;
-  if (pack.archetypeTag) return [pack.archetypeTag];
-
-  return [];
+function getManaCost(card) {
+  return card.raw?.mana_cost || card.mana_cost || "";
 }
 
-function getArchetypeBackground(tags) {
-  if (tags.length === 0) return "#202020";
-  if (tags.length > 3) return GOLD_ARCHETYPE_BACKGROUND;
-  if (tags.length === 1) return ARCHETYPE_COLORS[tags[0]] || "#202020";
+function getCardManaPips(card) {
+  const pips = {
+    W: 0,
+    U: 0,
+    B: 0,
+    R: 0,
+    G: 0,
+    C: 0,
+  };
+  const manaCost = getManaCost(card);
+  const symbols = manaCost.match(/\{[^}]+\}/g) || [];
 
-  const segmentSize = 100 / tags.length;
-  const segments = tags.flatMap((tag, index) => {
-    const color = ARCHETYPE_COLORS[tag] || "#202020";
-    const start = `${index * segmentSize}%`;
-    const end = `${(index + 1) * segmentSize}%`;
-
-    return [`${color} ${start}`, `${color} ${end}`];
+  symbols.forEach((symbol) => {
+    MANA_ORDER.forEach((color) => {
+      if (symbol.includes(color)) {
+        pips[color] += 1;
+      }
+    });
   });
 
-  return `linear-gradient(90deg, ${segments.join(", ")})`;
+  return pips;
 }
 
-function getPackArchetypeStyle(pack) {
-  const tags = getPackArchetypeTags(pack);
+function getPackManaPipSegments(pack) {
+  const totals = MANA_ORDER.reduce(
+    (counts, color) => ({ ...counts, [color]: 0 }),
+    {},
+  );
 
-  return {
-    "--cube-pack-archetype-bg": getArchetypeBackground(tags),
-    "--cube-pack-text": "white",
-  };
+  (pack.cards || []).forEach((card) => {
+    const cardPips = getCardManaPips(card);
+    const quantity = card.quantity || 1;
+
+    MANA_ORDER.forEach((color) => {
+      totals[color] += cardPips[color] * quantity;
+    });
+  });
+
+  const totalPips = MANA_ORDER.reduce((sum, color) => sum + totals[color], 0);
+
+  if (totalPips === 0) {
+    return [
+      {
+        color: "C",
+        start: 0,
+        end: 100,
+        percentage: 100,
+      },
+    ];
+  }
+
+  let currentOffset = 0;
+
+  return MANA_ORDER.map((color) => ({
+    color,
+    count: totals[color],
+    percentage: (totals[color] / totalPips) * 100,
+  }))
+    .filter((segment) => segment.count > 0)
+    .sort((segmentA, segmentB) => {
+      if (segmentA.count !== segmentB.count) {
+        return segmentA.count - segmentB.count;
+      }
+
+      return MANA_ORDER.indexOf(segmentA.color) - MANA_ORDER.indexOf(segmentB.color);
+    })
+    .map((segment) => {
+      const start = currentOffset;
+      const end = currentOffset + segment.percentage;
+
+      currentOffset = end;
+
+      return {
+        ...segment,
+        start,
+        end,
+      };
+    });
+}
+
+function getPackManaBackdrop(pack) {
+  return (
+    <span className="cubePackManaBackdrop" aria-hidden="true">
+      {getPackManaPipSegments(pack).map((segment, index, segments) => (
+        <span
+          className="cubePackManaSegment"
+          key={segment.color}
+          style={{
+            "--segment-color": MANA_COLORS[segment.color],
+            "--segment-start": `${segment.start}%`,
+            "--segment-end": `${segment.end}%`,
+            "--segment-left-slope": index === 0 ? "0px" : "8px",
+            "--segment-right-slope":
+              index === segments.length - 1 ? "0px" : "8px",
+          }}
+        />
+      ))}
+    </span>
+  );
 }
 
 export default function JumpCubeBox({
@@ -63,6 +144,7 @@ export default function JumpCubeBox({
   const [editingDescription, setEditingDescription] = useState(false);
   const [confirmingDeleteCube, setConfirmingDeleteCube] = useState(false);
   const [pendingRemovePackId, setPendingRemovePackId] = useState(null);
+  const [showCubeStats, setShowCubeStats] = useState(false);
 
   useEffect(() => {
     if (!pendingRemovePackId) return undefined;
@@ -110,6 +192,26 @@ export default function JumpCubeBox({
     return classes[color] || "";
   }
 
+  function getPackColorColumnId(pack) {
+    const colors = getPackColorIdentity(pack);
+
+    if (colors.length === 0) return "C";
+    if (colors.length > 1) return "M";
+
+    return colors[0];
+  }
+
+  const colorIdentityColumns = CUBE_COLOR_COLUMNS.map((column) => ({
+    ...column,
+    packs: selectedPacks.filter(
+      (pack) => getPackColorColumnId(pack) === column.id,
+    ),
+  }));
+  const largestColorColumn = Math.max(
+    1,
+    ...colorIdentityColumns.map((column) => column.packs.length),
+  );
+
   function handlePackContextMenu(event, packId) {
     event.preventDefault();
 
@@ -132,15 +234,22 @@ export default function JumpCubeBox({
   }
 
   return (
-    <aside className={`jumpCubeBox ${isOpen ? "open" : "closed"}`}>
+    <aside
+      className={`jumpCubeBox ${isOpen ? "open" : "closed"} ${
+        showCubeStats ? "statsOpen" : ""
+      }`}
+    >
       <button
         className="jumpCubeToggle"
-        onClick={() => setIsOpen((prev) => !prev)}
+        onClick={() => {
+          setShowCubeStats(false);
+          setIsOpen((prev) => !prev);
+        }}
         title={isOpen ? "Hide cube" : "Show cube"}
         aria-label={isOpen ? "Hide cube" : "Show cube"}
         aria-expanded={isOpen}
       >
-        {isOpen ? "‹" : "›"}
+        {isOpen ? "<" : ">"}
       </button>
 
       {editingName ? (
@@ -233,6 +342,20 @@ export default function JumpCubeBox({
         >
           <span aria-hidden="true">×</span>
         </button>
+
+        <button
+          className="cubeActionButton cubeStatsButton"
+          type="button"
+          onClick={() => {
+            setConfirmingDeleteCube(false);
+            setShowCubeStats(true);
+          }}
+          disabled={selectedPacks.length === 0}
+          title="Show cube statistics"
+          aria-label="Show cube statistics"
+        >
+          <span aria-hidden="true">%</span>
+        </button>
       </div>
 
       {confirmingDeleteCube && (
@@ -256,6 +379,85 @@ export default function JumpCubeBox({
         <p className="saveMessage error">Save failed</p>
       )}
 
+      {showCubeStats && (
+        <div className="cubeStatsOverlay" role="dialog" aria-modal="true">
+          <div className="cubeStatsHeader">
+            <div>
+              <h2>{cubeName}</h2>
+              <p>{selectedPacks.length} packs selected</p>
+            </div>
+
+            <button
+              className="cubeStatsCloseButton"
+              type="button"
+              onClick={() => setShowCubeStats(false)}
+              aria-label="Close cube statistics"
+              title="Close cube statistics"
+            >
+              x
+            </button>
+          </div>
+
+          <div className="cubeStatsColumns" aria-label="Packs by color identity">
+            {colorIdentityColumns.map((column) => (
+              <section className="cubeStatsColumn" key={column.id}>
+                <header className="cubeStatsColumnHeader">
+                  <span>{column.label}</span>
+                  <strong>{column.packs.length}</strong>
+                </header>
+
+                <div className="cubeStatsStack">
+                  {column.packs.length === 0 ? (
+                    <p className="cubeStatsEmpty">No packs</p>
+                  ) : (
+                    column.packs.map((pack) => (
+                      <button
+                        className="cubeStatsPack"
+                        type="button"
+                        key={pack.id}
+                        onClick={() => {
+                          setShowCubeStats(false);
+                          handlePackClick(pack);
+                        }}
+                      >
+                        {getPackManaBackdrop(pack)}
+                        <span className="cubeStatsPackName">{pack.name}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                <dl className="cubeStatsData">
+                  <div>
+                    <dt>Packs</dt>
+                    <dd>{column.packs.length}</dd>
+                  </div>
+                  <div>
+                    <dt>Share</dt>
+                    <dd>
+                      {selectedPacks.length === 0
+                        ? "0%"
+                        : `${Math.round(
+                            (column.packs.length / selectedPacks.length) * 100,
+                          )}%`}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Curve</dt>
+                    <dd>
+                      {Math.round(
+                        (column.packs.length / largestColorColumn) * 100,
+                      )}
+                      %
+                    </dd>
+                  </div>
+                </dl>
+              </section>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="cubePackScrollArea">
         {selectedPacks.length === 0 ? (
           <p className="emptyCube">Add packs to build your Jump Cube.</p>
@@ -267,7 +469,6 @@ export default function JumpCubeBox({
                 className={`cubePackItem ${
                   pendingRemovePackId === pack.id ? "pendingRemove" : ""
                 }`}
-                style={getPackArchetypeStyle(pack)}
                 data-pack-id={pack.id}
                 key={pack.id}
                 onClick={() => handlePackClick(pack)}
@@ -280,6 +481,7 @@ export default function JumpCubeBox({
                     : pack.name
                 }
               >
+                {getPackManaBackdrop(pack)}
                 <span className="cubePackName">{pack.name}</span>
                 <span className="cubePackPips" aria-label="Color identity">
                   {getPackColorIdentity(pack).length === 0 ? (

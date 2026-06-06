@@ -37,6 +37,7 @@ function getPackSnapshot(name, description, archetypeTags, visibility, cards) {
     cards: cards.map((card) => ({
       id: card.id,
       quantity: card.quantity,
+      manualMechanicBucket: card.manualMechanicBucket || null,
     })),
   });
 }
@@ -93,6 +94,7 @@ export function usePackBuilder(user, refreshPacks) {
       .select(
         `
       quantity,
+      manual_mechanic_bucket,
       cards (*)
     `,
       )
@@ -106,6 +108,7 @@ export function usePackBuilder(user, refreshPacks) {
     const hydratedCards = (packCards || []).map((row) => ({
       ...row.cards,
       quantity: row.quantity,
+      manualMechanicBucket: row.manual_mechanic_bucket || null,
     }));
 
     setPackName(normalizePackName(pack.name, "Current Pack"));
@@ -224,6 +227,7 @@ export function usePackBuilder(user, refreshPacks) {
       pack_id: actualPackId,
       card_id: card.id,
       quantity: card.quantity,
+      manual_mechanic_bucket: card.manualMechanicBucket || null,
     }));
 
     const { error: deleteCardsError } = await supabase
@@ -283,7 +287,7 @@ export function usePackBuilder(user, refreshPacks) {
 
     const { data: originalCards, error: cardsError } = await supabase
       .from("pack_cards")
-      .select("card_id, quantity")
+      .select("card_id, quantity, manual_mechanic_bucket")
       .eq("pack_id", packId);
 
     if (cardsError) {
@@ -314,6 +318,7 @@ export function usePackBuilder(user, refreshPacks) {
       pack_id: newPack.id,
       card_id: card.card_id,
       quantity: card.quantity,
+      manual_mechanic_bucket: card.manual_mechanic_bucket || null,
     }));
 
     if (copiedCards.length > 0) {
@@ -395,6 +400,18 @@ export function usePackBuilder(user, refreshPacks) {
     return finishSave(savedPackId, cardsToSave);
   }
 
+  function moveCardToMechanicBucket(cardId, bucketId) {
+    if (!cardId || !bucketId) return;
+
+    setSelectedCards((prev) =>
+      prev.map((card) =>
+        card.id === cardId
+          ? { ...card, manualMechanicBucket: bucketId }
+          : card,
+      ),
+    );
+  }
+
   useEffect(() => {
     if (!user?.id) return undefined;
     if (selectedCards.length === 0 && !savedPackId) return undefined;
@@ -457,5 +474,6 @@ export function usePackBuilder(user, refreshPacks) {
     deletePack,
     duplicatePack,
     moveCard,
+    moveCardToMechanicBucket,
   };
 }

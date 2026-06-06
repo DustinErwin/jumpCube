@@ -43,6 +43,7 @@ export async function savePackCards(packId, selectedCards) {
     pack_id: packId,
     card_id: card.id,
     quantity: card.quantity,
+    manual_mechanic_bucket: card.manualMechanicBucket || null,
   }));
 
   const { error } = await supabase

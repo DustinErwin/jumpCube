@@ -28,7 +28,8 @@ const CARD_VERSION_COLUMNS = `
   set_name,
   set_code,
   collector_number,
-  has_back_face
+  has_back_face,
+  raw
 `;
 
 function getImage(card) {

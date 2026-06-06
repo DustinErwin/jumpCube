@@ -27,7 +27,8 @@ const CARD_COLUMNS = `
   set_name,
   set_code,
   collector_number,
-  has_back_face
+  has_back_face,
+  raw
 `;
 
 const SCRYFALL_AUTOCOMPLETE_LIMIT = 20;

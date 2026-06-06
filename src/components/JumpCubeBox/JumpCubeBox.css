@@ -22,35 +22,51 @@
 
   transition:
     top 0.12s ease,
-    transform 0.22s ease;
+    transform 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform, top;
 }
 
 .jumpCubeBox.open {
-  transform: translateX(0);
+  transform: translate3d(0, 0, 0);
 }
 
 .jumpCubeBox.closed {
-  transform: translateX(-100%);
+  transform: translate3d(-100%, 0, 0);
+}
+
+.jumpCubeBox.statsOpen {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  padding: 0;
+  border: 0;
+  z-index: 9500;
+  transform: none;
+  will-change: auto;
+  overflow: hidden;
 }
 
 .jumpCubeToggle {
   position: absolute;
-  right: -34px;
+  right: -42px;
   top: 12px;
 
-  width: 34px;
-  height: 48px;
+  width: 36px;
+  height: 36px;
 
   background: rgba(18, 18, 18, 0.96);
   color: white;
 
-  border: 1px solid #333;
-  border-left: 0;
+  border: 1px solid #444;
 
-  border-radius: 0 10px 10px 0;
+  border-radius: 7px;
 
   cursor: pointer;
-  font-size: 1.5rem;
+  font-size: 1rem;
+  font-weight: 800;
   line-height: 1;
 
   z-index: 101;
@@ -175,6 +191,10 @@
   color: #ffb8b8;
 }
 
+.cubeStatsButton {
+  color: #b7f0d0;
+}
+
 .confirmDeleteCubeButton {
   width: 100%;
   min-height: 34px;
@@ -252,10 +272,10 @@
       rgba(0, 0, 0, 0.18) 68%,
       rgba(0, 0, 0, 0.32)
     ),
-    var(--cube-pack-archetype-bg, #202020);
+    #202020;
   border: 1px solid #333;
   border-radius: 0;
-  color: var(--cube-pack-text, white);
+  color: white;
   cursor: pointer;
   overflow: hidden;
 
@@ -269,7 +289,53 @@
     box-shadow 0.12s ease;
 }
 
+.cubePackManaBackdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: #202020;
+}
+
+.cubePackManaSegment {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--segment-start) - var(--segment-left-slope));
+  width: calc(
+    var(--segment-end) - var(--segment-start) + var(--segment-left-slope) +
+      var(--segment-right-slope)
+  );
+  background: var(--segment-color);
+  clip-path: polygon(
+    var(--segment-left-slope) 0,
+    100% 0,
+    calc(100% - var(--segment-right-slope)) 100%,
+    0 100%
+  );
+}
+
+.cubePackItem::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.28),
+      rgba(255, 255, 255, 0.08) 34%,
+      rgba(0, 0, 0, 0.18) 68%,
+      rgba(0, 0, 0, 0.32)
+    ),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.18), transparent 42%);
+}
+
 .cubePackName {
+  position: relative;
+  z-index: 2;
+
   display: block;
   width: 100%;
   min-width: 0;
@@ -286,6 +352,9 @@
 }
 
 .cubePackPips {
+  position: relative;
+  z-index: 2;
+
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
@@ -353,6 +422,201 @@
   font-style: italic;
 }
 
+.cubeStatsOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
+  padding: 18px;
+  box-sizing: border-box;
+
+  background: rgba(11, 13, 20, 0.98);
+  color: white;
+}
+
+.cubeStatsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+
+  min-height: 48px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.cubeStatsHeader h2 {
+  margin: 0 0 3px;
+  font-size: 1.25rem;
+  line-height: 1.15;
+}
+
+.cubeStatsHeader p {
+  margin: 0;
+  color: #bbb;
+  font-size: 0.86rem;
+}
+
+.cubeStatsCloseButton {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+
+  background: #252525;
+  color: white;
+  border: 1px solid #555;
+  border-radius: 7px;
+
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.cubeStatsColumns {
+  flex: 1;
+  min-height: 0;
+
+  display: grid;
+  grid-template-columns: repeat(7, minmax(148px, 1fr));
+  gap: 10px;
+
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 8px;
+}
+
+.cubeStatsColumn {
+  min-width: 148px;
+  min-height: 0;
+
+  display: grid;
+  grid-template-rows: 38px minmax(0, 52%) minmax(132px, 1fr);
+
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.cubeStatsColumnHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+
+  min-height: 38px;
+  padding: 7px 9px;
+  box-sizing: border-box;
+
+  background: rgba(0, 0, 0, 0.28);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+
+  font-weight: 800;
+}
+
+.cubeStatsColumnHeader strong {
+  color: #d8d0b8;
+}
+
+.cubeStatsStack {
+  min-height: 0;
+  padding: 8px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+
+.cubeStatsEmpty {
+  margin: 12px 0 0;
+  text-align: center;
+  color: #8f8f8f;
+  font-size: 0.8rem;
+}
+
+.cubeStatsPack {
+  position: relative;
+  width: 100%;
+  min-height: 38px;
+  margin: 0 0 5px;
+  padding: 6px 8px;
+  box-sizing: border-box;
+
+  background: #202020;
+  color: white;
+  border: 1px solid #333;
+  border-radius: 0;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+}
+
+.cubeStatsPack::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.24),
+      rgba(255, 255, 255, 0.08) 34%,
+      rgba(0, 0, 0, 0.18) 68%,
+      rgba(0, 0, 0, 0.32)
+    ),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.18), transparent 42%);
+}
+
+.cubeStatsPackName {
+  position: relative;
+  z-index: 2;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+  font-size: 0.78rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+
+.cubeStatsData {
+  min-height: 0;
+  margin: 0;
+  padding: 10px 9px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+
+  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.cubeStatsData div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.cubeStatsData dt {
+  color: #aeb5c3;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.cubeStatsData dd {
+  margin: 0;
+  color: #f5e7b2;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
 @media (max-width: 760px) {
   .jumpCubeBox {
     top: var(--side-panel-top, 64px);
@@ -372,11 +636,15 @@
   }
 
   .jumpCubeBox.open {
-    transform: translateX(0);
+    transform: translate3d(0, 0, 0);
   }
 
   .jumpCubeBox.closed {
-    transform: translateX(-100%);
+    transform: translate3d(-100%, 0, 0);
+  }
+
+  .jumpCubeBox.statsOpen {
+    transform: none;
   }
 
   .cubeTitle {
@@ -396,6 +664,14 @@
   .cubeActionButton {
     width: 44px;
     height: 44px;
+  }
+
+  .cubeStatsOverlay {
+    padding: 12px;
+  }
+
+  .cubeStatsColumns {
+    grid-template-columns: repeat(7, minmax(138px, 138px));
   }
 
   .confirmDeleteCubeButton {
