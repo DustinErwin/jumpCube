@@ -1,3 +1,10 @@
+/*
+ * CubeLibraryModal.css styles the saved-cube picker modal.
+ *
+ * Keep cube library interaction styling here; loading/opening/deleting behavior
+ * lives in CubeLibraryModal.jsx and useUserCubes().
+ */
+
 .cubeModalOverlay {
   position: fixed;
   inset: 0;

@@ -287,3 +287,10 @@
     max-width: none;
   }
 }
+/*
+ * App.css controls page-level layout: card search area, mobile panel nav, and
+ * global placement of PackBox/JumpCubeBox through CSS variables.
+ *
+ * Update this file when changing the main responsive layout rather than the
+ * internal styling of a specific component.
+ */

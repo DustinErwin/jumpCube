@@ -1,6 +1,16 @@
 import { useState } from "react";
 import "./CubeLibraryModal.css";
 
+/*
+ * CubeLibraryModal lists saved cubes for the logged-in user.
+ *
+ * Props:
+ * - isOpen: boolean
+ * - cubes: Array<cubes table row>
+ * - onClose()
+ * - onOpenCube(cubeId)
+ * - onDeleteCube(cubeId)
+ */
 export default function CubeLibraryModal({
   isOpen,
   cubes,
@@ -12,6 +22,7 @@ export default function CubeLibraryModal({
   const [cubeSearch, setCubeSearch] = useState("");
 
   const filteredCubes = cubes.filter((cube) => {
+    // Metadata-only search; loadCube() hydrates packs/cards after selection.
     const query = cubeSearch.toLowerCase().trim();
 
     if (!query) return true;
@@ -58,6 +69,7 @@ export default function CubeLibraryModal({
                     confirmDeleteId === cube.id ? "confirming" : ""
                   }`}
                   onClick={() => {
+                    // Two-click delete confirmation with a short auto-reset.
                     if (confirmDeleteId === cube.id) {
                       onDeleteCube(cube.id);
                       setConfirmDeleteId(null);

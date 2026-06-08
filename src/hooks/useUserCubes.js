@@ -1,7 +1,64 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../utils/supabase";
 
+/*
+ * useUserCubes() is the database boundary for cube library operations.
+ *
+ * Argument:
+ * - user: Supabase auth user. When null, cube state is cleared.
+ *
+ * Returns:
+ * {
+ *   cubes: lightweight cube rows for the library modal,
+ *   loadingCubes,
+ *   loadCubes(),
+ *   saveCube({ cubeId, name, description, packs }),
+ *   loadCube(cubeId),
+ *   deleteCube(cubeId)
+ * }
+ */
+
+const CUBE_CARD_COLUMNS = `
+  id,
+  scryfall_id,
+  oracle_id,
+  name,
+  mana_value,
+  mana_cost,
+  colors,
+  color_identity,
+  type_line,
+  oracle_text,
+  rarity,
+  image_url,
+  back_image_url,
+  image_uris,
+  card_faces,
+  legalities,
+  price_usd,
+  price_usd_foil,
+  games,
+  nonfoil,
+  is_token,
+  is_funny,
+  is_default_printing,
+  is_variant_printing,
+  is_planechase,
+  set_name,
+  set_code,
+  collector_number,
+  has_back_face
+`;
+
 function buildPackSummary(pack, position = 0) {
+  /*
+   * Converts the nested Supabase join shape into the pack item shape expected
+   * by JumpCubeBox:
+   * {
+   *   id/savedPackId, name, description, archetypeTags, visibility,
+   *   cardCount, colorIdentity, cards, position
+   * }
+   */
   const cards = (pack.pack_cards || []).map((row) => ({
     ...row.cards,
     quantity: row.quantity,
@@ -30,6 +87,8 @@ export function useUserCubes(user) {
   const [loadingCubes, setLoadingCubes] = useState(false);
 
   const loadCubes = useCallback(async function loadCubes() {
+    // Library list only needs cube metadata; individual cube opening hydrates
+    // packs/cards separately in loadCube().
     if (!user) {
       setCubes([]);
       return;
@@ -59,6 +118,12 @@ export function useUserCubes(user) {
     description,
     packs,
   }) {
+    /*
+     * Saves cube metadata and replaces cube_packs relationships.
+     *
+     * packs: Array of selected pack summaries. Each item must have either
+     * savedPackId or id pointing at a saved packs row.
+     */
     if (!user?.id || (!cubeId && packs.length === 0)) return null;
 
     let actualCubeId = cubeId;
@@ -96,6 +161,7 @@ export function useUserCubes(user) {
     }
 
     const { error: deleteError } = await supabase
+      // Replace relationships instead of diffing; position is the array index.
       .from("cube_packs")
       .delete()
       .eq("cube_id", actualCubeId);
@@ -130,6 +196,7 @@ export function useUserCubes(user) {
   }, [loadCubes, user]);
 
   async function loadCube(cubeId) {
+    // Hydrates one cube with its packs and cards for opening in JumpCubeBox.
     const { data: cube, error: cubeError } = await supabase
       .from("cubes")
       .select("*")
@@ -154,7 +221,7 @@ export function useUserCubes(user) {
             visibility,
             pack_cards (
               quantity,
-              cards (*)
+              cards (${CUBE_CARD_COLUMNS})
             )
           )
         `,
@@ -176,6 +243,7 @@ export function useUserCubes(user) {
   }
 
   async function deleteCube(cubeId) {
+    // Deletes only the cube. Packs remain in the user's pack library.
     if (!cubeId) return;
 
     const { error } = await supabase.from("cubes").delete().eq("id", cubeId);
@@ -189,6 +257,7 @@ export function useUserCubes(user) {
   }
 
   useEffect(() => {
+    // Defer initial load one tick so auth/user changes settle before querying.
     const timeoutId = window.setTimeout(() => {
       loadCubes();
     }, 0);

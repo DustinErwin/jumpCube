@@ -2,6 +2,20 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../utils/supabase";
 import "./CardModal.css";
 
+/*
+ * CardModal shows detailed data for one card and lets the user choose a
+ * printing/version before changing pack quantity.
+ *
+ * Props:
+ * - card: card row selected from any part of the app
+ * - isOpen: boolean
+ * - onClose(): closes modal
+ * - onAddToPack(card): add selected version to active pack
+ * - onDecreaseFromPack(cardId): remove one selected version copy
+ * - selectedCards: active pack cards with quantity
+ * - isPackFull: disables plus button at PACK_CARD_LIMIT
+ */
+
 const CARD_VERSION_COLUMNS = `
   id,
   scryfall_id,
@@ -29,18 +43,42 @@ const CARD_VERSION_COLUMNS = `
   set_code,
   collector_number,
   has_back_face,
-  raw
+  mana_cost,
+  image_uris,
+  card_faces
 `;
 
 function getImage(card) {
   return (
     card?.image_url ||
-    card?.raw?.image_uris?.normal ||
-    card?.raw?.image_uris?.small ||
-    card?.raw?.card_faces?.[0]?.image_uris?.normal ||
-    card?.raw?.card_faces?.[0]?.image_uris?.small ||
+    card?.image_uris?.normal ||
+    card?.image_uris?.small ||
+    card?.card_faces?.[0]?.image_uris?.normal ||
+    card?.card_faces?.[0]?.image_uris?.small ||
+    card?.card_faces?.[0]?.small?.normal ||
+    card?.card_faces?.[0]?.small?.small ||
     null
   );
+}
+
+function getBackImage(card) {
+  // Match CardBox behavior: require a true second face before showing flip.
+  const secondFaceImage =
+    card?.card_faces?.[1]?.image_uris?.normal ||
+    card?.card_faces?.[1]?.image_uris?.small ||
+    card?.card_faces?.[1]?.small?.normal ||
+    card?.card_faces?.[1]?.small?.small ||
+    null;
+
+  if (secondFaceImage) {
+    return secondFaceImage;
+  }
+
+  if (card?.card_faces?.length > 1) {
+    return card.back_image_url || null;
+  }
+
+  return null;
 }
 
 function formatArray(values, fallback = "None") {
@@ -64,6 +102,8 @@ function getLegalFormats(legalities) {
 }
 
 function getVersionLabel(card) {
+  // Text shown in the version dropdown. Add fields here if the picker needs
+  // language, finish, promo status, etc.
   const setCode = card.set_code ? card.set_code.toUpperCase() : "Set";
   const collectorNumber = card.collector_number || "?";
   const rarity = card.rarity ? `, ${card.rarity}` : "";
@@ -76,14 +116,18 @@ export default function CardModal({
   isOpen,
   onClose,
   onAddToPack,
+  onDecreaseFromPack,
+  selectedCards = [],
   isPackFull,
 }) {
   const [versions, setVersions] = useState([]);
   const [selectedCardId, setSelectedCardId] = useState(String(card?.id || ""));
   const [isLoadingVersions, setIsLoadingVersions] = useState(false);
   const [versionsError, setVersionsError] = useState("");
+  const [flippedCardId, setFlippedCardId] = useState(null);
 
   useEffect(() => {
+    // Escape closes the modal while it is open.
     if (!isOpen || !card) return undefined;
 
     function handleKeyDown(event) {
@@ -100,6 +144,8 @@ export default function CardModal({
   }, [card, isOpen, onClose]);
 
   useEffect(() => {
+    // Load all local printings for the same oracle card so the user can pick a
+    // specific version before adding it to the pack.
     if (!isOpen || !card) return undefined;
 
     let isCurrent = true;
@@ -149,6 +195,7 @@ export default function CardModal({
   }, [card, isOpen]);
 
   const selectedCard = useMemo(
+    // selectedCardId comes from a select value, so compare ids as strings.
     () =>
       versions.find((version) => String(version.id) === selectedCardId) || card,
     [card, selectedCardId, versions],
@@ -157,7 +204,13 @@ export default function CardModal({
   if (!isOpen || !card || !selectedCard) return null;
 
   const image = getImage(selectedCard);
+  const backImage = getBackImage(selectedCard);
+  const canFlip = Boolean(backImage);
+  const isFlipped = flippedCardId === selectedCardId;
   const legalFormats = getLegalFormats(selectedCard.legalities);
+  const selectedQuantity =
+    selectedCards.find((selectedPackCard) => selectedPackCard.id === selectedCard.id)
+      ?.quantity || 0;
 
   return (
     <div className="cardModalOverlay" onClick={onClose}>
@@ -179,7 +232,43 @@ export default function CardModal({
 
         <div className="cardModalImagePanel">
           {image ? (
-            <img src={image} alt={selectedCard.name} />
+            <div className={`cardModalFlipFrame${isFlipped ? " flipped" : ""}`}>
+              <div className="cardModalFlipInner">
+                <img
+                  className="cardModalFace cardModalFaceFront"
+                  src={image}
+                  alt={selectedCard.name}
+                />
+                {canFlip && (
+                  <img
+                    className="cardModalFace cardModalFaceBack"
+                    src={backImage}
+                    alt={`${selectedCard.name} back face`}
+                  />
+                )}
+              </div>
+
+              {canFlip && (
+                <button
+                  // Flip state is keyed by selectedCardId, so changing versions
+                  // naturally returns the newly selected version to front face.
+                  type="button"
+                  className="cardModalFlipButton"
+                  onClick={() =>
+                    setFlippedCardId((currentFlippedCardId) =>
+                      currentFlippedCardId === selectedCardId
+                        ? null
+                        : selectedCardId,
+                    )
+                  }
+                  aria-label={`Flip ${selectedCard.name}`}
+                  aria-pressed={isFlipped}
+                  title="Flip card"
+                >
+                  ↻
+                </button>
+              )}
+            </div>
           ) : (
             <div className="cardModalMissingImage">No image</div>
           )}
@@ -267,13 +356,32 @@ export default function CardModal({
           </div>
 
           <div className="cardModalActions">
-            <button
-              type="button"
-              onClick={() => onAddToPack(selectedCard)}
-              disabled={isPackFull}
+            <div
+              className="cardModalQuantityControls"
+              aria-label={`${selectedCard.name} pack quantity controls`}
             >
-              Add to Pack
-            </button>
+              <button
+                type="button"
+                onClick={() => onDecreaseFromPack?.(selectedCard.id)}
+                disabled={selectedQuantity === 0}
+                aria-label={`Remove one ${selectedCard.name} from pack`}
+              >
+                -
+              </button>
+
+              <span aria-label={`${selectedQuantity} in pack`}>
+                {selectedQuantity}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => onAddToPack?.(selectedCard)}
+                disabled={isPackFull}
+                aria-label={`Add one ${selectedCard.name} to pack`}
+              >
+                +
+              </button>
+            </div>
           </div>
         </div>
       </section>

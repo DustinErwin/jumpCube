@@ -1,3 +1,9 @@
+/*
+ * discordButton.css styles the standalone Discord invite CTA.
+ *
+ * Update the invite URL in DiscordButton.jsx; update button appearance here.
+ */
+
 .cta-wrap {
   width: 100%;
   display: flex;

@@ -1,3 +1,11 @@
+/*
+ * CardBox.css controls the search result grid, flip animation, and quick
+ * +/- quantity controls below each card.
+ *
+ * To change card density, update .cardGrid columns/gaps and responsive rules.
+ * To change flip button placement, update .cardFlipButton.
+ */
+
 .cardGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 280px));
@@ -23,11 +31,63 @@
   filter: grayscale(0.2);
 }
 
-.cardBox img {
+.cardFlipFrame {
+  position: relative;
   width: 100%;
-  height: auto;
+  aspect-ratio: 488 / 680;
+  perspective: 1000px;
+}
+
+.cardFlipInner {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transition: transform 320ms ease;
+}
+
+.cardBox.flipped .cardFlipInner {
+  transform: rotateY(180deg);
+}
+
+.cardFace {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   display: block;
   border-radius: 12px;
+  object-fit: cover;
+  backface-visibility: hidden;
+}
+
+.cardFaceBack {
+  transform: rotateY(180deg);
+}
+
+.cardFlipButton {
+  position: absolute;
+  bottom: 42px;
+  left: 7px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 4px;
+  background: rgba(10, 14, 20, 0.82);
+  color: #fff;
+  cursor: pointer;
+  font-size: 19px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.cardFlipButton:hover,
+.cardFlipButton:focus-visible {
+  border-color: rgba(255, 255, 255, 0.74);
+  background: rgba(37, 47, 64, 0.95);
 }
 
 .cardQuantityControls {
@@ -86,8 +146,15 @@
     padding: 6px 2px;
   }
 
-  .cardBox img {
+  .cardFace {
     border-radius: 8px;
+  }
+
+  .cardFlipButton {
+    bottom: 40px;
+    left: 5px;
+    width: 28px;
+    height: 28px;
   }
 }
 
@@ -106,5 +173,11 @@
   .cardQuantityControls button,
   .cardQuantityControls span {
     height: 30px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cardFlipInner {
+    transition: none;
   }
 }

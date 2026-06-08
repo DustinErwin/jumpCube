@@ -1,3 +1,9 @@
+/*
+ * AuthBox.css styles the legacy inline email/password auth box.
+ *
+ * AuthPage.css controls the main routed login/signup experience.
+ */
+
 .authBox {
   display: flex;
   gap: 8px;

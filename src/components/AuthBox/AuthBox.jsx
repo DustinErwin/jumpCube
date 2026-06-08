@@ -2,11 +2,21 @@ import { useState } from "react";
 import { supabase } from "../../utils/supabase";
 import "./AuthBox.css";
 
+/*
+ * AuthBox is a simple email/password auth form.
+ *
+ * Prop:
+ * - user: Supabase user | null. When present, show signed-in state.
+ *
+ * The main app currently routes auth through AuthPage/NavBar, so keep styling
+ * and behavior here in sync if this component is reused.
+ */
 export default function AuthBox({ user }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   async function signUp() {
+    // Supabase may require email confirmation depending on project settings.
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -21,6 +31,7 @@ export default function AuthBox({ user }) {
   }
 
   async function signIn() {
+    // Password login. OAuth providers should be added in AuthPage if needed.
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,

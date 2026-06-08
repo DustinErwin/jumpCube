@@ -1,7 +1,22 @@
 import { useEffect, useState } from "react";
 import "./JumpCubeBox.css";
 
+/*
+ * JumpCubeBox is the active cube editor panel.
+ *
+ * Props:
+ * - cubeName/cubeDescription plus setters: controlled cube metadata
+ * - selectedPacks: Array<pack summary> from App/useUserCubes
+ * - onOpenCubes(): opens CubeLibraryModal
+ * - onOpenPack(packId): loads a cube pack into PackBox
+ * - removePackFromCube(packId): removes relationship from current cube
+ * - newCube(): resets active cube editor state
+ * - saveStatus: "saving" | "saved" | "error" | ""
+ * - isOpen/setIsOpen: side-panel collapsed state
+ */
+
 const CUBE_TITLE_MAX_LENGTH = 40;
+// Colors used for the mana-pip percentage backdrop on each pack item.
 const MANA_COLORS = {
   W: "#eee0b3",
   U: "#3560c6",
@@ -12,6 +27,7 @@ const MANA_COLORS = {
 };
 const MANA_ORDER = ["W", "U", "B", "R", "G", "C"];
 const CUBE_COLOR_COLUMNS = [
+  // Stats view groups packs by overall color identity, not mana-cost pips.
   { id: "W", label: "White" },
   { id: "U", label: "Blue" },
   { id: "B", label: "Black" },
@@ -22,10 +38,12 @@ const CUBE_COLOR_COLUMNS = [
 ];
 
 function getManaCost(card) {
-  return card.raw?.mana_cost || card.mana_cost || "";
+  return card.mana_cost || "";
 }
 
 function getCardManaPips(card) {
+  // Counts colored/colorless symbols in mana_cost only. Generic costs are
+  // intentionally ignored.
   const pips = {
     W: 0,
     U: 0,
@@ -49,6 +67,11 @@ function getCardManaPips(card) {
 }
 
 function getPackManaPipSegments(pack) {
+  /*
+   * Converts all card mana pips in a pack into percentage segments.
+   * Segments are sorted ascending by count so the largest color lands on the
+   * right side after CSS positioning.
+   */
   const totals = MANA_ORDER.reduce(
     (counts, color) => ({ ...counts, [color]: 0 }),
     {},
@@ -106,6 +129,7 @@ function getPackManaPipSegments(pack) {
 }
 
 function getPackManaBackdrop(pack) {
+  // Returns layered spans whose CSS variables draw the slanted color divisions.
   return (
     <span className="cubePackManaBackdrop" aria-hidden="true">
       {getPackManaPipSegments(pack).map((segment, index, segments) => (
@@ -147,6 +171,8 @@ export default function JumpCubeBox({
   const [showCubeStats, setShowCubeStats] = useState(false);
 
   useEffect(() => {
+    // Pack removal is a two-step right-click flow: first right-click arms the
+    // item, second right-click removes it. Left/click elsewhere cancels.
     if (!pendingRemovePackId) return undefined;
 
     function cancelPendingRemove(event) {
@@ -164,12 +190,37 @@ export default function JumpCubeBox({
     };
   }, [pendingRemovePackId]);
 
+  useEffect(() => {
+    // Cube delete confirmation behaves like pack delete: any outside click
+    // cancels the pending action.
+    if (!confirmingDeleteCube) return undefined;
+
+    function cancelDeleteConfirmation(event) {
+      if (
+        event.target.closest(".confirmDeleteCubeButton") ||
+        event.target.closest(".deleteCubeButton")
+      ) {
+        return;
+      }
+
+      setConfirmingDeleteCube(false);
+    }
+
+    window.addEventListener("click", cancelDeleteConfirmation);
+
+    return () => {
+      window.removeEventListener("click", cancelDeleteConfirmation);
+    };
+  }, [confirmingDeleteCube]);
+
   function deleteConfirmedCube() {
     newCube();
     setConfirmingDeleteCube(false);
   }
 
   function getPackColorIdentity(pack) {
+    // Loaded cubes and live-added packs use slightly different property names;
+    // cards fallback keeps older summaries displayable.
     const colors =
       pack.colorIdentity ||
       pack.color_identity ||
@@ -193,6 +244,7 @@ export default function JumpCubeBox({
   }
 
   function getPackColorColumnId(pack) {
+    // Used only by cube stats view columns.
     const colors = getPackColorIdentity(pack);
 
     if (colors.length === 0) return "C";
@@ -213,6 +265,7 @@ export default function JumpCubeBox({
   );
 
   function handlePackContextMenu(event, packId) {
+    // Right-click/touch context menu removal flow.
     event.preventDefault();
 
     if (pendingRemovePackId === packId) {
@@ -225,6 +278,7 @@ export default function JumpCubeBox({
   }
 
   function handlePackClick(pack) {
+    // Left click opens the saved pack in PackBox.
     const packId = pack.savedPackId || pack.id;
 
     if (!packId) return;
@@ -335,11 +389,25 @@ export default function JumpCubeBox({
         <button
           className="cubeActionButton deleteCubeButton"
           type="button"
-          onClick={() => setConfirmingDeleteCube((current) => !current)}
+          onClick={(event) => {
+            event.stopPropagation();
+            setConfirmingDeleteCube((current) => !current);
+          }}
           disabled={selectedPacks.length === 0 && !cubeDescription.trim()}
           title="Clear cube"
           aria-label="Clear cube"
         >
+          <svg
+            aria-hidden="true"
+            className="actionIcon"
+            viewBox="0 0 24 24"
+            focusable="false"
+          >
+            <path d="M9 3h6l1 2h5v2H3V5h5z" />
+            <path d="M6 9h12l-1 12H7z" />
+            <path className="actionIconInset" d="M10 11h2v8h-2z" />
+            <path className="actionIconInset" d="M14 11h2v8h-2z" />
+          </svg>
           <span aria-hidden="true">×</span>
         </button>
 
@@ -362,7 +430,10 @@ export default function JumpCubeBox({
         <button
           className="confirmDeleteCubeButton"
           type="button"
-          onClick={deleteConfirmedCube}
+          onClick={(event) => {
+            event.stopPropagation();
+            deleteConfirmedCube();
+          }}
           aria-label={`Confirm clear ${cubeName}`}
         >
           Clear {cubeName}

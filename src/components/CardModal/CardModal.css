@@ -1,3 +1,11 @@
+/*
+ * CardModal.css styles the card detail dialog, version picker, flip animation,
+ * and modal +/- pack quantity controls.
+ *
+ * Keep mobile changes inside the max-width media query so the desktop modal
+ * remains a two-column detail layout.
+ */
+
 .cardModalOverlay {
   position: fixed;
   inset: 0;
@@ -45,11 +53,69 @@
   justify-content: center;
 }
 
-.cardModalImagePanel img,
+.cardModalFlipFrame,
 .cardModalMissingImage {
   width: 100%;
   max-width: 360px;
   border-radius: 12px;
+}
+
+.cardModalFlipFrame {
+  position: relative;
+  aspect-ratio: 488 / 680;
+  perspective: 1100px;
+}
+
+.cardModalFlipInner {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transition: transform 340ms ease;
+}
+
+.cardModalFlipFrame.flipped .cardModalFlipInner {
+  transform: rotateY(180deg);
+}
+
+.cardModalFace {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 12px;
+  object-fit: cover;
+  backface-visibility: hidden;
+}
+
+.cardModalFaceBack {
+  transform: rotateY(180deg);
+}
+
+.cardModalFlipButton {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 4px;
+  background: rgba(10, 14, 20, 0.84);
+  color: white;
+  cursor: pointer;
+  font-size: 21px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.cardModalFlipButton:hover,
+.cardModalFlipButton:focus-visible {
+  border-color: rgba(255, 255, 255, 0.76);
+  background: rgba(37, 47, 64, 0.95);
 }
 
 .cardModalMissingImage {
@@ -156,25 +222,47 @@
   gap: 10px;
 }
 
-.cardModalActions button {
-  min-height: 42px;
-  padding: 0 14px;
+.cardModalQuantityControls {
+  display: grid;
+  grid-template-columns: 42px minmax(44px, auto) 42px;
+  align-items: center;
+  overflow: hidden;
+
   border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: 4px;
-  background: #2d5dff;
+  border-radius: 6px;
+  background: #1c2330;
   color: white;
+}
+
+.cardModalQuantityControls button {
+  width: 42px;
+  min-height: 42px;
+  padding: 0;
+
+  background: #252f40;
+  color: white;
+  border: 0;
   cursor: pointer;
+  font-size: 1.1rem;
   font-weight: 800;
 }
 
-.cardModalActions button:last-child {
-  background: #d7a928;
-  color: #17130a;
+.cardModalQuantityControls button:hover:not(:disabled) {
+  background: #33415a;
 }
 
-.cardModalActions button:disabled {
+.cardModalQuantityControls button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+.cardModalQuantityControls span {
+  min-width: 44px;
+  padding: 0 12px;
+  color: #f6f2e9;
+  text-align: center;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 760px) {
@@ -191,7 +279,7 @@
     padding: 14px;
   }
 
-  .cardModalImagePanel img,
+  .cardModalFlipFrame,
   .cardModalMissingImage {
     max-width: min(320px, 78vw);
   }
@@ -202,5 +290,11 @@
 
   .cardDataGrid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cardModalFlipInner {
+    transition: none;
   }
 }

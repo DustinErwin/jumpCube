@@ -1,3 +1,12 @@
+/*
+ * Legacy in-memory card filtering helper.
+ *
+ * The current app mostly uses useCards() to query Supabase/Scryfall directly.
+ * Keep this file around for tests or future offline filtering. If the active UI
+ * search behavior changes, update useCards() first, then mirror compatible
+ * behavior here only if a caller imports filterCards().
+ */
+
 export function filterCards({
   cards,
   search,
@@ -8,6 +17,15 @@ export function filterCards({
   types,
   formats,
 }) {
+  /*
+   * Arguments:
+   * {
+   *   cards: Array<card row>,
+   *   search: string,
+   *   manaValues/colors/rarities/types/formats: string arrays,
+   *   colorMode: "or" | "and"
+   * }
+   */
   const query = search.toLowerCase().trim();
 
   if (
@@ -36,6 +54,7 @@ export function filterCards({
 }
 
 function matchesFormat(card, formats) {
+  // legalities is Scryfall's format map, e.g. { standard: "legal" }.
   if (formats.length === 0) return true;
 
   return formats.some((format) => {
@@ -51,6 +70,7 @@ function matchesRarity(card, rarities) {
 }
 
 function matchesSearch(card, query) {
+  // Case-insensitive substring match across the same fields as the card grid.
   if (query === "") return true;
 
   const name = card.name?.toLowerCase() || "";
@@ -73,6 +93,7 @@ function matchesType(card, types) {
 }
 
 function matchesManaValue(card, manaValues) {
+  // UI value "7" represents "7+".
   if (manaValues.length === 0) return true;
 
   return manaValues.some((mv) =>
@@ -83,6 +104,8 @@ function matchesManaValue(card, manaValues) {
 }
 
 function matchesColor(card, colors, colorMode) {
+  // This helper uses card.colors, not color_identity. useCards() uses
+  // color_identity because that is what the main UI filters by.
   if (colors.length === 0) return true;
 
   const cardColors = card.colors || [];

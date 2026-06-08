@@ -1,3 +1,10 @@
+/*
+ * AuthPage.css styles the login/signup route.
+ *
+ * Update OAuth/email button visuals here; Supabase auth behavior lives in
+ * AuthPage.jsx.
+ */
+
 .authPage {
   min-height: calc(100vh - 64px);
   display: grid;

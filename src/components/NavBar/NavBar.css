@@ -1,3 +1,10 @@
+/*
+ * NavBar.css styles the fixed top navigation content.
+ *
+ * App.jsx measures .navBar to position side panels below the visible nav, so
+ * update side-panel offset logic if nav height/positioning changes radically.
+ */
+
 .navBar {
   position: relative;
   z-index: 9000;

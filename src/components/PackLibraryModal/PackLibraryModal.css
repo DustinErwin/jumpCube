@@ -1,3 +1,10 @@
+/*
+ * PackLibraryModal.css styles the saved-pack picker modal.
+ *
+ * The list item layout, duplicate/delete buttons, and mobile full-screen modal
+ * rules live here. Data loading/deleting lives in useUserPacks/usePackBuilder.
+ */
+
 .packModalOverlay {
   position: fixed;
   inset: 0;

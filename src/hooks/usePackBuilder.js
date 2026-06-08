@@ -1,8 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../utils/supabase";
 
+/*
+ * usePackBuilder() owns the active pack editor.
+ *
+ * Arguments:
+ * - user: Supabase auth user; user.id is written to packs.user_id.
+ * - refreshPacks: optional async callback that reloads the pack library.
+ * - callbacks: {
+ *     onPackSaved(packSummary): called after a successful save/autosave,
+ *     onPackDeleted(packId): called after delete so cubes can remove it
+ *   }
+ *
+ * Selected card shape:
+ * {
+ *   ...card row from cards table,
+ *   quantity: number,
+ *   manualMechanicBucket?: string | null
+ * }
+ */
+
 const PACK_TITLE_MAX_LENGTH = 40;
 export const PACK_CARD_LIMIT = 20;
+// Update this list when adding/removing archetype options in PackBox.
 export const PACK_ARCHETYPE_TAGS = [
   "Aggro",
   "Midrange",
@@ -11,6 +31,37 @@ export const PACK_ARCHETYPE_TAGS = [
   "Combo",
   "Ramp",
 ];
+const PACK_CARD_COLUMNS = `
+  id,
+  scryfall_id,
+  oracle_id,
+  name,
+  mana_value,
+  mana_cost,
+  colors,
+  color_identity,
+  type_line,
+  oracle_text,
+  rarity,
+  image_url,
+  back_image_url,
+  image_uris,
+  card_faces,
+  legalities,
+  price_usd,
+  price_usd_foil,
+  games,
+  nonfoil,
+  is_token,
+  is_funny,
+  is_default_printing,
+  is_variant_printing,
+  is_planechase,
+  set_name,
+  set_code,
+  collector_number,
+  has_back_face
+`;
 
 function normalizePackName(name, fallback = "Unnamed Pack") {
   const trimmedName = (name || "").trim().slice(0, PACK_TITLE_MAX_LENGTH);
@@ -29,6 +80,8 @@ function normalizeVisibility(visibility) {
 }
 
 function getPackSnapshot(name, description, archetypeTags, visibility, cards) {
+  // Snapshot is compared before autosave to avoid writing the same pack in a
+  // loop. Include any new saved pack field here if it should trigger autosave.
   return JSON.stringify({
     name: normalizePackName(name),
     description: description || "",
@@ -46,7 +99,10 @@ function getPackCardCount(cards) {
   return cards.reduce((sum, card) => sum + card.quantity, 0);
 }
 
-export function usePackBuilder(user, refreshPacks) {
+export function usePackBuilder(user, refreshPacks, {
+  onPackSaved,
+  onPackDeleted,
+} = {}) {
   const [selectedCards, setSelectedCards] = useState([]);
   const [packName, setPackName] = useState("Current Pack");
   const [packDescription, setPackDescription] = useState("");
@@ -60,6 +116,8 @@ export function usePackBuilder(user, refreshPacks) {
   const lastSavedSnapshotRef = useRef(null);
 
   function addCardToPack(card) {
+    // Adds one copy, up to PACK_CARD_LIMIT. Existing copies increment quantity
+    // instead of duplicating rows in selectedCards.
     setSelectedCards((prev) => {
       if (getPackCardCount(prev) >= PACK_CARD_LIMIT) {
         return prev;
@@ -78,6 +136,9 @@ export function usePackBuilder(user, refreshPacks) {
   }
 
   async function loadPack(packId) {
+    // Loads pack metadata first, then pack_cards with hydrated card rows. The
+    // PACK_CARD_COLUMNS list should include every field the PackBox/CardModal
+    // needs after opening a saved pack.
     const { data: pack, error: packError } = await supabase
       .from("packs")
       .select("*")
@@ -92,10 +153,10 @@ export function usePackBuilder(user, refreshPacks) {
     const { data: packCards, error: cardsError } = await supabase
       .from("pack_cards")
       .select(
-        `
+      `
       quantity,
       manual_mechanic_bucket,
-      cards (*)
+      cards (${PACK_CARD_COLUMNS})
     `,
       )
       .eq("pack_id", packId);
@@ -130,6 +191,7 @@ export function usePackBuilder(user, refreshPacks) {
   }
 
   function decreaseCardQuantity(cardId) {
+    // Removes one copy and drops the card entirely when quantity reaches zero.
     setSelectedCards((prev) =>
       prev
         .map((card) =>
@@ -144,6 +206,7 @@ export function usePackBuilder(user, refreshPacks) {
   }
 
   function newPack() {
+    // Resets local editor state only. It does not delete anything in Supabase.
     setPackName("Unnamed Pack");
     setPackDescription("");
     setPackArchetypeTags([]);
@@ -161,6 +224,15 @@ export function usePackBuilder(user, refreshPacks) {
     packId,
     cardsOverride = selectedCards,
   ) {
+    /*
+     * Persists pack metadata and card rows.
+     *
+     * packId: existing database id, or null to create.
+     * cardsOverride: optional selectedCards replacement used by callers that
+     * need to save a just-mutated card list before React state settles.
+     *
+     * Returns the saved pack id, or null on validation/save error.
+     */
     if (!user?.id) {
       setSaveStatus("error");
       return null;
@@ -185,6 +257,7 @@ export function usePackBuilder(user, refreshPacks) {
     let actualPackId = packId;
 
     if (!actualPackId) {
+      // First save creates the packs row and stores user ownership for RLS.
       const { data: pack, error: packError } = await supabase
         .from("packs")
         .insert({
@@ -206,6 +279,7 @@ export function usePackBuilder(user, refreshPacks) {
       actualPackId = pack.id;
       setSavedPackId(pack.id);
     } else {
+      // Existing save updates metadata; pack_cards are replaced below.
       const { error: updateError } = await supabase
         .from("packs")
         .update({
@@ -224,6 +298,7 @@ export function usePackBuilder(user, refreshPacks) {
     }
 
     const packCards = cardsToSave.map((card) => ({
+      // Database pack_cards rows are one row per card id, with quantity.
       pack_id: actualPackId,
       card_id: card.id,
       quantity: card.quantity,
@@ -256,6 +331,14 @@ export function usePackBuilder(user, refreshPacks) {
     setSavedPackName(normalizePackName(packName));
     lastSavedSnapshotRef.current = currentSnapshot;
     await refreshPacks?.();
+    onPackSaved?.({
+      id: actualPackId,
+      name: normalizePackName(packName),
+      description: packDescription,
+      archetypeTags: normalizeArchetypeTags(packArchetypeTags),
+      visibility: normalizeVisibility(packVisibility),
+      cards: cardsToSave,
+    });
     setSaveStatus("saved");
 
     setTimeout(() => setSaveStatus(""), 2000);
@@ -266,12 +349,15 @@ export function usePackBuilder(user, refreshPacks) {
     packDescription,
     packVisibility,
     packName,
+    onPackSaved,
     refreshPacks,
     selectedCards,
     user,
   ]);
 
   async function duplicatePack(packId) {
+    // Creates a new packs row and copies pack_cards. It does not load the copy
+    // into the active editor; the library refresh lets the user open it.
     if (!packId || !user) return;
 
     const { data: originalPack, error: packError } = await supabase
@@ -336,6 +422,8 @@ export function usePackBuilder(user, refreshPacks) {
   }
 
   async function deletePack(packId) {
+    // Deletes the packs row. Foreign keys/RLS should handle dependent rows;
+    // the UI callback removes the pack from any currently open cube summary.
     if (!packId) return;
 
     const { error } = await supabase.from("packs").delete().eq("id", packId);
@@ -345,10 +433,13 @@ export function usePackBuilder(user, refreshPacks) {
       return;
     }
 
+    onPackDeleted?.(packId);
+    await refreshPacks?.();
     newPack();
   }
 
   function moveCard(draggedCardId, targetCardId) {
+    // Reorders cards in the normal PackBox stack.
     if (!draggedCardId || draggedCardId === targetCardId) return;
 
     setSelectedCards((prev) => {
@@ -370,6 +461,13 @@ export function usePackBuilder(user, refreshPacks) {
     promptOnRename = true,
     cardsOverride = selectedCards,
   } = {}) {
+    /*
+     * Public save entry point.
+     *
+     * promptOnRename: if true, renaming an existing pack asks whether to update
+     * the existing pack or save a new copy.
+     * cardsOverride: optional card array for immediate save-after-drop flows.
+     */
     const cardsToSave = cardsOverride || selectedCards;
 
     if (cardsToSave.length === 0) return null;
@@ -401,6 +499,7 @@ export function usePackBuilder(user, refreshPacks) {
   }
 
   function moveCardToMechanicBucket(cardId, bucketId) {
+    // Persists the PackBox stats-view manual column assignment via autosave.
     if (!cardId || !bucketId) return;
 
     setSelectedCards((prev) =>
@@ -413,6 +512,8 @@ export function usePackBuilder(user, refreshPacks) {
   }
 
   useEffect(() => {
+    // Debounced autosave after any meaningful pack edit. The snapshot guard in
+    // finishSave prevents repeat writes once the database is current.
     if (!user?.id) return undefined;
     if (selectedCards.length === 0 && !savedPackId) return undefined;
 

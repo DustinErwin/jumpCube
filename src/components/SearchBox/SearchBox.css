@@ -1,3 +1,10 @@
+/*
+ * SearchBox.css styles the centered search form above filters.
+ *
+ * Width and mobile button/input sizing live here; search behavior lives in
+ * SearchBox.jsx and useCards.js.
+ */
+
 .searchBox {
   display: flex;
   align-items: center;

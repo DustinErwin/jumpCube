@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   PACK_ARCHETYPE_TAGS,
   PACK_CARD_LIMIT,
@@ -9,7 +9,22 @@ import {
 } from "../../utils/cardMechanics";
 import "./PackBox.css";
 
+/*
+ * PackBox is the active pack editor panel.
+ *
+ * Props are controlled by usePackBuilder/App:
+ * - packName/description/archetypeTags/visibility plus their setters
+ * - selectedCards: Array<card row & { quantity, manualMechanicBucket? }>
+ * - addCard(card), decreaseCardQuantity(cardId)
+ * - addCurrentPackToCube(): saves current pack and inserts/updates cube item
+ * - deletePack(savedPackId), newPack()
+ * - moveCard(draggedCardId, targetCardId)
+ * - moveCardToMechanicBucket(cardId, bucketId)
+ * - isOpen/setIsOpen: side-panel collapsed state
+ */
+
 const PACK_TITLE_MAX_LENGTH = 40;
+// Update CARD_TYPE_COLORS/LABELS together when changing the type pie chart.
 const CARD_TYPE_COLORS = {
   Artifact: "#9aa3ad",
   Creature: "#65a765",
@@ -30,6 +45,7 @@ const CARD_TYPE_LABELS = {
   Sorcery: "Sorceries",
 };
 const IDEAL_MANA_CURVE = [1, 4, 3, 2, 1, 1];
+// Pack archetype tag colors. Keep keys synced with PACK_ARCHETYPE_TAGS.
 const ARCHETYPE_COLORS = {
   Aggro: { background: "#c93f32", color: "white" },
   Control: { background: "#2f77c8", color: "white" },
@@ -40,6 +56,7 @@ const ARCHETYPE_COLORS = {
 };
 
 function getCardPrice(card) {
+  // Uses normalized price_usd first, with old raw prices fallback.
   const price = card.price_usd ?? card.prices?.usd ?? 0;
   const numericPrice = Number(price);
 
@@ -66,6 +83,7 @@ function getArchetypeTagStyle(tag) {
 }
 
 function getCardTypes(card) {
+  // Type matching avoids accidental substring hits inside longer words.
   const typeLine = card.type_line || "";
 
   return CARD_TYPES.filter((type) =>
@@ -79,6 +97,7 @@ export default function PackBox({
   selectedCards,
   addCard,
   decreaseCardQuantity,
+  onCardOpen,
   addCurrentPackToCube,
   onOpenPacks,
   deletePack,
@@ -99,19 +118,22 @@ export default function PackBox({
   isOpen,
   setIsOpen,
 }) {
-  // Drag state constants
+  // Drag state controls normal pack-stack reordering and stats-column moves.
   const [draggedCardId, setDraggedCardId] = useState(null);
   const [dragOverCardId, setDragOverCardId] = useState(null);
   const [draggedStatsCardId, setDraggedStatsCardId] = useState(null);
   const [suppressStackHover, setSuppressStackHover] = useState(false);
   const droppedInsidePackRef = useRef(false);
   const [isDragOverPack, setIsDragOverPack] = useState(false);
+  const cardDragStartedRef = useRef(false);
 
   const [editingName, setEditingName] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
   const [confirmingDeletePack, setConfirmingDeletePack] = useState(false);
   const [isArchetypeMenuOpen, setIsArchetypeMenuOpen] = useState(false);
   const [showPackStats, setShowPackStats] = useState(false);
+  const [visibilityMessage, setVisibilityMessage] = useState("");
+  const visibilityMessageTimeoutRef = useRef(null);
   // const [showManaCurve, setShowManaCurve] = useState(false);
 
   const totalCards = selectedCards.reduce(
@@ -133,6 +155,8 @@ export default function PackBox({
     packColorIdentity.includes(color),
   );
 
+  // Expand quantities into visual copies so stats/stack views reflect the
+  // actual pack count while still saving one row per card id.
   const displayedCards = selectedCards.flatMap((card) =>
     Array.from({ length: card.quantity }, (_, index) => ({
       ...card,
@@ -140,6 +164,8 @@ export default function PackBox({
       copyNumber: index + 1,
     })),
   );
+  // Stats-view columns are mechanic buckets. Manual user placement is handled
+  // by getPrimaryCardMechanicBucket().
   const mechanicColumns = PACK_MECHANIC_BUCKETS.map((bucket) => ({
     ...bucket,
     cards: displayedCards.filter((card) => {
@@ -153,6 +179,7 @@ export default function PackBox({
     color: column.color,
     count: column.cards.length,
   }));
+  // Bar chart buckets use 6+ as the final bucket.
   const manaCurveChartColumns = [1, 2, 3, 4, 5, 6].map((manaValue, index) => ({
     manaValue,
     idealCount: IDEAL_MANA_CURVE[index],
@@ -183,6 +210,7 @@ export default function PackBox({
     (sum, typeCount) => sum + typeCount.count,
     0,
   );
+  // Conic-gradient segments for the type pie chart.
   const typeChartSegments = cardTypeCounts.reduce((segments, typeCount) => {
     const percentage =
       totalTypeCount === 0 ? 0 : (typeCount.count / totalTypeCount) * 100;
@@ -259,6 +287,8 @@ export default function PackBox({
   }
 
   function deleteConfirmedPack() {
+    // Actual delete lives in usePackBuilder so database and current pack state
+    // are reset together.
     if (!savedPackId) return;
 
     deletePack(savedPackId);
@@ -266,6 +296,7 @@ export default function PackBox({
   }
 
   function toggleArchetypeTag(tag) {
+    // Multiple archetypes are allowed; empty list means no archetype color tags.
     setPackArchetypeTags((currentTags) => {
       if (currentTags.includes(tag)) {
         return currentTags.filter((currentTag) => currentTag !== tag);
@@ -274,6 +305,52 @@ export default function PackBox({
       return [...currentTags, tag];
     });
   }
+
+  function togglePackVisibility() {
+    // Visibility autosaves through usePackBuilder; the message is only local UI.
+    const nextVisibility = packVisibility === "public" ? "private" : "public";
+
+    setPackVisibility(nextVisibility);
+    setVisibilityMessage(nextVisibility === "public" ? "Public" : "Private");
+
+    if (visibilityMessageTimeoutRef.current) {
+      window.clearTimeout(visibilityMessageTimeoutRef.current);
+    }
+
+    visibilityMessageTimeoutRef.current = window.setTimeout(() => {
+      setVisibilityMessage("");
+      visibilityMessageTimeoutRef.current = null;
+    }, 1800);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (visibilityMessageTimeoutRef.current) {
+        window.clearTimeout(visibilityMessageTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!confirmingDeletePack) return undefined;
+
+    function cancelDeleteConfirmation(event) {
+      if (
+        event.target.closest(".confirmDeletePackButton") ||
+        event.target.closest(".deletePackButton")
+      ) {
+        return;
+      }
+
+      setConfirmingDeletePack(false);
+    }
+
+    window.addEventListener("click", cancelDeleteConfirmation);
+
+    return () => {
+      window.removeEventListener("click", cancelDeleteConfirmation);
+    };
+  }, [confirmingDeletePack]);
 
   return (
     <aside
@@ -313,6 +390,164 @@ export default function PackBox({
       >
         {isOpen ? ">" : "<"}
       </button>
+
+      <div className="packActionToolbar" aria-label="Pack actions">
+        <button
+          className={`packVisibilitySwitch ${packVisibility}`}
+          type="button"
+          onClick={togglePackVisibility}
+          aria-label={`Pack visibility: ${
+            packVisibility === "public" ? "Public" : "Private"
+          }`}
+          aria-pressed={packVisibility === "public"}
+          title={
+            packVisibility === "public"
+              ? "Pack is public"
+              : "Pack is private"
+          }
+        >
+          <span aria-hidden="true" />
+        </button>
+
+        <button
+          className="packActionButton openPacksButton"
+          type="button"
+          onClick={() => {
+            setConfirmingDeletePack(false);
+            onOpenPacks();
+          }}
+          title="Open my packs"
+          aria-label="Open my packs"
+        >
+          <svg
+            aria-hidden="true"
+            className="actionIcon"
+            viewBox="0 0 24 24"
+            focusable="false"
+          >
+            <path d="M3.5 6.5h6l2 2h10v2h-18z" />
+            <path d="M2.5 9.5h21l-2 11h-19z" />
+          </svg>
+        </button>
+
+        <button
+          className="packActionButton newPackButton"
+          type="button"
+          onClick={() => {
+            setConfirmingDeletePack(false);
+            newPack();
+          }}
+          title="New pack"
+          aria-label="New pack"
+        >
+          <span aria-hidden="true">+</span>
+        </button>
+
+        <button
+          className="packActionButton deletePackButton"
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            setConfirmingDeletePack((current) => !current);
+          }}
+          disabled={!savedPackId}
+          title={savedPackId ? "Delete pack" : "Save this pack before deleting"}
+          aria-label={
+            savedPackId ? "Delete pack" : "Save this pack before deleting"
+          }
+        >
+          <svg
+            aria-hidden="true"
+            className="actionIcon"
+            viewBox="0 0 24 24"
+            focusable="false"
+          >
+            <path d="M9 3h6l1 2h5v2H3V5h5z" />
+            <path d="M6 9h12l-1 12H7z" />
+            <path className="actionIconInset" d="M10 11h2v8h-2z" />
+            <path className="actionIconInset" d="M14 11h2v8h-2z" />
+          </svg>
+          <span aria-hidden="true">Ã—</span>
+        </button>
+
+        <button
+          className="packActionButton addPackToCubeButton"
+          type="button"
+          onClick={() => {
+            setConfirmingDeletePack(false);
+            addCurrentPackToCube();
+          }}
+          disabled={selectedCards.length === 0 || saveStatus === "saving"}
+          title="Save and add pack to cube"
+          aria-label="Save and add pack to cube"
+        >
+          <svg
+            aria-hidden="true"
+            className="actionIcon"
+            viewBox="0 0 24 24"
+            focusable="false"
+          >
+            <path d="M4 5h7v7H4z" />
+            <path d="M13 5h7v7h-7z" />
+            <path d="M4 14h7v7H4z" />
+            <path d="M15 14h3v3h3v2h-3v3h-2v-3h-3v-2h3z" />
+          </svg>
+          <span aria-hidden="true">âŠž</span>
+        </button>
+
+        <button
+          className="packActionButton archetypeMenuButton"
+          type="button"
+          onClick={() => {
+            setConfirmingDeletePack(false);
+            setIsArchetypeMenuOpen((current) => !current);
+          }}
+          title="Add archetype tag"
+          aria-label="Add archetype tag"
+          aria-expanded={isArchetypeMenuOpen}
+        >
+          <span aria-hidden="true">#</span>
+        </button>
+
+        <button
+          className="packActionButton packStatsButton"
+          type="button"
+          onClick={() => {
+            setConfirmingDeletePack(false);
+            setShowPackStats(true);
+          }}
+          disabled={selectedCards.length === 0}
+          title="Show pack statistics"
+          aria-label="Show pack statistics"
+        >
+          <span aria-hidden="true">%</span>
+        </button>
+      </div>
+
+      {visibilityMessage && (
+        <p
+          className={`visibilityMessage ${
+            visibilityMessage === "Public" ? "public" : "private"
+          }`}
+        >
+          {visibilityMessage}
+        </p>
+      )}
+
+      {confirmingDeletePack && (
+        <button
+          className="confirmDeletePackButton"
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            deleteConfirmedPack();
+          }}
+          aria-label={`Confirm delete ${packName}`}
+        >
+          Delete {packName}
+        </button>
+      )}
+
       {editingName ? (
         <input
           className="packNameInput"
@@ -431,7 +666,10 @@ export default function PackBox({
         <button
           className="packActionButton deletePackButton"
           type="button"
-          onClick={() => setConfirmingDeletePack((current) => !current)}
+          onClick={(event) => {
+            event.stopPropagation();
+            setConfirmingDeletePack((current) => !current);
+          }}
           disabled={!savedPackId}
           title={savedPackId ? "Delete pack" : "Save this pack before deleting"}
           aria-label={
@@ -527,17 +765,6 @@ export default function PackBox({
 
       <p className="packTotalPrice">Total: {formatUsd(totalPrice)}</p>
 
-      {confirmingDeletePack && (
-        <button
-          className="confirmDeletePackButton"
-          type="button"
-          onClick={deleteConfirmedPack}
-          aria-label={`Confirm delete ${packName}`}
-        >
-          Delete {packName}
-        </button>
-      )}
-
       {saveStatus === "saving" && <p className="saveMessage">Saving...</p>}
 
       {saveStatus === "saved" && (
@@ -632,6 +859,7 @@ export default function PackBox({
                           className="packStatsCard"
                           draggable
                           key={card.stackId}
+                          onClick={() => onCardOpen?.(card)}
                           onDragStart={(e) => {
                             e.stopPropagation();
                             setDraggedStatsCardId(card.id);
@@ -884,6 +1112,7 @@ export default function PackBox({
                 key={card.stackId}
                 draggable
                 onDragStart={(e) => {
+                  cardDragStartedRef.current = true;
                   setDraggedCardId(card.id);
                   setSuppressStackHover(true);
 
@@ -940,10 +1169,14 @@ export default function PackBox({
                   }
                 }}
                 onDragEnd={() => {
-                  if (!droppedInsidePackRef.current) {
+                  if (
+                    cardDragStartedRef.current &&
+                    !droppedInsidePackRef.current
+                  ) {
                     decreaseCardQuantity(card.id);
                   }
 
+                  cardDragStartedRef.current = false;
                   droppedInsidePackRef.current = false;
                   setDraggedCardId(null);
                   setDragOverCardId(null);
@@ -952,6 +1185,11 @@ export default function PackBox({
                 onContextMenu={(e) => {
                   e.preventDefault();
                   decreaseCardQuantity(card.id);
+                }}
+                onClick={() => {
+                  if (cardDragStartedRef.current) return;
+
+                  onCardOpen?.(card);
                 }}
               >
                 <img src={card.image_url} alt={card.name} />

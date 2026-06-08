@@ -1,5 +1,20 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./FilterBox.css";
+
+/*
+ * FilterBox renders compact dropdown chips for the card search filters.
+ *
+ * Props are all controlled by App:
+ * - each filter value is an array (manaValues, colors, rarities, types,
+ *   formats, selectedSets)
+ * - each setX prop is the matching React state setter
+ * - colorMode is "or" | "and"
+ * - sets is the list from useSets(), with set_code/name/icon_svg_uri
+ * - showAllPrintings toggles default-printing dedupe in useCards()
+ *
+ * To add a new filter option, update the *_OPTIONS list here and the matching
+ * query behavior in useCards().
+ */
 
 const MANA_OPTIONS = ["0", "1", "2", "3", "4", "5", "6", "7"];
 const COLOR_OPTIONS = ["W", "U", "B", "R", "G", "C"];
@@ -7,6 +22,7 @@ const RARITY_OPTIONS = ["Common", "Uncommon", "Rare", "Mythic"];
 const TYPE_OPTIONS = [
   "Artifact",
   "Battle",
+  "Basic Land",
   "Creature",
   "Enchantment",
   "Instant",
@@ -42,13 +58,33 @@ export default function FilterBox({
   showAllPrintings,
   setShowAllPrintings,
 }) {
+  const filterBoxRef = useRef(null);
   const [openFilter, setOpenFilter] = useState(null);
+
+  useEffect(() => {
+    // Any click outside the active dropdown closes it. This keeps the compact
+    // chip bar usable on mobile where dropdowns cover more screen area.
+    if (!openFilter) return undefined;
+
+    function closeOnOutsideClick(event) {
+      if (filterBoxRef.current?.contains(event.target)) return;
+
+      setOpenFilter(null);
+    }
+
+    window.addEventListener("click", closeOnOutsideClick);
+
+    return () => {
+      window.removeEventListener("click", closeOnOutsideClick);
+    };
+  }, [openFilter]);
 
   function toggleOpen(filterName) {
     setOpenFilter((current) => (current === filterName ? null : filterName));
   }
 
   function toggleValue(value, selectedValues, setSelectedValues) {
+    // Generic checkbox toggle for array-backed filters.
     setSelectedValues((prev) =>
       prev.includes(value)
         ? prev.filter((item) => item !== value)
@@ -57,6 +93,7 @@ export default function FilterBox({
   }
 
   function clearAllFilters() {
+    // Reset every controlled filter to the same defaults App uses at startup.
     setManaValues([]);
     setColors([]);
     setColorMode("or");
@@ -73,7 +110,7 @@ export default function FilterBox({
   }
 
   return (
-    <div className="filterBox compactFilterBox">
+    <div className="filterBox compactFilterBox" ref={filterBoxRef}>
       <div className="filterChipBar">
         <div className="filterChipWrap">
           <button

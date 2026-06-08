@@ -1,7 +1,20 @@
 import { useState } from "react";
 import "./PackLibraryModal.css";
 
+/*
+ * PackLibraryModal lists saved packs for the logged-in user.
+ *
+ * Props:
+ * - isOpen: boolean
+ * - packs: Array<packs table row>
+ * - onClose()
+ * - onOpenPack(packId)
+ * - onDeletePack(packId)
+ * - onDuplicatePack(packId)
+ */
+
 function getPackArchetypeTags(pack) {
+  // Supports both the current archetype_tags array and older archetype_tag data.
   if (Array.isArray(pack.archetype_tags)) return pack.archetype_tags;
   if (pack.archetype_tag) return [pack.archetype_tag];
 
@@ -20,6 +33,8 @@ export default function PackLibraryModal({
   const [packSearch, setPackSearch] = useState("");
 
   const filteredPacks = packs.filter((pack) => {
+    // Local library search only filters loaded metadata; opening a pack hydrates
+    // cards through usePackBuilder.loadPack().
     const query = packSearch.toLowerCase().trim();
 
     if (!query) return true;
@@ -87,6 +102,7 @@ export default function PackLibraryModal({
                     confirmDeleteId === pack.id ? "confirming" : ""
                   }`}
                   onClick={() => {
+                    // Two-click delete confirmation with a short auto-reset.
                     if (confirmDeleteId === pack.id) {
                       onDeletePack(pack.id);
                       setConfirmDeleteId(null);

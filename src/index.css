@@ -130,3 +130,9 @@ body,
 body {
   min-width: 320px;
 }
+/*
+ * Global base styles and font imports.
+ *
+ * Component-specific spacing/colors should live in each component stylesheet;
+ * keep this file for body/root defaults and shared resets.
+ */

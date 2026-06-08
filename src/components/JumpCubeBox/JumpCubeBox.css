@@ -1,3 +1,11 @@
+/*
+ * JumpCubeBox.css controls the left-side cube editor panel.
+ *
+ * Update pack item sizing in .cubePackItem and mana-pip backdrop rendering in
+ * .cubePackManaBackdrop/.cubePackManaSegment. Mobile full-screen behavior lives
+ * in this file's media queries.
+ */
+
 .jumpCubeBox {
   position: fixed;
 
@@ -129,12 +137,19 @@
 }
 
 .cubeActionToolbar {
+  order: -1;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
 
-  margin: 0 0 10px;
+  margin: -14px -14px 12px;
+  padding: 8px 10px;
+  box-sizing: border-box;
+
+  background: rgba(8, 8, 8, 0.64);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .cubeActionButton {
@@ -189,6 +204,10 @@
 
 .deleteCubeButton {
   color: #ffb8b8;
+}
+
+.deleteCubeButton > span {
+  display: none;
 }
 
 .cubeStatsButton {
@@ -658,7 +677,8 @@
 
   .cubeActionToolbar {
     gap: 8px;
-    margin-bottom: 8px;
+    margin: -12px -12px 10px;
+    padding: 8px 10px;
   }
 
   .cubeActionButton {

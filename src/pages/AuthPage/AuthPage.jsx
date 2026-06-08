@@ -3,6 +3,18 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../../utils/supabase";
 import "./AuthPage.css";
 
+/*
+ * AuthPage handles login/signup routes.
+ *
+ * State:
+ * - mode: "login" | "signup"
+ * - email/password: controlled inputs
+ * - authMessage/authError: user feedback from Supabase
+ * - isSubmitting: disables the email form during requests
+ *
+ * OAuth redirect uses BASE_URL so GitHub Pages/project-path deploys return to
+ * the correct app URL.
+ */
 export default function AuthPage() {
   const navigate = useNavigate();
   const authRedirectUrl = new URL(import.meta.env.BASE_URL, window.location.origin)
@@ -16,6 +28,8 @@ export default function AuthPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleEmailAuth(e) {
+    // One form supports both signup and login; mode controls which Supabase
+    // auth method is called.
     e.preventDefault();
 
     setAuthMessage("");
@@ -60,6 +74,7 @@ export default function AuthPage() {
   }
 
   async function signInWithGoogle() {
+    // Google provider must also be enabled/configured in Supabase dashboard.
     setAuthMessage("");
     setAuthError("");
 

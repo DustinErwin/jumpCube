@@ -1,6 +1,13 @@
 import { Link } from "react-router-dom";
 import "./NavBar.css";
 
+/*
+ * NavBar renders the persistent top navigation.
+ *
+ * Props:
+ * - user: Supabase user | null
+ * - onLogout(): signs out and clears active app UI in App
+ */
 export default function NavBar({ user, onLogout }) {
   return (
     <header className="navBar">

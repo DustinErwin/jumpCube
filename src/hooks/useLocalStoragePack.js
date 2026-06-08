@@ -1,7 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 
 const STORAGE_KEY = "jumpCubeCurrentPack";
 
+/*
+ * Legacy localStorage persistence for an active pack draft.
+ *
+ * The current app primarily uses Supabase autosave in usePackBuilder(). If this
+ * hook is reintroduced, pass the active pack state/setters shown below and make
+ * sure it does not conflict with autosave or savedPackId.
+ */
 export function useLocalStoragePack({
   packName,
   setPackName,
@@ -14,9 +21,10 @@ export function useLocalStoragePack({
   savedPackName,
   setSavedPackName,
 }) {
-  const [hasLoadedPack, setHasLoadedPack] = useState(false);
+  const hasLoadedPackRef = useRef(false);
 
   useEffect(() => {
+    // Initial load: restore the saved draft into controlled pack state.
     const savedPack = localStorage.getItem(STORAGE_KEY);
 
     if (savedPack) {
@@ -33,7 +41,7 @@ export function useLocalStoragePack({
       }
     }
 
-    setHasLoadedPack(true);
+    hasLoadedPackRef.current = true;
   }, [
     setPackName,
     setPackDescription,
@@ -43,7 +51,8 @@ export function useLocalStoragePack({
   ]);
 
   useEffect(() => {
-    if (!hasLoadedPack) return;
+    // Subsequent changes overwrite the draft after initial load completes.
+    if (!hasLoadedPackRef.current) return;
 
     const packData = {
       packName,
@@ -55,7 +64,6 @@ export function useLocalStoragePack({
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(packData));
   }, [
-    hasLoadedPack,
     packName,
     packDescription,
     selectedCards,
@@ -64,6 +72,7 @@ export function useLocalStoragePack({
   ]);
 
   function clearStoredPack() {
+    // Call this when starting a truly fresh local draft.
     localStorage.removeItem(STORAGE_KEY);
   }
 

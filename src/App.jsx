@@ -20,10 +20,27 @@ import NavBar from "./components/NavBar/NavBar";
 
 import "./App.css";
 
+/*
+ * App.jsx is the top-level coordinator for Jump Cube.
+ *
+ * It owns page-wide state that multiple panels need to share:
+ * - search/filter input for the card grid
+ * - the active PackBox state returned by usePackBuilder()
+ * - the active JumpCubeBox state, including selected pack summaries
+ * - modal visibility for pack/cube libraries and card details
+ *
+ * Most child components are intentionally "controlled": this file passes the
+ * current value plus setter/callback props. When adding a new global workflow,
+ * prefer placing the shared state here and passing only the narrow callback a
+ * child needs.
+ */
+
 const TITLE_MAX_LENGTH = 40;
 const MOBILE_PANEL_QUERY = "(max-width: 760px)";
 const FALLBACK_FROG_BACKGROUND = `${import.meta.env.BASE_URL}images/frogCube.png`;
 
+// Used for pack/cube names before they are saved. Update TITLE_MAX_LENGTH if
+// the database constraint changes.
 function normalizeTitle(title, fallback) {
   const trimmedTitle = (title || "").trim().slice(0, TITLE_MAX_LENGTH);
 
@@ -31,6 +48,17 @@ function normalizeTitle(title, fallback) {
 }
 
 function getCubeSnapshot(name, description, packs) {
+  /*
+   * Snapshot shape:
+   * {
+   *   name: string,
+   *   description: string,
+   *   packs: Array<pack id>
+   * }
+   *
+   * The cube autosave effect compares this string against the last saved
+   * version so it can skip writes when nothing meaningful changed.
+   */
   return JSON.stringify({
     name: normalizeTitle(name, "Unnamed Cube"),
     description: description || "",
@@ -38,7 +66,54 @@ function getCubeSnapshot(name, description, packs) {
   });
 }
 
+function getPackSummary({
+  id,
+  name,
+  description,
+  archetypeTags,
+  visibility,
+  cards,
+}) {
+  /*
+   * Input arguments describe the current pack UI state. Output is the compact
+   * object JumpCubeBox needs to render one pack item:
+   * {
+   *   id/savedPackId: database pack id,
+   *   name/description/visibility/archetypeTags,
+   *   cardCount,
+   *   colorIdentity,
+   *   cards: selected cards with quantity
+   * }
+   *
+   * If the cube pack item needs new derived display data, add it here and in
+   * useUserCubes.buildPackSummary() so loaded cubes and live cubes match.
+   */
+  const normalizedCards = cards || [];
+  const colorIdentity = [
+    ...new Set(
+      normalizedCards.flatMap((card) => card.color_identity || []),
+    ),
+  ];
+  const cardCount = normalizedCards.reduce(
+    (sum, card) => sum + card.quantity,
+    0,
+  );
+
+  return {
+    id,
+    name: normalizeTitle(name, "Unnamed Pack"),
+    description: (description || "").trim(),
+    archetypeTags: archetypeTags || [],
+    visibility: visibility || "private",
+    cardCount,
+    colorIdentity,
+    savedPackId: id,
+    cards: normalizedCards,
+  };
+}
+
 function getCardArt(card) {
+  // Scryfall random cards can provide images either at top-level or per-face.
   return (
     card?.image_uris?.art_crop ||
     card?.image_uris?.normal ||
@@ -49,6 +124,14 @@ function getCardArt(card) {
 }
 
 function App() {
+  /*
+   * Hook outputs:
+   * - useAuth(): { user, session, authLoading }
+   * - useUserPacks(): saved pack library list + reload callback
+   * - useUserCubes(): saved cube library functions
+   * - useCards(): current search results and pagination callback
+   * - usePackBuilder(): active pack state plus pack mutations
+   */
   const { user } = useAuth();
   const { sets } = useSets();
   const { packs, loadPacks } = useUserPacks(user);
@@ -90,8 +173,40 @@ function App() {
   );
   const lastSavedCubeSnapshotRef = useRef(null);
 
+  // Called by usePackBuilder after an autosave/manual save succeeds. It keeps
+  // the currently open cube item in sync with pack name, cards, colors,
+  // archetypes, description, and visibility.
+  const syncPackIntoCurrentCube = useCallback((packSummary) => {
+    if (!packSummary?.id) return;
+
+    setSelectedPacks((currentPacks) =>
+      currentPacks.map((selectedPack) => {
+        const selectedPackId = selectedPack.savedPackId || selectedPack.id;
+
+        return selectedPackId === packSummary.id
+          ? { ...selectedPack, ...packSummary }
+          : selectedPack;
+      }),
+    );
+  }, []);
+
+  // Called when a pack is deleted from either the PackBox or pack library.
+  // Removing locally lets the cube autosave drop the cube_packs relationship.
+  const removePackFromCurrentCube = useCallback((packId) => {
+    if (!packId) return;
+
+    setSelectedPacks((currentPacks) =>
+      currentPacks.filter((selectedPack) => {
+        const selectedPackId = selectedPack.savedPackId || selectedPack.id;
+
+        return selectedPackId !== packId;
+      }),
+    );
+  }, []);
+
   const {
     cardList,
+    totalCards,
     loadingCards,
     loadingMoreCards,
     cardsError,
@@ -109,9 +224,14 @@ function App() {
     showAllPrintings,
     limit: 50,
   });
-  const pack = usePackBuilder(user, loadPacks);
+  const pack = usePackBuilder(user, loadPacks, {
+    onPackSaved: syncPackIntoCurrentCube,
+    onPackDeleted: removePackFromCurrentCube,
+  });
 
   async function handleLogout() {
+    // Sign out through Supabase, then clear local UI that should not survive
+    // into an anonymous session.
     const { error } = await supabase.auth.signOut();
 
     if (error) {
@@ -125,42 +245,34 @@ function App() {
   }
 
   function submitSearch() {
+    // Keeps typing separate from committed search so users can edit without
+    // firing a new query until submit.
     setSearch(searchInput.trim());
   }
 
   async function saveCurrentPackBeforeLeaving() {
+    // Protects edits when opening another pack or starting a new one.
     if (pack.selectedCards.length === 0) return;
 
     await pack.savePack({ promptOnRename: false });
   }
 
   async function addCurrentPackToCube() {
+    // Pack must exist in the database before cube_packs can point at it.
     if (pack.selectedCards.length === 0) return;
 
     const savedPackId = await pack.savePack({ promptOnRename: false });
 
     if (!savedPackId) return;
 
-    const colorIdentity = [
-      ...new Set(
-        pack.selectedCards.flatMap((card) => card.color_identity || []),
-      ),
-    ];
-    const cardCount = pack.selectedCards.reduce(
-      (sum, card) => sum + card.quantity,
-      0,
-    );
-    const packSummary = {
+    const packSummary = getPackSummary({
       id: savedPackId,
       name: normalizeTitle(pack.packName, "Unnamed Pack"),
       description: pack.packDescription.trim(),
       archetypeTags: pack.packArchetypeTags,
       visibility: pack.packVisibility,
-      cardCount,
-      colorIdentity,
-      savedPackId,
       cards: pack.selectedCards,
-    };
+    });
 
     setSelectedPacks((currentPacks) => {
       const existingIndex = currentPacks.findIndex(
@@ -180,12 +292,12 @@ function App() {
   }
 
   function removePackFromCube(packId) {
-    setSelectedPacks((currentPacks) =>
-      currentPacks.filter((selectedPack) => selectedPack.id !== packId),
-    );
+    removePackFromCurrentCube(packId);
   }
 
   async function openCubePack(packId) {
+    // Opening from the cube loads the pack into PackBox; mobile gets a full
+    // screen panel swap so the selected pack is immediately visible.
     await saveCurrentPackBeforeLeaving();
     await pack.loadPack(packId);
     setIsPackBoxOpen(true);
@@ -210,6 +322,16 @@ function App() {
   }
 
   const saveCurrentCube = useCallback(async function saveCurrentCube() {
+    /*
+     * Persists cube metadata and pack relationships.
+     * Arguments passed to useUserCubes.saveCube:
+     * {
+     *   cubeId: string | null,
+     *   name: string,
+     *   description: string,
+     *   packs: Array<pack summary with savedPackId/id>
+     * }
+     */
     if (selectedPacks.length === 0 && !savedCubeId) return;
 
     const currentSnapshot = getCubeSnapshot(
@@ -250,6 +372,7 @@ function App() {
   ]);
 
   async function openCube(cubeId) {
+    // loadCube returns cube metadata plus hydrated pack summaries.
     const cube = await userCubes.loadCube(cubeId);
 
     if (!cube) return;
@@ -267,6 +390,8 @@ function App() {
   }
 
   useEffect(() => {
+    // Debounced cube autosave. The snapshot prevents repeated saves from the
+    // same state while still catching pack reorder/removal/name edits.
     if (selectedPacks.length === 0 && !savedCubeId) return undefined;
 
     const currentSnapshot = getCubeSnapshot(
@@ -289,6 +414,8 @@ function App() {
   }, [cubeDescription, cubeName, savedCubeId, saveCurrentCube, selectedPacks]);
 
   useEffect(() => {
+    // Infinite scroll for the card grid. loadMoreCards is internally guarded
+    // against concurrent loads and no-more-results state.
     function handleScroll() {
       const scrollPosition = window.innerHeight + window.scrollY;
       const bottomPosition = document.documentElement.offsetHeight - 300;
@@ -306,6 +433,8 @@ function App() {
   }, [loadMoreCards]);
 
   useEffect(() => {
+    // Decorative search-area background: random non-funny Frog creature art.
+    // FALLBACK_FROG_BACKGROUND keeps the UI usable if Scryfall is unavailable.
     let isCurrent = true;
 
     async function loadRandomFrogBackground() {
@@ -335,6 +464,8 @@ function App() {
   }, []);
 
   useEffect(() => {
+    // Side panels sit below the visible nav. This updates a CSS variable as the
+    // nav scrolls in/out so PackBox and JumpCubeBox move smoothly with it.
     let animationFrame = null;
 
     function updateSidePanelTop() {
@@ -454,7 +585,11 @@ function App() {
                     <p>Loading cards...</p>
                   ) : (
                     <>
-                      <p>Results: {cardList.length}</p>
+                      <p>
+                        {totalCards === null
+                          ? `Showing ${cardList.length}${hasMoreCards ? "+" : ""} loaded`
+                          : `Results: ${totalCards} (${cardList.length} shown)`}
+                      </p>
 
                       <CardBox
                         cards={cardList}
@@ -485,6 +620,7 @@ function App() {
                   selectedCards={pack.selectedCards}
                   addCard={pack.addCardToPack}
                   decreaseCardQuantity={pack.decreaseCardQuantity}
+                  onCardOpen={setModalCard}
                   addCurrentPackToCube={addCurrentPackToCube}
                   onOpenPacks={() => setIsPackLibraryOpen(true)}
                   deletePack={pack.deletePack}
@@ -553,6 +689,8 @@ function App() {
                 card={modalCard}
                 onClose={() => setModalCard(null)}
                 onAddToPack={pack.addCardToPack}
+                onDecreaseFromPack={pack.decreaseCardQuantity}
+                selectedCards={pack.selectedCards}
                 isPackFull={pack.isPackFull}
               />
             </>

@@ -1,3 +1,10 @@
+/*
+ * FilterBox.css controls the compact filter chip bar and dropdown menus.
+ *
+ * Dropdown widths/stacking are tuned here; filter option data and behavior live
+ * in FilterBox.jsx and useCards.js.
+ */
+
 .filterToggle {
   display: flex;
   align-items: center;

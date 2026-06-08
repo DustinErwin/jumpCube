@@ -1,3 +1,15 @@
+/*
+ * Card mechanic classification for PackBox stats.
+ *
+ * CARD_MECHANIC_TAGS are low-level regex matches against oracle text.
+ * PACK_MECHANIC_BUCKETS are the user-facing columns/charts.
+ *
+ * To tune classification:
+ * - add/edit regexes in CARD_MECHANIC_TAGS.rules,
+ * - then map tag ids into PACK_MECHANIC_BUCKETS.mechanicIds,
+ * - or add matchesCard(card) for type-line/card-shape rules.
+ */
+
 export const CARD_MECHANIC_TAGS = [
   {
     id: "card-draw",
@@ -188,20 +200,33 @@ export const PACK_MECHANIC_BUCKETS = [
     matchesCard: (card) => /\bland\b/i.test(card.type_line || ""),
   },
 ];
+const DEFAULT_PACK_MECHANIC_BUCKET_ID = "utility";
+
+function getDefaultMechanicBucket() {
+  // Every card in stats view needs a column; unmatched cards become Utility.
+  return (
+    PACK_MECHANIC_BUCKETS.find(
+      (bucket) => bucket.id === DEFAULT_PACK_MECHANIC_BUCKET_ID,
+    ) || null
+  );
+}
 
 function getOracleText(card) {
-  const faceText = card.raw?.card_faces
+  // Double-faced cards may store text on card_faces; combine both faces before
+  // running regex classification.
+  const faceText = card.card_faces
     ?.map((face) => face.oracle_text)
     .filter(Boolean)
     .join("\n");
 
-  return [card.oracle_text, card.raw?.oracle_text, faceText]
+  return [card.oracle_text, faceText]
     .filter(Boolean)
     .join("\n")
     .replace(/\s+/g, " ");
 }
 
 export function classifyCardMechanics(card) {
+  // Returns the low-level tags that matched the card text.
   const oracleText = getOracleText(card);
 
   if (!oracleText) return [];
@@ -212,6 +237,7 @@ export function classifyCardMechanics(card) {
 }
 
 export function classifyCardMechanicBuckets(card) {
+  // Converts low-level tags into the visible bucket list for a card.
   const mechanicIds = classifyCardMechanics(card).map((tag) => tag.id);
 
   return PACK_MECHANIC_BUCKETS.filter((bucket) => {
@@ -225,6 +251,7 @@ export function classifyCardMechanicBuckets(card) {
 }
 
 export function getPrimaryCardMechanicBucket(card) {
+  // Manual placement from the stats drag/drop UI always wins over regex rules.
   if (card.manualMechanicBucket) {
     return (
       PACK_MECHANIC_BUCKETS.find(
@@ -233,10 +260,12 @@ export function getPrimaryCardMechanicBucket(card) {
     );
   }
 
-  return classifyCardMechanicBuckets(card)[0] || null;
+  return classifyCardMechanicBuckets(card)[0] || getDefaultMechanicBucket();
 }
 
 export function getPackMechanicBucketCounts(cards) {
+  // Chart helper: count cards by their primary bucket. Quantities are not
+  // expanded here because the stats columns display card entries, not copies.
   return PACK_MECHANIC_BUCKETS.map((bucket) => ({
     ...bucket,
     count: cards.filter(
