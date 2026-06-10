@@ -36,7 +36,6 @@ const CARD_VERSION_COLUMNS = `
   nonfoil,
   is_token,
   is_funny,
-  is_default_printing,
   is_variant_printing,
   is_planechase,
   set_name,
@@ -111,6 +110,14 @@ function getVersionLabel(card) {
   return `${setCode} #${collectorNumber}${rarity}`;
 }
 
+function normalizeCardVersions(versions, sourceCard) {
+  return (versions || []).map((version) => ({
+    ...version,
+    card_search_id: sourceCard.card_search_id || null,
+    variant_id: version.id,
+  }));
+}
+
 export default function CardModal({
   card,
   isOpen,
@@ -155,9 +162,10 @@ export default function CardModal({
       setVersionsError("");
 
       let query = supabase
-        .from("cards")
+        .from("card_variants")
         .select(CARD_VERSION_COLUMNS)
         .contains("games", ["paper"])
+        .eq("lang", "en")
         .eq("is_token", false)
         .eq("is_funny", false)
         .eq("is_planechase", false)
@@ -183,7 +191,11 @@ export default function CardModal({
         return;
       }
 
-      setVersions(data?.length ? data : [card]);
+      const hydratedVersions = normalizeCardVersions(data || [], card);
+
+      if (!isCurrent) return;
+
+      setVersions(hydratedVersions.length ? hydratedVersions : [card]);
       setIsLoadingVersions(false);
     }
 

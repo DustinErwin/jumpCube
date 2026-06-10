@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../utils/supabase";
+import { sanitizeDescription, sanitizeTitle } from "../utils/userText";
 
 /*
  * useUserCubes() is the database boundary for cube library operations.
@@ -18,7 +19,30 @@ import { supabase } from "../utils/supabase";
  * }
  */
 
-const CUBE_CARD_COLUMNS = `
+const CUBE_CARD_SEARCH_COLUMNS = `
+  id,
+  oracle_id,
+  name,
+  mana_value,
+  mana_cost,
+  colors,
+  color_identity,
+  type_line,
+  oracle_text,
+  legalities,
+  games,
+  nonfoil,
+  is_token,
+  is_funny,
+  is_variant_printing,
+  is_planechase,
+  image_url,
+  back_image_url,
+  image_uris,
+  card_faces,
+  has_back_face
+`;
+const CUBE_CARD_VARIANT_COLUMNS = `
   id,
   scryfall_id,
   oracle_id,
@@ -41,7 +65,6 @@ const CUBE_CARD_COLUMNS = `
   nonfoil,
   is_token,
   is_funny,
-  is_default_printing,
   is_variant_printing,
   is_planechase,
   set_name,
@@ -50,7 +73,7 @@ const CUBE_CARD_COLUMNS = `
   has_back_face
 `;
 
-function buildPackSummary(pack, position = 0) {
+function buildPackSummary(pack, position = 0, hydratedCards = null) {
   /*
    * Converts the nested Supabase join shape into the pack item shape expected
    * by JumpCubeBox:
@@ -59,8 +82,11 @@ function buildPackSummary(pack, position = 0) {
    *   cardCount, colorIdentity, cards, position
    * }
    */
-  const cards = (pack.pack_cards || []).map((row) => ({
-    ...row.cards,
+  const cards = hydratedCards || (pack.pack_cards || []).map((row) => ({
+    card_search_id: row.card_search_id || null,
+    variant_id: row.variant_id || null,
+    oracle_id: row.oracle_id || null,
+    variation_id: row.variation_id || null,
     quantity: row.quantity,
   }));
   const cardCount = cards.reduce((sum, card) => sum + card.quantity, 0);
@@ -71,8 +97,8 @@ function buildPackSummary(pack, position = 0) {
   return {
     id: pack.id,
     savedPackId: pack.id,
-    name: pack.name || "Unnamed Pack",
-    description: pack.description || "",
+    name: sanitizeTitle(pack.name, "Unnamed Pack"),
+    description: sanitizeDescription(pack.description),
     archetypeTags: pack.archetype_tags || [],
     visibility: pack.visibility || "private",
     cardCount,
@@ -80,6 +106,54 @@ function buildPackSummary(pack, position = 0) {
     cards,
     position,
   };
+}
+
+async function hydrateCubePackCards(packCards) {
+  const cardSearchIds = [
+    ...new Set(packCards.map((row) => row.card_search_id).filter(Boolean)),
+  ];
+  const variantIds = [
+    ...new Set(packCards.map((row) => row.variant_id).filter(Boolean)),
+  ];
+
+  const [searchResult, variantResult] = await Promise.all([
+    cardSearchIds.length > 0
+      ? supabase
+          .from("card_search")
+          .select(CUBE_CARD_SEARCH_COLUMNS)
+          .in("id", cardSearchIds)
+      : Promise.resolve({ data: [], error: null }),
+    variantIds.length > 0
+      ? supabase
+          .from("card_variants")
+          .select(CUBE_CARD_VARIANT_COLUMNS)
+          .in("id", variantIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (searchResult.error) throw searchResult.error;
+  if (variantResult.error) throw variantResult.error;
+
+  const searchById = new Map((searchResult.data || []).map((card) => [card.id, card]));
+  const variantById = new Map(
+    (variantResult.data || []).map((variant) => [variant.id, variant]),
+  );
+
+  return (packCards || []).map((row) => {
+    const searchCard = searchById.get(row.card_search_id);
+    const variantCard = variantById.get(row.variant_id);
+    return {
+      ...(searchCard || {}),
+      ...(variantCard || {}),
+      id: row.variant_id || variantCard?.id || searchCard?.id,
+      card_search_id: row.card_search_id || searchCard?.id || null,
+      variant_id: row.variant_id || variantCard?.id || null,
+      oracle_id: row.oracle_id || searchCard?.oracle_id || null,
+      variation_id: row.variation_id || variantCard?.scryfall_id || null,
+      scryfall_id: variantCard?.scryfall_id || null,
+      quantity: row.quantity,
+    };
+  });
 }
 
 export function useUserCubes(user) {
@@ -132,8 +206,8 @@ export function useUserCubes(user) {
       const { data: cube, error: cubeError } = await supabase
         .from("cubes")
         .insert({
-          name,
-          description,
+          name: sanitizeTitle(name, "Unnamed Cube"),
+          description: sanitizeDescription(description),
           user_id: user.id,
         })
         .select()
@@ -149,8 +223,8 @@ export function useUserCubes(user) {
       const { error: updateError } = await supabase
         .from("cubes")
         .update({
-          name,
-          description,
+          name: sanitizeTitle(name, "Unnamed Cube"),
+          description: sanitizeDescription(description),
         })
         .eq("id", actualCubeId);
 
@@ -220,8 +294,11 @@ export function useUserCubes(user) {
             archetype_tags,
             visibility,
             pack_cards (
+              card_search_id,
+              variant_id,
               quantity,
-              cards (${CUBE_CARD_COLUMNS})
+              oracle_id,
+              variation_id
             )
           )
         `,
@@ -234,11 +311,21 @@ export function useUserCubes(user) {
       return null;
     }
 
+    const hydratedPacks = await Promise.all(
+      (cubePacks || [])
+        .filter((row) => row.packs)
+        .map(async (row) => {
+          const hydratedCards = await hydrateCubePackCards(
+            row.packs.pack_cards || [],
+          );
+
+          return buildPackSummary(row.packs, row.position, hydratedCards);
+        }),
+    );
+
     return {
       ...cube,
-      packs: (cubePacks || [])
-        .filter((row) => row.packs)
-        .map((row) => buildPackSummary(row.packs, row.position)),
+      packs: hydratedPacks,
     };
   }
 

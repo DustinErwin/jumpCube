@@ -21,10 +21,42 @@ import { supabase } from "../utils/supabase";
  * - Normal text and UI filters use Supabase so indexed local fields stay
  *   authoritative.
  * - Scryfall syntax like "o:draw t:bird" is passed through raw, then hydrated
- *   from our cards table.
+ *   from card_search/card_variants.
  */
 
 const CARD_COLUMNS = `
+  id,
+  oracle_id,
+  representative_scryfall_id,
+  default_variant_id,
+  default_variant_scryfall_id,
+  name,
+  mana_value,
+  colors,
+  color_identity,
+  type_line,
+  oracle_text,
+  rarity,
+  image_url,
+  back_image_url,
+  legalities,
+  price_usd,
+  price_usd_foil,
+  games,
+  nonfoil,
+  is_token,
+  is_funny,
+  is_variant_printing,
+  is_planechase,
+  set_name,
+  set_code,
+  collector_number,
+  has_back_face,
+  mana_cost,
+  image_uris,
+  card_faces
+`;
+const CARD_VARIANT_COLUMNS = `
   id,
   scryfall_id,
   oracle_id,
@@ -44,7 +76,6 @@ const CARD_COLUMNS = `
   nonfoil,
   is_token,
   is_funny,
-  is_default_printing,
   is_variant_printing,
   is_planechase,
   set_name,
@@ -59,6 +90,7 @@ const CARD_COLUMNS = `
 const TEXT_SEARCH_CANDIDATE_LIMIT = 700;
 const SCRYFALL_SEARCH_PAGE_LIMIT = 5;
 const EXACT_NAME_BATCH_SIZE = 50;
+const CARD_SEARCH_ID_BATCH_SIZE = 50;
 // Detects Scryfall syntax operators. Add aliases here only if the official
 // syntax introduces a new operator shape not covered by key:value/key>=value.
 const SCRYFALL_SYNTAX_PATTERN =
@@ -148,27 +180,6 @@ function getPlainSearchTerms(search) {
   return normalizedTerms;
 }
 
-function getCardTextSearchFilter(term) {
-  /*
-   * Supabase .or() filter for one required term across searchable fields.
-   *
-   * Longer rules-text phrases are much more likely to be oracle text than
-   * names/types, and broad name/type ilike scans can make filtered searches
-   * timeout. Keeping phrase searches on oracle_text lets the trigram index do
-   * the heavy lifting for searches like "enters the battlefield".
-   */
-  const isLikelyRulesTextPhrase = term.includes(" ");
-  const searchableFields = isLikelyRulesTextPhrase
-    ? ["oracle_text"]
-    : ["name", "type_line", "oracle_text"];
-
-  return getSearchTermAliases(term)
-    .flatMap((alias) =>
-      searchableFields.map((field) => `${field}.ilike.%${alias}%`),
-    )
-    .join(",");
-}
-
 function getSearchTermAliases(term) {
   /*
    * Scryfall uses current Oracle wording. Older/common player phrasing can
@@ -186,26 +197,15 @@ function getSearchTermAliases(term) {
   return [normalizedTerm];
 }
 
-function getRpcSearchTerms(search) {
-  /*
-   * The RPC keeps two search buckets:
-   * - anySearchTerms can match name, type_line, or oracle_text
-   * - oracleSearchTerms only match oracle_text, which is faster and more
-   *   accurate for quoted/rules-text phrases.
-   */
-  const anySearchTerms = [];
-  const oracleSearchTerms = [];
-
-  getPlainSearchTerms(search).forEach((term) => {
-    const targetTerms = term.includes(" ") ? oracleSearchTerms : anySearchTerms;
-
-    targetTerms.push(...getSearchTermAliases(term));
-  });
-
-  return {
-    anySearchTerms: uniqueValues(anySearchTerms),
-    oracleSearchTerms: uniqueValues(oracleSearchTerms),
-  };
+function normalizeSearchText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[’']/g, "'")
+    .replace(/[^a-z0-9{}+/-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function usesScryfallSyntax(search) {
@@ -330,13 +330,6 @@ function shouldReplaceCardVersion(currentCard, candidateCard) {
     return true;
   }
 
-  if (
-    !currentCard.is_default_printing &&
-    candidateCard.is_default_printing
-  ) {
-    return true;
-  }
-
   return candidateCard.name.localeCompare(currentCard.name) < 0;
 }
 
@@ -359,6 +352,70 @@ function mergeUniqueCards(cardGroups, showAllPrintings) {
 
 function getScryfallOracleIds(cards) {
   return uniqueValues(cards.map((card) => card.oracle_id));
+}
+
+async function getCardSearchIdsByOracleId(oracleIds) {
+  const rows = [];
+
+  for (
+    let index = 0;
+    index < oracleIds.length;
+    index += CARD_SEARCH_ID_BATCH_SIZE
+  ) {
+    const { data, error } = await supabase
+      .from("card_search")
+      .select("id, oracle_id")
+      .in("oracle_id", oracleIds.slice(index, index + CARD_SEARCH_ID_BATCH_SIZE));
+
+    if (error) throw error;
+
+    rows.push(...(data || []));
+  }
+
+  return new Map(rows.map((row) => [row.oracle_id, row.id]));
+}
+
+async function normalizeCardRows(
+  cards,
+  showAllPrintings,
+  usesVariantRows = showAllPrintings,
+) {
+  if (usesVariantRows) {
+    const oracleIds = uniqueValues(cards.map((card) => card.oracle_id));
+    const searchIdByOracleId = await getCardSearchIdsByOracleId(oracleIds);
+
+    return (cards || [])
+      .map((card) => {
+        const cardSearchId = searchIdByOracleId.get(card.oracle_id);
+
+        if (!cardSearchId) return null;
+
+        return {
+          ...card,
+          card_search_id: cardSearchId,
+          variant_id: card.id,
+        };
+      })
+      .filter(Boolean);
+  }
+
+  return (cards || [])
+    .map((card) => {
+      if (!card.default_variant_id) {
+        return null;
+      }
+
+      return {
+        ...card,
+        card_search_id: card.id,
+        id: card.default_variant_id,
+        variant_id: card.default_variant_id,
+        scryfall_id:
+          card.default_variant_scryfall_id || card.representative_scryfall_id,
+        is_default_printing: true,
+      };
+    })
+    .filter(Boolean);
 }
 
 export function useCards({
@@ -390,14 +447,6 @@ export function useCards({
     types.length > 0 ||
     formats.length > 0 ||
     selectedSets.length > 0;
-  const hasStructuredFilters =
-    manaValues.length > 0 ||
-    colors.length > 0 ||
-    rarities.length > 0 ||
-    types.length > 0 ||
-    formats.length > 0 ||
-    selectedSets.length > 0;
-
   const buildCardsQuery = useCallback(
     (
       start,
@@ -419,9 +468,12 @@ export function useCards({
        *   type_line ilike scans.
        */
       const hasSplitSearchField = Boolean(searchField);
+      const searchesVariants = showAllPrintings || selectedSets.length > 0;
+      const searchTable = searchesVariants ? "card_variants" : "card_search";
+      const searchColumns = searchesVariants ? CARD_VARIANT_COLUMNS : CARD_COLUMNS;
       let query = supabase
-        .from("cards")
-        .select(CARD_COLUMNS)
+        .from(searchTable)
+        .select(searchColumns)
         .contains("games", ["paper"])
         .eq("nonfoil", true)
         .eq("is_token", false)
@@ -433,19 +485,16 @@ export function useCards({
 
       query = query.range(start, end);
 
+      if (searchesVariants) {
+        query = query.eq("lang", "en");
+      }
+
       if (selectedSets.length > 0) {
         query = query.in("set_code", selectedSets);
       }
 
-      const hasSelectedSets = selectedSets.length > 0;
-      const hasBasicLandTypeFilter = types.includes(BASIC_LAND_TYPE_FILTER);
-
-      if (!showAllPrintings && hasSelectedSets) {
+      if (!showAllPrintings && selectedSets.length > 0) {
         query = query.eq("is_variant_printing", false);
-      }
-
-      if (!showAllPrintings && !hasSelectedSets && !hasBasicLandTypeFilter) {
-        query = query.eq("is_default_printing", true);
       }
 
       const trimmedSearch = search.trim();
@@ -460,7 +509,18 @@ export function useCards({
           );
         } else {
           searchTerms.forEach((term) => {
-            query = query.or(getCardTextSearchFilter(term));
+            getSearchTermAliases(term).forEach((alias) => {
+              if (searchesVariants) {
+                query = query.or(
+                  `name.ilike.%${alias}%,type_line.ilike.%${alias}%,oracle_text.ilike.%${alias}%`,
+                );
+              } else {
+                query = query.ilike(
+                  "search_text",
+                  `%${normalizeSearchText(alias)}%`,
+                );
+              }
+            });
           });
         }
       }
@@ -548,49 +608,8 @@ export function useCards({
       rarities,
       types,
       formats,
-      showAllPrintings,
-      selectedSets,
-    ],
-  );
-
-  const buildSearchRpcParams = useCallback(
-    (start) => {
-      /*
-       * Mirrors the UI filter state into the search_cards RPC arguments.
-       * Supabase maps these p_* keys onto the Postgres function parameters.
-       */
-      const { anySearchTerms, oracleSearchTerms } = getRpcSearchTerms(search);
-      const exactManaValues = manaValues
-        .filter((mv) => mv !== "7")
-        .map(Number);
-
-      return {
-        p_any_search_terms: anySearchTerms,
-        p_oracle_search_terms: oracleSearchTerms,
-        p_mana_values: exactManaValues,
-        p_include_mana_7_plus: manaValues.includes("7"),
-        p_colors: colors,
-        p_color_mode: colorMode,
-        p_rarities: rarities.map((rarity) => rarity.toLowerCase()),
-        p_types: types,
-        p_formats: formats.map((format) => format.toLowerCase()),
-        p_selected_sets: selectedSets,
-        p_show_all_printings: showAllPrintings,
-        p_limit: limit,
-        p_offset: start,
-      };
-    },
-    [
-      search,
-      manaValues,
-      colors,
-      colorMode,
-      rarities,
-      types,
-      formats,
       selectedSets,
       showAllPrintings,
-      limit,
     ],
   );
 
@@ -620,7 +639,7 @@ export function useCards({
       let error;
       let totalCount = null;
 
-      if (hasBasicLandTypeFilter && !trimmedSearch) {
+      if (hasBasicLandTypeFilter && !trimmedSearch && colors.length === 0) {
         // Special-case basics so the filter returns the six land names instead
         // of every basic land printing in the database.
         const basicLandResults = await Promise.all(
@@ -699,27 +718,15 @@ export function useCards({
           totalCount = data.length;
         }
       } else {
-        // Normal app search and UI filters run through a Supabase RPC so
-        // Postgres receives one stable search function instead of a long
-        // PostgREST filter URL with chained OR clauses.
-        const searchParams = buildSearchRpcParams(0);
-        const [result, countResult] = await Promise.all([
-          supabase
-            .rpc("search_cards", searchParams)
-            .select(CARD_COLUMNS),
-          supabase.rpc("count_search_cards", searchParams),
-        ]);
+        // Normal app search reads card_search; all-printing mode reads exact
+        // card_variants rows and attaches card_search_id afterward.
+        const result = await buildCardsQuery(0, limit - 1);
         const rowCount = result.data?.length || 0;
 
         data = mergeUniqueCards([result.data || []], showAllPrintings);
         error = result.error;
         nextRowStartRef.current = rowCount;
-
-        if (countResult.error) {
-          console.error("Error counting cards:", countResult.error);
-        } else {
-          totalCount = countResult.data;
-        }
+        totalCount = null;
       }
 
       if (requestId !== requestIdRef.current) {
@@ -733,7 +740,17 @@ export function useCards({
         return;
       }
 
-      setCardList(data || []);
+      const normalizedData = await normalizeCardRows(
+        data || [],
+        showAllPrintings,
+        showAllPrintings || selectedSets.length > 0,
+      );
+
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+
+      setCardList(normalizedData);
       setTotalCards(totalCount);
       setHasMoreCards(
         !hasScryfallSyntax && nextRowStartRef.current >= limit,
@@ -750,10 +767,9 @@ export function useCards({
     };
   }, [
     buildCardsQuery,
-    buildSearchRpcParams,
+    colors.length,
     formats,
     hasActiveFilters,
-    hasStructuredFilters,
     limit,
     manaValues,
     search,
@@ -772,9 +788,7 @@ export function useCards({
 
     const start = nextRowStartRef.current;
 
-    const { data, error } = await supabase
-      .rpc("search_cards", buildSearchRpcParams(start))
-      .select(CARD_COLUMNS);
+    const { data, error } = await buildCardsQuery(start, start + limit - 1);
     const rowCount = data?.length || 0;
 
     if (requestId !== requestIdRef.current) {
@@ -788,8 +802,18 @@ export function useCards({
       return;
     }
 
+    const normalizedData = await normalizeCardRows(
+      data || [],
+      showAllPrintings,
+      showAllPrintings || selectedSets.length > 0,
+    );
+
+    if (requestId !== requestIdRef.current) {
+      return;
+    }
+
     setCardList((prev) => {
-      const combined = [...prev, ...(data || [])];
+      const combined = [...prev, ...normalizedData];
 
       return mergeUniqueCards([combined], showAllPrintings);
     });
@@ -797,11 +821,12 @@ export function useCards({
     setHasMoreCards(rowCount === limit);
     setLoadingMoreCards(false);
   }, [
-    buildSearchRpcParams,
+    buildCardsQuery,
     hasMoreCards,
     limit,
     loadingCards,
     loadingMoreCards,
+    selectedSets.length,
     showAllPrintings,
   ]);
 

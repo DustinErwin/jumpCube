@@ -7,6 +7,12 @@ import {
   getPrimaryCardMechanicBucket,
   PACK_MECHANIC_BUCKETS,
 } from "../../utils/cardMechanics";
+import {
+  DESCRIPTION_MAX_LENGTH,
+  TITLE_MAX_LENGTH,
+  sanitizeDescription,
+  sanitizeTitle,
+} from "../../utils/userText";
 import "./PackBox.css";
 
 /*
@@ -23,7 +29,6 @@ import "./PackBox.css";
  * - isOpen/setIsOpen: side-panel collapsed state
  */
 
-const PACK_TITLE_MAX_LENGTH = 40;
 // Update CARD_TYPE_COLORS/LABELS together when changing the type pie chart.
 const CARD_TYPE_COLORS = {
   Artifact: "#9aa3ad",
@@ -552,10 +557,10 @@ export default function PackBox({
         <input
           className="packNameInput"
           value={packName}
-          maxLength={PACK_TITLE_MAX_LENGTH}
+          maxLength={TITLE_MAX_LENGTH}
           autoFocus
           onChange={(e) =>
-            setPackName(e.target.value.slice(0, PACK_TITLE_MAX_LENGTH))
+            setPackName(sanitizeTitle(e.target.value, ""))
           }
           onBlur={() => setEditingName(false)}
           onKeyDown={(e) => {
@@ -571,9 +576,12 @@ export default function PackBox({
         <textarea
           className="packDescriptionInput"
           value={packDescription}
+          maxLength={DESCRIPTION_MAX_LENGTH}
           placeholder="Click to add a description..."
           autoFocus
-          onChange={(e) => setPackDescription(e.target.value)}
+          onChange={(e) =>
+            setPackDescription(sanitizeDescription(e.target.value))
+          }
           onBlur={() => setEditingDescription(false)}
         />
       ) : (

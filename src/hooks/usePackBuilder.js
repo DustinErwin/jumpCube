@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../utils/supabase";
+import {
+  sanitizeDescription,
+  sanitizeTitle,
+} from "../utils/userText";
 
 /*
  * usePackBuilder() owns the active pack editor.
@@ -20,7 +24,6 @@ import { supabase } from "../utils/supabase";
  * }
  */
 
-const PACK_TITLE_MAX_LENGTH = 40;
 export const PACK_CARD_LIMIT = 20;
 // Update this list when adding/removing archetype options in PackBox.
 export const PACK_ARCHETYPE_TAGS = [
@@ -31,7 +34,30 @@ export const PACK_ARCHETYPE_TAGS = [
   "Combo",
   "Ramp",
 ];
-const PACK_CARD_COLUMNS = `
+const PACK_CARD_SEARCH_COLUMNS = `
+  id,
+  oracle_id,
+  name,
+  mana_value,
+  mana_cost,
+  colors,
+  color_identity,
+  type_line,
+  oracle_text,
+  legalities,
+  games,
+  nonfoil,
+  is_token,
+  is_funny,
+  is_variant_printing,
+  is_planechase,
+  image_url,
+  back_image_url,
+  image_uris,
+  card_faces,
+  has_back_face
+`;
+const PACK_CARD_VARIANT_COLUMNS = `
   id,
   scryfall_id,
   oracle_id,
@@ -54,7 +80,6 @@ const PACK_CARD_COLUMNS = `
   nonfoil,
   is_token,
   is_funny,
-  is_default_printing,
   is_variant_printing,
   is_planechase,
   set_name,
@@ -64,9 +89,7 @@ const PACK_CARD_COLUMNS = `
 `;
 
 function normalizePackName(name, fallback = "Unnamed Pack") {
-  const trimmedName = (name || "").trim().slice(0, PACK_TITLE_MAX_LENGTH);
-
-  return trimmedName || fallback;
+  return sanitizeTitle(name, fallback);
 }
 
 function normalizeArchetypeTags(tags) {
@@ -84,11 +107,13 @@ function getPackSnapshot(name, description, archetypeTags, visibility, cards) {
   // loop. Include any new saved pack field here if it should trigger autosave.
   return JSON.stringify({
     name: normalizePackName(name),
-    description: description || "",
+    description: sanitizeDescription(description),
     archetypeTags: normalizeArchetypeTags(archetypeTags),
     visibility: normalizeVisibility(visibility),
     cards: cards.map((card) => ({
       id: card.id,
+      oracleId: card.oracle_id || null,
+      variationId: card.variation_id || card.scryfall_id || null,
       quantity: card.quantity,
       manualMechanicBucket: card.manualMechanicBucket || null,
     })),
@@ -97,6 +122,60 @@ function getPackSnapshot(name, description, archetypeTags, visibility, cards) {
 
 function getPackCardCount(cards) {
   return cards.reduce((sum, card) => sum + card.quantity, 0);
+}
+
+async function hydratePackCardRows(packCards) {
+  const cardSearchIds = [
+    ...new Set(packCards.map((row) => row.card_search_id).filter(Boolean)),
+  ];
+  const variantIds = [
+    ...new Set(packCards.map((row) => row.variant_id).filter(Boolean)),
+  ];
+
+  const [searchResult, variantResult] = await Promise.all([
+    cardSearchIds.length > 0
+      ? supabase
+          .from("card_search")
+          .select(PACK_CARD_SEARCH_COLUMNS)
+          .in("id", cardSearchIds)
+      : Promise.resolve({ data: [], error: null }),
+    variantIds.length > 0
+      ? supabase
+          .from("card_variants")
+          .select(PACK_CARD_VARIANT_COLUMNS)
+          .in("id", variantIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (searchResult.error) {
+    throw searchResult.error;
+  }
+
+  if (variantResult.error) {
+    throw variantResult.error;
+  }
+
+  const searchById = new Map((searchResult.data || []).map((card) => [card.id, card]));
+  const variantById = new Map(
+    (variantResult.data || []).map((variant) => [variant.id, variant]),
+  );
+
+  return (packCards || []).map((row) => {
+    const searchCard = searchById.get(row.card_search_id);
+    const variantCard = variantById.get(row.variant_id);
+    return {
+      ...(searchCard || {}),
+      ...(variantCard || {}),
+      id: row.variant_id || variantCard?.id || searchCard?.id,
+      card_search_id: row.card_search_id || searchCard?.id || null,
+      variant_id: row.variant_id || variantCard?.id || null,
+      oracle_id: row.oracle_id || searchCard?.oracle_id || null,
+      variation_id: row.variation_id || variantCard?.scryfall_id || null,
+      scryfall_id: variantCard?.scryfall_id || null,
+      quantity: row.quantity,
+      manualMechanicBucket: row.manual_mechanic_bucket || null,
+    };
+  });
 }
 
 export function usePackBuilder(user, refreshPacks, {
@@ -136,9 +215,8 @@ export function usePackBuilder(user, refreshPacks, {
   }
 
   async function loadPack(packId) {
-    // Loads pack metadata first, then pack_cards with hydrated card rows. The
-    // PACK_CARD_COLUMNS list should include every field the PackBox/CardModal
-    // needs after opening a saved pack.
+    // Loads pack metadata first, then hydrates pack_cards through v2 card
+    // identity/variant relationships.
     const { data: pack, error: packError } = await supabase
       .from("packs")
       .select("*")
@@ -154,9 +232,12 @@ export function usePackBuilder(user, refreshPacks, {
       .from("pack_cards")
       .select(
       `
+      card_search_id,
+      variant_id,
       quantity,
-      manual_mechanic_bucket,
-      cards (${PACK_CARD_COLUMNS})
+      oracle_id,
+      variation_id,
+      manual_mechanic_bucket
     `,
       )
       .eq("pack_id", packId);
@@ -166,14 +247,17 @@ export function usePackBuilder(user, refreshPacks, {
       return;
     }
 
-    const hydratedCards = (packCards || []).map((row) => ({
-      ...row.cards,
-      quantity: row.quantity,
-      manualMechanicBucket: row.manual_mechanic_bucket || null,
-    }));
+    let hydratedCards;
+
+    try {
+      hydratedCards = await hydratePackCardRows(packCards || []);
+    } catch (hydrateError) {
+      console.error("Error hydrating v2 pack cards:", hydrateError);
+      return;
+    }
 
     setPackName(normalizePackName(pack.name, "Current Pack"));
-    setPackDescription(pack.description || "");
+    setPackDescription(sanitizeDescription(pack.description));
     setPackArchetypeTags(
       normalizeArchetypeTags(pack.archetype_tags || pack.archetype_tag),
     );
@@ -183,7 +267,7 @@ export function usePackBuilder(user, refreshPacks, {
     setSavedPackName(pack.name || null);
     lastSavedSnapshotRef.current = getPackSnapshot(
       pack.name || "Current Pack",
-      pack.description || "",
+      sanitizeDescription(pack.description),
       pack.archetype_tags || pack.archetype_tag,
       pack.visibility,
       hydratedCards,
@@ -262,7 +346,7 @@ export function usePackBuilder(user, refreshPacks, {
         .from("packs")
         .insert({
           name: normalizePackName(packName),
-          description: packDescription,
+          description: sanitizeDescription(packDescription),
           archetype_tags: normalizeArchetypeTags(packArchetypeTags),
           visibility: normalizeVisibility(packVisibility),
           user_id: user.id,
@@ -284,7 +368,7 @@ export function usePackBuilder(user, refreshPacks, {
         .from("packs")
         .update({
           name: normalizePackName(packName),
-          description: packDescription,
+          description: sanitizeDescription(packDescription),
           archetype_tags: normalizeArchetypeTags(packArchetypeTags),
           visibility: normalizeVisibility(packVisibility),
         })
@@ -298,9 +382,12 @@ export function usePackBuilder(user, refreshPacks, {
     }
 
     const packCards = cardsToSave.map((card) => ({
-      // Database pack_cards rows are one row per card id, with quantity.
       pack_id: actualPackId,
-      card_id: card.id,
+      card_id: null,
+      card_search_id: card.card_search_id || null,
+      variant_id: card.variant_id || null,
+      oracle_id: card.oracle_id || null,
+      variation_id: card.variation_id || card.scryfall_id || null,
       quantity: card.quantity,
       manual_mechanic_bucket: card.manualMechanicBucket || null,
     }));
@@ -334,7 +421,7 @@ export function usePackBuilder(user, refreshPacks, {
     onPackSaved?.({
       id: actualPackId,
       name: normalizePackName(packName),
-      description: packDescription,
+      description: sanitizeDescription(packDescription),
       archetypeTags: normalizeArchetypeTags(packArchetypeTags),
       visibility: normalizeVisibility(packVisibility),
       cards: cardsToSave,
@@ -373,7 +460,9 @@ export function usePackBuilder(user, refreshPacks, {
 
     const { data: originalCards, error: cardsError } = await supabase
       .from("pack_cards")
-      .select("card_id, quantity, manual_mechanic_bucket")
+      .select(
+        "card_search_id, variant_id, oracle_id, variation_id, quantity, manual_mechanic_bucket",
+      )
       .eq("pack_id", packId);
 
     if (cardsError) {
@@ -385,7 +474,7 @@ export function usePackBuilder(user, refreshPacks, {
       .from("packs")
       .insert({
         name: normalizePackName(`${originalPack.name} Copy`),
-        description: originalPack.description,
+        description: sanitizeDescription(originalPack.description),
         archetype_tags: normalizeArchetypeTags(
           originalPack.archetype_tags || originalPack.archetype_tag,
         ),
@@ -402,7 +491,11 @@ export function usePackBuilder(user, refreshPacks, {
 
     const copiedCards = originalCards.map((card) => ({
       pack_id: newPack.id,
-      card_id: card.card_id,
+      card_id: null,
+      card_search_id: card.card_search_id || null,
+      variant_id: card.variant_id || null,
+      oracle_id: card.oracle_id || null,
+      variation_id: card.variation_id || null,
       quantity: card.quantity,
       manual_mechanic_bucket: card.manual_mechanic_bucket || null,
     }));

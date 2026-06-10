@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { sanitizeDescription, sanitizeTitle } from "../utils/userText";
 
 const STORAGE_KEY = "jumpCubeCurrentPack";
 
@@ -31,8 +32,8 @@ export function useLocalStoragePack({
       try {
         const parsedPack = JSON.parse(savedPack);
 
-        setPackName(parsedPack.packName || "Current Pack");
-        setPackDescription(parsedPack.packDescription || "");
+        setPackName(sanitizeTitle(parsedPack.packName, "Current Pack"));
+        setPackDescription(sanitizeDescription(parsedPack.packDescription));
         setSelectedCards(parsedPack.selectedCards || []);
         setSavedPackId(parsedPack.savedPackId || null);
         setSavedPackName(parsedPack.savedPackName || null);

@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabaseClient";
+import { sanitizeDescription, sanitizeTitle } from "../utils/userText";
 
 /*
  * Pack service helpers.
@@ -20,8 +21,8 @@ export async function createPack({
   const { data, error } = await supabase
     .from("packs")
     .insert({
-      name,
-      description,
+      name: sanitizeTitle(name, "Unnamed Pack"),
+      description: sanitizeDescription(description),
       archetype_tags: archetypeTags || [],
       visibility,
     })
@@ -40,8 +41,8 @@ export async function updatePack(
   const { error } = await supabase
     .from("packs")
     .update({
-      name,
-      description,
+      name: sanitizeTitle(name, "Unnamed Pack"),
+      description: sanitizeDescription(description),
       archetype_tags: archetypeTags || [],
       visibility,
     })
@@ -51,17 +52,21 @@ export async function updatePack(
 }
 
 export async function savePackCards(packId, selectedCards) {
-  // selectedCards shape: [{ id: card_id, quantity, manualMechanicBucket? }].
+  // selectedCards shape: card rows plus quantity/manualMechanicBucket.
   const rows = selectedCards.map((card) => ({
     pack_id: packId,
-    card_id: card.id,
+    card_id: null,
+    card_search_id: card.card_search_id || null,
+    variant_id: card.variant_id || null,
+    oracle_id: card.oracle_id || null,
+    variation_id: card.variation_id || card.scryfall_id || null,
     quantity: card.quantity,
     manual_mechanic_bucket: card.manualMechanicBucket || null,
   }));
 
   const { error } = await supabase
     .from("pack_cards")
-    .upsert(rows, { onConflict: "pack_id,card_id" });
+    .insert(rows);
 
   if (error) throw error;
 }

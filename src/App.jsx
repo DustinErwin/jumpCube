@@ -17,6 +17,10 @@ import PackLibraryModal from "./components/PackLibraryModal/PackLibraryModal";
 import CubeLibraryModal from "./components/CubeLibraryModal/CubeLibraryModal";
 import JumpCubeBox from "./components/JumpCubeBox/JumpCubeBox";
 import NavBar from "./components/NavBar/NavBar";
+import {
+  sanitizeDescription,
+  sanitizeTitle,
+} from "./utils/userText";
 
 import "./App.css";
 
@@ -35,16 +39,13 @@ import "./App.css";
  * child needs.
  */
 
-const TITLE_MAX_LENGTH = 40;
 const MOBILE_PANEL_QUERY = "(max-width: 760px)";
 const FALLBACK_FROG_BACKGROUND = `${import.meta.env.BASE_URL}images/frogCube.png`;
 
-// Used for pack/cube names before they are saved. Update TITLE_MAX_LENGTH if
-// the database constraint changes.
+// Used for pack/cube names before they are saved. Update userText.js if the
+// database constraint changes.
 function normalizeTitle(title, fallback) {
-  const trimmedTitle = (title || "").trim().slice(0, TITLE_MAX_LENGTH);
-
-  return trimmedTitle || fallback;
+  return sanitizeTitle(title, fallback);
 }
 
 function getCubeSnapshot(name, description, packs) {
@@ -61,7 +62,7 @@ function getCubeSnapshot(name, description, packs) {
    */
   return JSON.stringify({
     name: normalizeTitle(name, "Unnamed Cube"),
-    description: description || "",
+    description: sanitizeDescription(description),
     packs: packs.map((pack) => pack.savedPackId || pack.id),
   });
 }
@@ -102,7 +103,7 @@ function getPackSummary({
   return {
     id,
     name: normalizeTitle(name, "Unnamed Pack"),
-    description: (description || "").trim(),
+    description: sanitizeDescription(description),
     archetypeTags: archetypeTags || [],
     visibility: visibility || "private",
     cardCount,
@@ -268,7 +269,7 @@ function App() {
     const packSummary = getPackSummary({
       id: savedPackId,
       name: normalizeTitle(pack.packName, "Unnamed Pack"),
-      description: pack.packDescription.trim(),
+      description: sanitizeDescription(pack.packDescription),
       archetypeTags: pack.packArchetypeTags,
       visibility: pack.packVisibility,
       cards: pack.selectedCards,
@@ -349,7 +350,7 @@ function App() {
     const cubeId = await saveUserCube({
       cubeId: savedCubeId,
       name: normalizeTitle(cubeName, "Unnamed Cube"),
-      description: cubeDescription.trim(),
+      description: sanitizeDescription(cubeDescription),
       packs: selectedPacks,
     });
 

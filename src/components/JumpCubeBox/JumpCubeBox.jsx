@@ -1,4 +1,10 @@
 import { useEffect, useState } from "react";
+import {
+  DESCRIPTION_MAX_LENGTH,
+  TITLE_MAX_LENGTH,
+  sanitizeDescription,
+  sanitizeTitle,
+} from "../../utils/userText";
 import "./JumpCubeBox.css";
 
 /*
@@ -15,7 +21,6 @@ import "./JumpCubeBox.css";
  * - isOpen/setIsOpen: side-panel collapsed state
  */
 
-const CUBE_TITLE_MAX_LENGTH = 40;
 // Colors used for the mana-pip percentage backdrop on each pack item.
 const MANA_COLORS = {
   W: "#eee0b3",
@@ -310,10 +315,10 @@ export default function JumpCubeBox({
         <input
           className="cubeNameInput"
           value={cubeName}
-          maxLength={CUBE_TITLE_MAX_LENGTH}
+          maxLength={TITLE_MAX_LENGTH}
           autoFocus
           onChange={(e) =>
-            setCubeName(e.target.value.slice(0, CUBE_TITLE_MAX_LENGTH))
+            setCubeName(sanitizeTitle(e.target.value, ""))
           }
           onBlur={() => setEditingName(false)}
           onKeyDown={(e) => {
@@ -330,9 +335,12 @@ export default function JumpCubeBox({
         <textarea
           className="cubeDescriptionInput"
           value={cubeDescription}
+          maxLength={DESCRIPTION_MAX_LENGTH}
           placeholder="Click to add a cube description..."
           autoFocus
-          onChange={(e) => setCubeDescription(e.target.value)}
+          onChange={(e) =>
+            setCubeDescription(sanitizeDescription(e.target.value))
+          }
           onBlur={() => setEditingDescription(false)}
         />
       ) : (

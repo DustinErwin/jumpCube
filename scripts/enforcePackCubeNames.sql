@@ -29,6 +29,31 @@ alter table public.packs
     and name !~ '[[:cntrl:]]'
   );
 
+update public.packs
+set description = left(
+  btrim(regexp_replace(coalesce(description, ''), '[[:cntrl:]]', ' ', 'g')),
+  500
+)
+where description is null
+  or description <> left(
+    btrim(regexp_replace(coalesce(description, ''), '[[:cntrl:]]', ' ', 'g')),
+    500
+  );
+
+alter table public.packs
+  drop constraint if exists packs_description_valid;
+
+alter table public.packs
+  add constraint packs_description_valid
+  check (
+    description is null
+    or (
+      description = btrim(description)
+      and char_length(description) <= 500
+      and description !~ '[[:cntrl:]]'
+    )
+  );
+
 update public.cubes
 set name = left(
   coalesce(
@@ -58,4 +83,29 @@ alter table public.cubes
     name = btrim(name)
     and char_length(name) between 1 and 40
     and name !~ '[[:cntrl:]]'
+  );
+
+update public.cubes
+set description = left(
+  btrim(regexp_replace(coalesce(description, ''), '[[:cntrl:]]', ' ', 'g')),
+  500
+)
+where description is null
+  or description <> left(
+    btrim(regexp_replace(coalesce(description, ''), '[[:cntrl:]]', ' ', 'g')),
+    500
+  );
+
+alter table public.cubes
+  drop constraint if exists cubes_description_valid;
+
+alter table public.cubes
+  add constraint cubes_description_valid
+  check (
+    description is null
+    or (
+      description = btrim(description)
+      and char_length(description) <= 500
+      and description !~ '[[:cntrl:]]'
+    )
   );

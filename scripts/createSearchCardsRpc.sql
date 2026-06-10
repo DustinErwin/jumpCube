@@ -12,6 +12,60 @@
 -- regular booleans, not generated columns, so they can be backfilled in small
 -- batches without timing out.
 
+create or replace function public.card_produces_mana_colors(
+  p_oracle_text text,
+  p_colors text[],
+  p_color_mode text default 'or'
+)
+returns boolean
+language sql
+immutable
+as $$
+  with requested_colors as (
+    select unnest(coalesce(p_colors, array[]::text[])) as color_symbol
+  ),
+  mana_matches as (
+    select
+      color_symbol,
+      case color_symbol
+        when 'W' then coalesce(p_oracle_text, '') ilike '%{W}%'
+        when 'U' then coalesce(p_oracle_text, '') ilike '%{U}%'
+        when 'B' then coalesce(p_oracle_text, '') ilike '%{B}%'
+        when 'R' then coalesce(p_oracle_text, '') ilike '%{R}%'
+        when 'G' then coalesce(p_oracle_text, '') ilike '%{G}%'
+        when 'C' then (
+          coalesce(p_oracle_text, '') ilike '%{C}%'
+          or coalesce(p_oracle_text, '') ilike '%colorless%'
+        )
+        else false
+      end as produces_selected_color
+    from requested_colors
+  ),
+  any_color_match as (
+    select
+      lower(coalesce(p_oracle_text, '')) like '%any color%'
+      as produces_any_color
+  )
+  select case
+    when not exists (select 1 from requested_colors) then true
+    else not exists (
+      select 1
+      from mana_matches
+      where produces_selected_color = false
+        and not (
+          (select produces_any_color from any_color_match)
+          and color_symbol in ('W', 'U', 'B', 'R', 'G')
+        )
+    )
+  end;
+$$;
+
+grant execute on function public.card_produces_mana_colors(
+  text,
+  text[],
+  text
+) to anon, authenticated;
+
 create or replace function public.search_cards(
   p_any_search_terms text[] default array[]::text[],
   p_oracle_search_terms text[] default array[]::text[],
@@ -61,6 +115,9 @@ declare
   v_selected_colors text[] := array_remove(coalesce(p_colors, array[]::text[]), 'C');
   v_includes_colorless boolean := 'C' = any(coalesce(p_colors, array[]::text[]));
   v_includes_basic_land boolean := 'Basic Land' = any(coalesce(p_types, array[]::text[]));
+  v_includes_land boolean :=
+    'Land' = any(coalesce(p_types, array[]::text[]))
+    or 'Basic Land' = any(coalesce(p_types, array[]::text[]));
   v_non_basic_types text[] := array_remove(coalesce(p_types, array[]::text[]), 'Basic Land');
   v_term text;
   v_type text;
@@ -157,7 +214,13 @@ begin
   end loop;
 
   if cardinality(v_colors) > 0 then
-    if v_includes_colorless and cardinality(v_selected_colors) = 0 then
+    if v_includes_land then
+      v_sql := v_sql || format(
+        ' and public.card_produces_mana_colors(cards.oracle_text, %L::text[], %L)',
+        v_colors,
+        v_color_mode
+      );
+    elsif v_includes_colorless and cardinality(v_selected_colors) = 0 then
       v_sql := v_sql || ' and cards.color_identity = array[]::text[]';
     elsif v_includes_colorless and cardinality(v_selected_colors) > 0 and v_color_mode = 'and' then
       v_sql := v_sql || ' and cards.color_identity = array[]::text[]';
@@ -246,6 +309,9 @@ declare
   v_selected_colors text[] := array_remove(coalesce(p_colors, array[]::text[]), 'C');
   v_includes_colorless boolean := 'C' = any(coalesce(p_colors, array[]::text[]));
   v_includes_basic_land boolean := 'Basic Land' = any(coalesce(p_types, array[]::text[]));
+  v_includes_land boolean :=
+    'Land' = any(coalesce(p_types, array[]::text[]))
+    or 'Basic Land' = any(coalesce(p_types, array[]::text[]));
   v_non_basic_types text[] := array_remove(coalesce(p_types, array[]::text[]), 'Basic Land');
   v_term text;
   v_type text;
@@ -343,7 +409,13 @@ begin
   end loop;
 
   if cardinality(v_colors) > 0 then
-    if v_includes_colorless and cardinality(v_selected_colors) = 0 then
+    if v_includes_land then
+      v_sql := v_sql || format(
+        ' and public.card_produces_mana_colors(cards.oracle_text, %L::text[], %L)',
+        v_colors,
+        v_color_mode
+      );
+    elsif v_includes_colorless and cardinality(v_selected_colors) = 0 then
       v_sql := v_sql || ' and cards.color_identity = array[]::text[]';
     elsif v_includes_colorless and cardinality(v_selected_colors) > 0 and v_color_mode = 'and' then
       v_sql := v_sql || ' and cards.color_identity = array[]::text[]';
