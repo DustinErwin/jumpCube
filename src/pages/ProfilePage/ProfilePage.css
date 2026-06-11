@@ -1,0 +1,116 @@
+/*
+ * ProfilePage.css styles the signed-in profile editor.
+ */
+
+.profilePage {
+  position: fixed;
+  inset: 58px 0 0;
+  min-height: calc(100vh - 58px);
+  display: grid;
+  place-items: start center;
+  padding: 32px 16px;
+  z-index: 8000;
+  box-sizing: border-box;
+  background: rgba(5, 7, 10, 0.56);
+  backdrop-filter: blur(6px);
+}
+
+.profilePanel {
+  width: min(520px, 100%);
+  box-sizing: border-box;
+  padding: 28px;
+  background: rgba(18, 20, 25, 0.94);
+  border: 1px solid #343941;
+  border-radius: 10px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+.profilePanel h1 {
+  margin: 0 0 22px;
+}
+
+.profileForm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.profileForm label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #c4cad3;
+  font-size: 0.92rem;
+}
+
+.profileForm input {
+  padding: 11px 12px;
+  background: #1d2127;
+  color: white;
+  border: 1px solid #414851;
+  border-radius: 8px;
+}
+
+.profileForm input:disabled {
+  color: #aeb6c1;
+  opacity: 0.75;
+}
+
+.profileForm input:focus {
+  outline: 2px solid #8bb8ff;
+  outline-offset: 2px;
+}
+
+.profileForm button {
+  margin-top: 4px;
+  padding: 11px 12px;
+  background: #d8b55b;
+  color: #15120a;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.profileForm button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.profileLogoutButton {
+  width: 100%;
+  margin-top: 16px;
+  padding: 10px 12px;
+  background: #252a31;
+  color: white;
+  border: 1px solid #414851;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.profileLogoutButton:hover {
+  background: #303741;
+}
+
+.profileError,
+.profileSuccess {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.profileError {
+  color: #ff9c9c;
+}
+
+.profileSuccess {
+  color: #95e59d;
+}
+
+@media (max-width: 760px) {
+  .profilePage {
+    inset: 64px 0 0;
+    min-height: calc(100svh - 64px);
+    padding: 14px 10px;
+  }
+}

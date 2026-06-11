@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../../utils/supabase";
 import "./CardModal.css";
 
@@ -129,13 +129,12 @@ function getLegalFormats(legalities) {
 }
 
 function getVersionLabel(card) {
-  // Text shown in the version dropdown. Add fields here if the picker needs
-  // language, finish, promo status, etc.
-  const setCode = card.set_code ? card.set_code.toUpperCase() : "Set";
+  // Text shown in the version picker.
+  const setName = card.set_name || card.set_code?.toUpperCase() || "Set";
   const collectorNumber = card.collector_number || "?";
   const rarity = card.rarity ? `, ${card.rarity}` : "";
 
-  return `${setCode} #${collectorNumber}${rarity}`;
+  return `${setName} #${collectorNumber}${rarity}`;
 }
 
 function normalizeCardVersions(versions, sourceCard) {
@@ -155,6 +154,8 @@ export default function CardModal({
   selectedCards = [],
   isPackFull,
 }) {
+  const versionPickerRef = useRef(null);
+  const touchPreviewVersionIdRef = useRef("");
   const [versions, setVersions] = useState([]);
   const [manualSelectedCard, setManualSelectedCard] = useState({
     sourceCardId: "",
@@ -164,6 +165,8 @@ export default function CardModal({
   const [versionsError, setVersionsError] = useState("");
   const [flippedCardId, setFlippedCardId] = useState(null);
   const [livePricesByScryfallId, setLivePricesByScryfallId] = useState({});
+  const [isVersionPickerOpen, setIsVersionPickerOpen] = useState(false);
+  const [hoveredVersionId, setHoveredVersionId] = useState("");
   const sourceCardId = String(card?.variant_id || card?.id || "");
   const selectedCardId =
     manualSelectedCard.sourceCardId === sourceCardId
@@ -270,6 +273,32 @@ export default function CardModal({
       price_tix: Number(livePrices.tix) || selectedCard.price_tix || null,
     };
   }, [livePricesByScryfallId, selectedCard]);
+  const hoveredVersion = useMemo(
+    () =>
+      versions.find((version) => String(version.id) === hoveredVersionId) ||
+      null,
+    [hoveredVersionId, versions],
+  );
+  const versionPreview = hoveredVersion || selectedCard;
+  const versionPreviewImage = getImage(versionPreview);
+
+  useEffect(() => {
+    if (!isVersionPickerOpen) return undefined;
+
+    function closeVersionPicker(event) {
+      if (versionPickerRef.current?.contains(event.target)) return;
+
+      setIsVersionPickerOpen(false);
+      setHoveredVersionId("");
+      touchPreviewVersionIdRef.current = "";
+    }
+
+    window.addEventListener("click", closeVersionPicker);
+
+    return () => {
+      window.removeEventListener("click", closeVersionPicker);
+    };
+  }, [isVersionPickerOpen]);
 
   useEffect(() => {
     if (!isOpen || !selectedCard?.scryfall_id || hasDisplayPrice(selectedCard)) {
@@ -386,25 +415,86 @@ export default function CardModal({
             <p>{displayedCard.type_line || "Unknown type"}</p>
           </div>
 
-          <label className="cardVersionPicker">
+          <div className="cardVersionPicker" ref={versionPickerRef}>
             <span>Version</span>
-            <select
-              value={selectedCardId}
-              onChange={(event) =>
-                setManualSelectedCard({
-                  sourceCardId,
-                  selectedCardId: event.target.value,
-                })
-              }
+            <button
+              type="button"
+              className="cardVersionPickerButton"
+              onClick={() => {
+                touchPreviewVersionIdRef.current = "";
+                setHoveredVersionId("");
+                setIsVersionPickerOpen((currentIsOpen) => !currentIsOpen);
+              }}
               disabled={isLoadingVersions}
+              aria-expanded={isVersionPickerOpen}
+              aria-haspopup="listbox"
             >
-              {versions.map((version) => (
-                <option key={version.id} value={String(version.id)}>
-                  {getVersionLabel(version)}
-                </option>
-              ))}
-            </select>
-          </label>
+              {getVersionLabel(displayedCard)}
+            </button>
+
+            {isVersionPickerOpen && (
+              <div className="cardVersionMenu">
+                <div className="cardVersionList" role="listbox">
+                  {versions.map((version) => {
+                    const versionId = String(version.id);
+                    const isSelected = versionId === selectedCardId;
+                    const isPreviewed =
+                      !isSelected && versionId === hoveredVersionId;
+
+                    return (
+                      <button
+                        type="button"
+                        key={version.id}
+                        className={`cardVersionOption${
+                          isSelected ? " selected" : ""
+                        }${isPreviewed ? " previewed" : ""}`}
+                        role="option"
+                        aria-selected={isSelected}
+                        onMouseEnter={() => setHoveredVersionId(versionId)}
+                        onFocus={() => setHoveredVersionId(versionId)}
+                        onClick={() => {
+                          const isTouchVersionPicker =
+                            window.matchMedia?.(
+                              "(hover: none), (pointer: coarse)",
+                            )?.matches || false;
+
+                          if (
+                            isTouchVersionPicker &&
+                            touchPreviewVersionIdRef.current !== versionId
+                          ) {
+                            touchPreviewVersionIdRef.current = versionId;
+                            setHoveredVersionId(versionId);
+                            return;
+                          }
+
+                          touchPreviewVersionIdRef.current = "";
+                          setManualSelectedCard({
+                            sourceCardId,
+                            selectedCardId: versionId,
+                          });
+                          setIsVersionPickerOpen(false);
+                          setHoveredVersionId("");
+                        }}
+                      >
+                        <span>{getVersionLabel(version)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="cardVersionPreview" aria-hidden="true">
+                  {versionPreviewImage ? (
+                    <img
+                      src={versionPreviewImage}
+                      alt=""
+                    />
+                  ) : (
+                    <span>No image</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           {versionsError && <p className="cardModalError">{versionsError}</p>}
 
@@ -412,10 +502,6 @@ export default function CardModal({
             <div>
               <dt>Mana Value</dt>
               <dd>{displayedCard.mana_value ?? "N/A"}</dd>
-            </div>
-            <div>
-              <dt>Colors</dt>
-              <dd>{formatArray(displayedCard.colors)}</dd>
             </div>
             <div>
               <dt>Color Identity</dt>

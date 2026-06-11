@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Navigate, Routes, Route } from "react-router-dom";
 import { supabase } from "./utils/supabase";
 import { useCards } from "./hooks/useCards";
 import { usePackBuilder } from "./hooks/usePackBuilder";
@@ -8,6 +8,7 @@ import { useUserPacks } from "./hooks/useUserPacks";
 import { useUserCubes } from "./hooks/useUserCubes";
 import { useSets } from "./hooks/useSets";
 import AuthPage from "./pages/AuthPage/AuthPage";
+import ProfilePage from "./pages/ProfilePage/ProfilePage";
 import SearchBox from "./components/SearchBox/SearchBox";
 import FilterBox from "./components/FilterBox/FilterBox";
 import CardBox from "./components/CardBox/CardBox";
@@ -17,6 +18,7 @@ import PackLibraryModal from "./components/PackLibraryModal/PackLibraryModal";
 import CubeLibraryModal from "./components/CubeLibraryModal/CubeLibraryModal";
 import JumpCubeBox from "./components/JumpCubeBox/JumpCubeBox";
 import NavBar from "./components/NavBar/NavBar";
+import UsernameRequiredModal from "./components/UsernameRequiredModal/UsernameRequiredModal";
 import {
   sanitizeDescription,
   sanitizeTitle,
@@ -133,7 +135,13 @@ function App() {
    * - useCards(): current search results and pagination callback
    * - usePackBuilder(): active pack state plus pack mutations
    */
-  const { user } = useAuth();
+  const {
+    user,
+    profile,
+    displayName,
+    profileLoading,
+    setProfile,
+  } = useAuth();
   const { sets } = useSets();
   const { packs, loadPacks } = useUserPacks(user);
   const userCubes = useUserCubes(user);
@@ -216,7 +224,6 @@ function App() {
 
   const {
     cardList,
-    totalCards,
     loadingCards,
     loadingMoreCards,
     cardsError,
@@ -534,8 +541,15 @@ function App() {
     >
       <NavBar
         user={user}
-        onLogout={handleLogout}
+        displayName={displayName}
       />
+
+      {user && !profileLoading && !profile?.username && (
+        <UsernameRequiredModal
+          user={user}
+          onProfileSaved={setProfile}
+        />
+      )}
 
       <nav className="mobilePanelNav" aria-label="Builder panels">
         <button
@@ -606,12 +620,6 @@ function App() {
                     <p>Loading cards...</p>
                   ) : (
                     <>
-                      <p>
-                        {totalCards === null
-                          ? `Showing ${cardList.length}${hasMoreCards ? "+" : ""} loaded`
-                          : `Results: ${totalCards} (${cardList.length} shown)`}
-                      </p>
-
                       <CardBox
                         cards={cardList}
                         onCardOpen={setModalCard}
@@ -719,6 +727,23 @@ function App() {
         />
 
         <Route path="/auth" element={<AuthPage />} />
+        <Route
+          path="/profile"
+          element={
+            user ? (
+              <ProfilePage
+                key={profile?.username || "missing-profile"}
+                user={user}
+                profile={profile}
+                profileLoading={profileLoading}
+                onProfileSaved={setProfile}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <Navigate to="/auth" replace />
+            )
+          }
+        />
       </Routes>
     </main>
   );

@@ -49,6 +49,11 @@
 .navUser {
   color: #aaa;
   font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.navUser:hover {
+  color: white;
 }
 
 .navActions button {

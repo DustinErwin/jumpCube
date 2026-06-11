@@ -14,7 +14,7 @@ import { supabase } from "../utils/supabase";
  * }
  *
  * Returns:
- * { cardList, totalCards, loadingCards, loadingMoreCards, cardsError,
+ * { cardList, loadingCards, loadingMoreCards, cardsError,
  *   hasMoreCards, loadMoreCards }
  *
  * Search strategy:
@@ -447,7 +447,6 @@ export function useCards({
   const [loadingMoreCards, setLoadingMoreCards] = useState(false);
   const [cardsError, setCardsError] = useState(null);
   const [hasMoreCards, setHasMoreCards] = useState(false);
-  const [totalCards, setTotalCards] = useState(null);
   const requestIdRef = useRef(0);
   const nextRowStartRef = useRef(0);
 
@@ -637,7 +636,6 @@ export function useCards({
       setCardsError(null);
       setCardList([]);
       setHasMoreCards(false);
-      setTotalCards(null);
       nextRowStartRef.current = 0;
 
       if (!hasActiveFilters) {
@@ -650,7 +648,6 @@ export function useCards({
       const hasBasicLandTypeFilter = types.includes(BASIC_LAND_TYPE_FILTER);
       let data;
       let error;
-      let totalCount = null;
 
       if (hasBasicLandTypeFilter && !trimmedSearch && colors.length === 0) {
         // Special-case basics so the filter returns the six land names instead
@@ -692,7 +689,6 @@ export function useCards({
         }
 
         nextRowStartRef.current = BASIC_LAND_NAMES.length;
-        totalCount = data?.length || 0;
       } else if (hasScryfallSyntax) {
         // Explicit Scryfall syntax goes raw, then hydrates local card rows by
         // oracle_id so pack actions still use our database ids.
@@ -728,7 +724,6 @@ export function useCards({
             successfulResults.map((result) => result.data || []),
             showAllPrintings,
           ).slice(0, TEXT_SEARCH_CANDIDATE_LIMIT);
-          totalCount = data.length;
         }
       } else {
         // Normal app search reads card_search; all-printing mode reads exact
@@ -739,7 +734,6 @@ export function useCards({
         data = mergeUniqueCards([result.data || []], showAllPrintings);
         error = result.error;
         nextRowStartRef.current = rowCount;
-        totalCount = null;
       }
 
       if (requestId !== requestIdRef.current) {
@@ -764,7 +758,6 @@ export function useCards({
       }
 
       setCardList(normalizedData);
-      setTotalCards(totalCount);
       setHasMoreCards(
         !hasScryfallSyntax && nextRowStartRef.current >= limit,
       );
@@ -845,7 +838,6 @@ export function useCards({
 
   return {
     cardList,
-    totalCards,
     loadingCards,
     loadingMoreCards,
     cardsError,

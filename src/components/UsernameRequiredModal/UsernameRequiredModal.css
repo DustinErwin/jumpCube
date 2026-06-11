@@ -1,0 +1,82 @@
+/*
+ * UsernameRequiredModal.css styles the blocking profile-completion dialog.
+ */
+
+.usernameRequiredOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(5, 7, 10, 0.82);
+  backdrop-filter: blur(8px);
+}
+
+.usernameRequiredModal {
+  width: min(420px, 100%);
+  box-sizing: border-box;
+  padding: 24px;
+  background: #151a21;
+  border: 1px solid #3b4653;
+  border-radius: 10px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.58);
+}
+
+.usernameRequiredModal h2 {
+  margin: 0 0 8px;
+  font-size: 1.35rem;
+}
+
+.usernameRequiredModal p {
+  margin: 0 0 18px;
+  color: #b7c0cb;
+}
+
+.usernameRequiredForm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.usernameRequiredForm label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #d5dbe3;
+  font-size: 0.92rem;
+}
+
+.usernameRequiredForm input {
+  padding: 11px 12px;
+  background: #1f252d;
+  color: white;
+  border: 1px solid #4a5663;
+  border-radius: 8px;
+}
+
+.usernameRequiredForm input:focus {
+  outline: 2px solid #8bb8ff;
+  outline-offset: 2px;
+}
+
+.usernameRequiredError {
+  margin: 0;
+  color: #ff9c9c;
+  font-size: 0.9rem;
+}
+
+.usernameRequiredForm button {
+  padding: 11px 12px;
+  background: #d8b55b;
+  color: #15120a;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.usernameRequiredForm button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}

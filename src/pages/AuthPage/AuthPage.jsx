@@ -3,12 +3,15 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../../utils/supabase";
 import "./AuthPage.css";
 
+const PENDING_SIGNUP_USERNAME_KEY = "jumpCubePendingSignupUsername";
+const USERNAME_PATTERN = /^[A-Za-z0-9]{3,31}$/;
+
 /*
  * AuthPage handles login/signup routes.
  *
  * State:
  * - mode: "login" | "signup"
- * - email/password: controlled inputs
+ * - email/password/username: controlled inputs
  * - authMessage/authError: user feedback from Supabase
  * - isSubmitting: disables the email form during requests
  *
@@ -21,11 +24,84 @@ export default function AuthPage() {
     .href;
 
   const [mode, setMode] = useState("login");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authMessage, setAuthMessage] = useState("");
   const [authError, setAuthError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  function getValidSignupUsername() {
+    const trimmedUsername = username.trim();
+
+    if (!USERNAME_PATTERN.test(trimmedUsername)) {
+      return {
+        error: "Usernames must be 3-31 letters or numbers.",
+        username: "",
+      };
+    }
+
+    return {
+      error: "",
+      username: trimmedUsername,
+    };
+  }
+
+  async function checkUsernameAvailability(trimmedUsername) {
+    const { data: isUsernameAvailable, error } = await supabase.rpc(
+      "is_username_available",
+      {
+        requested_username: trimmedUsername,
+      },
+    );
+
+    if (error) {
+      return {
+        error: "Could not check that username. Please try again.",
+        isAvailable: false,
+      };
+    }
+
+    if (!isUsernameAvailable) {
+      return {
+        error: "That username is already taken.",
+        isAvailable: false,
+      };
+    }
+
+    return {
+      error: "",
+      isAvailable: true,
+    };
+  }
+
+  async function checkEmailAvailability(trimmedEmail) {
+    const { data: isEmailAvailable, error } = await supabase.rpc(
+      "is_email_available",
+      {
+        requested_email: trimmedEmail,
+      },
+    );
+
+    if (error) {
+      return {
+        error: "Could not check that email. Please try again.",
+        isAvailable: false,
+      };
+    }
+
+    if (!isEmailAvailable) {
+      return {
+        error: "That email is already being used.",
+        isAvailable: false,
+      };
+    }
+
+    return {
+      error: "",
+      isAvailable: true,
+    };
+  }
 
   async function handleEmailAuth(e) {
     // One form supports both signup and login; mode controls which Supabase
@@ -37,10 +113,41 @@ export default function AuthPage() {
     setIsSubmitting(true);
 
     if (mode === "signup") {
+      const trimmedEmail = email.trim();
+      const usernameResult = getValidSignupUsername();
+
+      if (usernameResult.error) {
+        setAuthError(usernameResult.error);
+        setIsSubmitting(false);
+        return;
+      }
+
+      const emailAvailabilityResult =
+        await checkEmailAvailability(trimmedEmail);
+
+      if (!emailAvailabilityResult.isAvailable) {
+        setAuthError(emailAvailabilityResult.error);
+        setIsSubmitting(false);
+        return;
+      }
+
+      const availabilityResult = await checkUsernameAvailability(
+        usernameResult.username,
+      );
+
+      if (!availabilityResult.isAvailable) {
+        setAuthError(availabilityResult.error);
+        setIsSubmitting(false);
+        return;
+      }
+
       const { error } = await supabase.auth.signUp({
-        email,
+        email: trimmedEmail,
         password,
         options: {
+          data: {
+            username: usernameResult.username,
+          },
           emailRedirectTo: authRedirectUrl,
         },
       });
@@ -78,6 +185,29 @@ export default function AuthPage() {
     setAuthMessage("");
     setAuthError("");
 
+    if (mode === "signup") {
+      const usernameResult = getValidSignupUsername();
+
+      if (usernameResult.error) {
+        setAuthError(usernameResult.error);
+        return;
+      }
+
+      const availabilityResult = await checkUsernameAvailability(
+        usernameResult.username,
+      );
+
+      if (!availabilityResult.isAvailable) {
+        setAuthError(availabilityResult.error);
+        return;
+      }
+
+      window.localStorage.setItem(
+        PENDING_SIGNUP_USERNAME_KEY,
+        usernameResult.username,
+      );
+    }
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
@@ -86,6 +216,10 @@ export default function AuthPage() {
     });
 
     if (error) {
+      if (mode === "signup") {
+        window.localStorage.removeItem(PENDING_SIGNUP_USERNAME_KEY);
+      }
+
       setAuthError(error.message);
     }
   }
@@ -108,8 +242,24 @@ export default function AuthPage() {
         <p className="authSubtitle">
           {mode === "login"
             ? "Log in to access your saved packs."
-            : "Create an account to save and share packs."}
+          : "Create an account to save and share packs."}
         </p>
+
+        {mode === "signup" && (
+          <label className="authUsernameField">
+            Username
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+              minLength={3}
+              maxLength={31}
+              pattern="[A-Za-z0-9]+"
+              required
+            />
+          </label>
+        )}
 
         <button
           className="googleAuthButton"

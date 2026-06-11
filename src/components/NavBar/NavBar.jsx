@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import "./NavBar.css";
 
 /*
@@ -6,9 +6,12 @@ import "./NavBar.css";
  *
  * Props:
  * - user: Supabase user | null
- * - onLogout(): signs out and clears active app UI in App
+ * - displayName: username/profile display fallback from useAuth()
  */
-export default function NavBar({ user, onLogout }) {
+export default function NavBar({ user, displayName }) {
+  const location = useLocation();
+  const profileTarget = location.pathname === "/profile" ? "/" : "/profile";
+
   return (
     <header className="navBar">
       <Link className="navBrand" to="/">
@@ -21,13 +24,9 @@ export default function NavBar({ user, onLogout }) {
 
       <nav className="navActions">
         {user ? (
-          <>
-            <span className="navUser">{user.email}</span>
-
-            <button onClick={onLogout}>
-              Log Out
-            </button>
-          </>
+          <Link className="navUser" to={profileTarget}>
+            {displayName || user.email}
+          </Link>
         ) : (
           <Link className="navLoginButton" to="/auth">
             Log In / Sign Up
