@@ -152,7 +152,6 @@ function App() {
   const [rarities, setRarities] = useState([]);
   const [types, setTypes] = useState([]);
   const [formats, setFormats] = useState([]);
-  const [showAllPrintings, setShowAllPrintings] = useState(false);
   const [isPackBoxOpen, setIsPackBoxOpen] = useState(
     () =>
       typeof window === "undefined" ||
@@ -173,6 +172,16 @@ function App() {
     FALLBACK_FROG_BACKGROUND,
   );
   const lastSavedCubeSnapshotRef = useRef(null);
+  const filterSearchSnapshot = JSON.stringify({
+    manaValues,
+    colors,
+    colorMode,
+    rarities,
+    types,
+    formats,
+    selectedSets,
+  });
+  const lastFilterSearchSnapshotRef = useRef(filterSearchSnapshot);
 
   // Called by usePackBuilder after an autosave/manual save succeeds. It keeps
   // the currently open cube item in sync with pack name, cards, colors,
@@ -222,7 +231,6 @@ function App() {
     types,
     formats,
     selectedSets,
-    showAllPrintings,
     limit: 50,
   });
   const pack = usePackBuilder(user, loadPacks, {
@@ -250,6 +258,20 @@ function App() {
     // firing a new query until submit.
     setSearch(searchInput.trim());
   }
+
+  useEffect(() => {
+    /*
+     * Filter changes are search submissions too. This keeps the committed
+     * query in sync with the visible input, including when the user clears the
+     * text box and then selects a filter.
+     */
+    if (lastFilterSearchSnapshotRef.current === filterSearchSnapshot) {
+      return;
+    }
+
+    lastFilterSearchSnapshotRef.current = filterSearchSnapshot;
+    setSearch(searchInput.trim());
+  }, [filterSearchSnapshot, searchInput]);
 
   async function saveCurrentPackBeforeLeaving() {
     // Protects edits when opening another pack or starting a new one.
@@ -571,8 +593,6 @@ function App() {
                     sets={sets}
                     selectedSets={selectedSets}
                     setSelectedSets={setSelectedSets}
-                    showAllPrintings={showAllPrintings}
-                    setShowAllPrintings={setShowAllPrintings}
                   />
 
                   {cardsError && (

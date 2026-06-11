@@ -8,6 +8,15 @@ import { supabase } from "../utils/supabase";
  * To add/remove sets from the UI without code changes, update that column in
  * the sets table.
  */
+function getTodayDateString() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
 export function useSets() {
   const [sets, setSets] = useState([]);
   const [loadingSets, setLoadingSets] = useState(false);
@@ -24,6 +33,8 @@ export function useSets() {
         .from("sets")
         .select("set_code, name, released_at, icon_svg_uri, set_type")
         .eq("is_standard_set_filter", true)
+        .lte("released_at", getTodayDateString())
+        .neq("set_type", "funny")
         .order("released_at", { ascending: false });
 
       if (error) {

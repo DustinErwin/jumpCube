@@ -10,8 +10,6 @@ import "./FilterBox.css";
  * - each setX prop is the matching React state setter
  * - colorMode is "or" | "and"
  * - sets is the list from useSets(), with set_code/name/icon_svg_uri
- * - showAllPrintings toggles default-printing dedupe in useCards()
- *
  * To add a new filter option, update the *_OPTIONS list here and the matching
  * query behavior in useCards().
  */
@@ -55,8 +53,6 @@ export default function FilterBox({
   sets,
   selectedSets,
   setSelectedSets,
-  showAllPrintings,
-  setShowAllPrintings,
 }) {
   const filterBoxRef = useRef(null);
   const [openFilter, setOpenFilter] = useState(null);
@@ -101,7 +97,6 @@ export default function FilterBox({
     setTypes([]);
     setFormats([]);
     setSelectedSets([]);
-    setShowAllPrintings(false);
     setOpenFilter(null);
   }
 
@@ -304,28 +299,6 @@ export default function FilterBox({
           )}
         </div>
 
-        <div className="filterChipWrap">
-          <button
-            className={`filterChip ${showAllPrintings ? "active" : ""}`}
-            onClick={() => toggleOpen("more")}
-          >
-            More ▼
-          </button>
-
-          {openFilter === "more" && (
-            <div className="filterDropdown">
-              <label className="filterOption">
-                <input
-                  type="checkbox"
-                  checked={showAllPrintings}
-                  onChange={(e) => setShowAllPrintings(e.target.checked)}
-                />
-                Show all printings
-              </label>
-            </div>
-          )}
-        </div>
-
         <button className="clearFiltersButton" onClick={clearAllFilters}>
           Clear
         </button>
@@ -333,3 +306,4 @@ export default function FilterBox({
     </div>
   );
 }
+

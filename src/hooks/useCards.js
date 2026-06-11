@@ -51,6 +51,7 @@ const CARD_COLUMNS = `
   set_name,
   set_code,
   collector_number,
+  released_at,
   has_back_face,
   mana_cost,
   image_uris,
@@ -80,7 +81,9 @@ const CARD_VARIANT_COLUMNS = `
   is_planechase,
   set_name,
   set_code,
+  set_type,
   collector_number,
+  released_at,
   has_back_face,
   mana_cost,
   image_uris,
@@ -112,6 +115,15 @@ const BASIC_LAND_SET_CODES = {
   Forest: "bfz",
   Wastes: "ogw",
 };
+
+function getTodayDateString() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
 
 function getPreferredBasicLandScore(card) {
   // Basic lands prefer a coherent Zendikar-block look, but the imported
@@ -475,6 +487,7 @@ export function useCards({
         .from(searchTable)
         .select(searchColumns)
         .contains("games", ["paper"])
+        .lte("released_at", getTodayDateString())
         .eq("nonfoil", true)
         .eq("is_token", false)
         .eq("is_funny", false)
@@ -486,7 +499,7 @@ export function useCards({
       query = query.range(start, end);
 
       if (searchesVariants) {
-        query = query.eq("lang", "en");
+        query = query.eq("lang", "en").neq("set_type", "funny");
       }
 
       if (selectedSets.length > 0) {

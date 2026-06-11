@@ -30,8 +30,13 @@ const CARD_VERSION_COLUMNS = `
   image_url,
   back_image_url,
   legalities,
+  prices,
   price_usd,
   price_usd_foil,
+  price_usd_etched,
+  price_eur,
+  price_eur_foil,
+  price_tix,
   games,
   nonfoil,
   is_token,
@@ -40,7 +45,9 @@ const CARD_VERSION_COLUMNS = `
   is_planechase,
   set_name,
   set_code,
+  set_type,
   collector_number,
+  released_at,
   has_back_face,
   mana_cost,
   image_uris,
@@ -92,6 +99,27 @@ function formatMoney(value) {
   return Number.isFinite(number) ? `$${number.toFixed(2)}` : "N/A";
 }
 
+function getCardPrice(card, priceKey) {
+  return card?.[priceKey] ?? card?.prices?.[priceKey.replace("price_", "")] ?? null;
+}
+
+function getTodayDateString() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function hasDisplayPrice(card) {
+  return Boolean(
+    getCardPrice(card, "price_usd") ||
+      getCardPrice(card, "price_usd_foil") ||
+      getCardPrice(card, "price_usd_etched"),
+  );
+}
+
 function getLegalFormats(legalities) {
   if (!legalities || typeof legalities !== "object") return [];
 
@@ -128,10 +156,19 @@ export default function CardModal({
   isPackFull,
 }) {
   const [versions, setVersions] = useState([]);
-  const [selectedCardId, setSelectedCardId] = useState(String(card?.id || ""));
+  const [manualSelectedCard, setManualSelectedCard] = useState({
+    sourceCardId: "",
+    selectedCardId: "",
+  });
   const [isLoadingVersions, setIsLoadingVersions] = useState(false);
   const [versionsError, setVersionsError] = useState("");
   const [flippedCardId, setFlippedCardId] = useState(null);
+  const [livePricesByScryfallId, setLivePricesByScryfallId] = useState({});
+  const sourceCardId = String(card?.variant_id || card?.id || "");
+  const selectedCardId =
+    manualSelectedCard.sourceCardId === sourceCardId
+      ? manualSelectedCard.selectedCardId
+      : sourceCardId;
 
   useEffect(() => {
     // Escape closes the modal while it is open.
@@ -166,9 +203,11 @@ export default function CardModal({
         .select(CARD_VERSION_COLUMNS)
         .contains("games", ["paper"])
         .eq("lang", "en")
+        .lte("released_at", getTodayDateString())
         .eq("is_token", false)
         .eq("is_funny", false)
         .eq("is_planechase", false)
+        .neq("set_type", "funny")
         .neq("layout", "art_series")
         .order("set_code", { ascending: true })
         .order("collector_number", { ascending: true });
@@ -212,16 +251,71 @@ export default function CardModal({
       versions.find((version) => String(version.id) === selectedCardId) || card,
     [card, selectedCardId, versions],
   );
+  const displayedCard = useMemo(() => {
+    const livePrices = livePricesByScryfallId[selectedCard?.scryfall_id];
 
-  if (!isOpen || !card || !selectedCard) return null;
+    if (!livePrices) return selectedCard;
 
-  const image = getImage(selectedCard);
-  const backImage = getBackImage(selectedCard);
+    return {
+      ...selectedCard,
+      prices: livePrices,
+      price_usd: Number(livePrices.usd) || selectedCard.price_usd || null,
+      price_usd_foil:
+        Number(livePrices.usd_foil) || selectedCard.price_usd_foil || null,
+      price_usd_etched:
+        Number(livePrices.usd_etched) || selectedCard.price_usd_etched || null,
+      price_eur: Number(livePrices.eur) || selectedCard.price_eur || null,
+      price_eur_foil:
+        Number(livePrices.eur_foil) || selectedCard.price_eur_foil || null,
+      price_tix: Number(livePrices.tix) || selectedCard.price_tix || null,
+    };
+  }, [livePricesByScryfallId, selectedCard]);
+
+  useEffect(() => {
+    if (!isOpen || !selectedCard?.scryfall_id || hasDisplayPrice(selectedCard)) {
+      return undefined;
+    }
+
+    if (livePricesByScryfallId[selectedCard.scryfall_id]) {
+      return undefined;
+    }
+
+    let isCurrent = true;
+
+    async function loadLivePrices() {
+      try {
+        const response = await fetch(
+          `https://api.scryfall.com/cards/${selectedCard.scryfall_id}`,
+        );
+        const payload = await response.json();
+
+        if (!isCurrent || !response.ok || !payload.prices) return;
+
+        setLivePricesByScryfallId((currentPrices) => ({
+          ...currentPrices,
+          [selectedCard.scryfall_id]: payload.prices,
+        }));
+      } catch {
+        // The modal can still render database data if the live price lookup fails.
+      }
+    }
+
+    loadLivePrices();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [isOpen, livePricesByScryfallId, selectedCard]);
+
+  if (!isOpen || !card || !displayedCard) return null;
+
+  const image = getImage(displayedCard);
+  const backImage = getBackImage(displayedCard);
   const canFlip = Boolean(backImage);
   const isFlipped = flippedCardId === selectedCardId;
-  const legalFormats = getLegalFormats(selectedCard.legalities);
+  const legalFormats = getLegalFormats(displayedCard.legalities);
   const selectedQuantity =
-    selectedCards.find((selectedPackCard) => selectedPackCard.id === selectedCard.id)
+    selectedCards.find((selectedPackCard) => selectedPackCard.id === displayedCard.id)
       ?.quantity || 0;
 
   return (
@@ -249,13 +343,13 @@ export default function CardModal({
                 <img
                   className="cardModalFace cardModalFaceFront"
                   src={image}
-                  alt={selectedCard.name}
+                  alt={displayedCard.name}
                 />
                 {canFlip && (
                   <img
                     className="cardModalFace cardModalFaceBack"
                     src={backImage}
-                    alt={`${selectedCard.name} back face`}
+                    alt={`${displayedCard.name} back face`}
                   />
                 )}
               </div>
@@ -273,7 +367,7 @@ export default function CardModal({
                         : selectedCardId,
                     )
                   }
-                  aria-label={`Flip ${selectedCard.name}`}
+                  aria-label={`Flip ${displayedCard.name}`}
                   aria-pressed={isFlipped}
                   title="Flip card"
                 >
@@ -288,15 +382,20 @@ export default function CardModal({
 
         <div className="cardModalDetails">
           <div className="cardModalHeader">
-            <h2 id="cardModalTitle">{selectedCard.name}</h2>
-            <p>{selectedCard.type_line || "Unknown type"}</p>
+            <h2 id="cardModalTitle">{displayedCard.name}</h2>
+            <p>{displayedCard.type_line || "Unknown type"}</p>
           </div>
 
           <label className="cardVersionPicker">
             <span>Version</span>
             <select
               value={selectedCardId}
-              onChange={(event) => setSelectedCardId(event.target.value)}
+              onChange={(event) =>
+                setManualSelectedCard({
+                  sourceCardId,
+                  selectedCardId: event.target.value,
+                })
+              }
               disabled={isLoadingVersions}
             >
               {versions.map((version) => (
@@ -312,51 +411,51 @@ export default function CardModal({
           <dl className="cardDataGrid">
             <div>
               <dt>Mana Value</dt>
-              <dd>{selectedCard.mana_value ?? "N/A"}</dd>
+              <dd>{displayedCard.mana_value ?? "N/A"}</dd>
             </div>
             <div>
               <dt>Colors</dt>
-              <dd>{formatArray(selectedCard.colors)}</dd>
+              <dd>{formatArray(displayedCard.colors)}</dd>
             </div>
             <div>
               <dt>Color Identity</dt>
-              <dd>{formatArray(selectedCard.color_identity, "Colorless")}</dd>
+              <dd>{formatArray(displayedCard.color_identity, "Colorless")}</dd>
             </div>
             <div>
               <dt>Rarity</dt>
-              <dd>{selectedCard.rarity || "N/A"}</dd>
+              <dd>{displayedCard.rarity || "N/A"}</dd>
             </div>
             <div>
               <dt>Set</dt>
-              <dd>{selectedCard.set_name || selectedCard.set_code || "N/A"}</dd>
+              <dd>{displayedCard.set_name || displayedCard.set_code || "N/A"}</dd>
             </div>
             <div>
               <dt>Collector</dt>
-              <dd>{selectedCard.collector_number || "N/A"}</dd>
+              <dd>{displayedCard.collector_number || "N/A"}</dd>
             </div>
             <div>
               <dt>Price</dt>
-              <dd>{formatMoney(selectedCard.price_usd)}</dd>
+              <dd>{formatMoney(getCardPrice(displayedCard, "price_usd"))}</dd>
             </div>
             <div>
               <dt>Foil</dt>
-              <dd>{formatMoney(selectedCard.price_usd_foil)}</dd>
+              <dd>{formatMoney(getCardPrice(displayedCard, "price_usd_foil"))}</dd>
             </div>
             <div>
               <dt>Games</dt>
-              <dd>{formatArray(selectedCard.games)}</dd>
+              <dd>{formatArray(displayedCard.games)}</dd>
             </div>
             <div>
               <dt>Printing</dt>
               <dd>
-                {selectedCard.is_default_printing ? "Default" : "Alternate"}
+                {displayedCard.is_default_printing ? "Default" : "Alternate"}
               </dd>
             </div>
           </dl>
 
-          {selectedCard.oracle_text && (
+          {displayedCard.oracle_text && (
             <div className="cardOracleText">
-              {selectedCard.oracle_text.split("\n").map((line) => (
+              {displayedCard.oracle_text.split("\n").map((line) => (
                 <p key={line}>{line}</p>
               ))}
             </div>
@@ -370,13 +469,13 @@ export default function CardModal({
           <div className="cardModalActions">
             <div
               className="cardModalQuantityControls"
-              aria-label={`${selectedCard.name} pack quantity controls`}
+              aria-label={`${displayedCard.name} pack quantity controls`}
             >
               <button
                 type="button"
-                onClick={() => onDecreaseFromPack?.(selectedCard.id)}
+                onClick={() => onDecreaseFromPack?.(displayedCard.id)}
                 disabled={selectedQuantity === 0}
-                aria-label={`Remove one ${selectedCard.name} from pack`}
+                aria-label={`Remove one ${displayedCard.name} from pack`}
               >
                 -
               </button>
@@ -387,9 +486,9 @@ export default function CardModal({
 
               <button
                 type="button"
-                onClick={() => onAddToPack?.(selectedCard)}
+                onClick={() => onAddToPack?.(displayedCard)}
                 disabled={isPackFull}
-                aria-label={`Add one ${selectedCard.name} to pack`}
+                aria-label={`Add one ${displayedCard.name} to pack`}
               >
                 +
               </button>
