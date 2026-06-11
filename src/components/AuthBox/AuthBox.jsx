@@ -20,15 +20,18 @@ export default function AuthBox({ user }) {
     // Supabase may require email confirmation depending on project settings.
     const trimmedUsername = username.trim();
 
-    if (!/^[A-Za-z0-9]{3,31}$/.test(trimmedUsername)) {
-      console.error("Signup error: usernames must be 3-31 letters or numbers.");
+    if (trimmedUsername && !/^[A-Za-z0-9_]{3,31}$/.test(trimmedUsername)) {
+      console.error(
+        "Signup error: usernames must be 3-31 letters, numbers, or underscores.",
+      );
       return;
     }
 
-    const { data: isUsernameAvailable, error: usernameError } =
-      await supabase.rpc("is_username_available", {
-        requested_username: trimmedUsername,
-      });
+    const { data: isUsernameAvailable, error: usernameError } = trimmedUsername
+      ? await supabase.rpc("is_username_available", {
+          requested_username: trimmedUsername,
+        })
+      : { data: true, error: null };
 
     if (usernameError || !isUsernameAvailable) {
       console.error(
@@ -57,9 +60,7 @@ export default function AuthBox({ user }) {
       email: email.trim(),
       password,
       options: {
-        data: {
-          username: trimmedUsername,
-        },
+        data: trimmedUsername ? { username: trimmedUsername } : {},
       },
     });
 

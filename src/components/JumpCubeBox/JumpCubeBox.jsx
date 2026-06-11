@@ -19,6 +19,7 @@ import "./JumpCubeBox.css";
  * - newCube(): resets active cube editor state
  * - saveStatus: "saving" | "saved" | "error" | ""
  * - isOpen/setIsOpen: side-panel collapsed state
+ * - isAuthenticated/onAuthRequired: gate account-backed cube workflows
  */
 
 // Colors used for the mana-pip percentage backdrop on each pack item.
@@ -168,6 +169,8 @@ export default function JumpCubeBox({
   saveStatus,
   isOpen,
   setIsOpen,
+  isAuthenticated = false,
+  onAuthRequired,
 }) {
   const [editingName, setEditingName] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
@@ -218,7 +221,16 @@ export default function JumpCubeBox({
     };
   }, [confirmingDeleteCube]);
 
+  function requireAuth() {
+    if (isAuthenticated) return true;
+
+    onAuthRequired?.();
+    return false;
+  }
+
   function deleteConfirmedCube() {
+    if (!requireAuth()) return;
+
     newCube();
     setConfirmingDeleteCube(false);
   }
@@ -273,6 +285,8 @@ export default function JumpCubeBox({
     // Right-click/touch context menu removal flow.
     event.preventDefault();
 
+    if (!requireAuth()) return;
+
     if (pendingRemovePackId === packId) {
       removePackFromCube(packId);
       setPendingRemovePackId(null);
@@ -287,6 +301,7 @@ export default function JumpCubeBox({
     const packId = pack.savedPackId || pack.id;
 
     if (!packId) return;
+    if (!requireAuth()) return;
 
     setPendingRemovePackId(null);
     onOpenPack(packId);
@@ -326,7 +341,13 @@ export default function JumpCubeBox({
           }}
         />
       ) : (
-        <h2 className="cubeTitle" onClick={() => setEditingName(true)}>
+        <h2
+          className="cubeTitle"
+          onClick={() => {
+            if (!requireAuth()) return;
+            setEditingName(true);
+          }}
+        >
           {cubeName}
         </h2>
       )}
@@ -346,7 +367,10 @@ export default function JumpCubeBox({
       ) : (
         <p
           className="cubeDescription"
-          onClick={() => setEditingDescription(true)}
+          onClick={() => {
+            if (!requireAuth()) return;
+            setEditingDescription(true);
+          }}
           title="Click to edit description"
         >
           {cubeDescription || (
@@ -364,6 +388,8 @@ export default function JumpCubeBox({
           className="cubeActionButton openCubesButton"
           type="button"
           onClick={() => {
+            if (!requireAuth()) return;
+
             setConfirmingDeleteCube(false);
             onOpenCubes();
           }}
@@ -385,6 +411,8 @@ export default function JumpCubeBox({
           className="cubeActionButton newCubeButton"
           type="button"
           onClick={() => {
+            if (!requireAuth()) return;
+
             setConfirmingDeleteCube(false);
             newCube();
           }}
@@ -399,6 +427,8 @@ export default function JumpCubeBox({
           type="button"
           onClick={(event) => {
             event.stopPropagation();
+            if (!requireAuth()) return;
+
             setConfirmingDeleteCube((current) => !current);
           }}
           disabled={selectedPacks.length === 0 && !cubeDescription.trim()}
@@ -423,6 +453,8 @@ export default function JumpCubeBox({
           className="cubeActionButton cubeStatsButton"
           type="button"
           onClick={() => {
+            if (!requireAuth()) return;
+
             setConfirmingDeleteCube(false);
             setShowCubeStats(true);
           }}

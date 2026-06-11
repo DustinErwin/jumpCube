@@ -9,6 +9,7 @@ import { useUserCubes } from "./hooks/useUserCubes";
 import { useSets } from "./hooks/useSets";
 import AuthPage from "./pages/AuthPage/AuthPage";
 import ProfilePage from "./pages/ProfilePage/ProfilePage";
+import SecretManagerPage from "./pages/SecretManagerPage/SecretManagerPage";
 import SearchBox from "./components/SearchBox/SearchBox";
 import FilterBox from "./components/FilterBox/FilterBox";
 import CardBox from "./components/CardBox/CardBox";
@@ -18,6 +19,7 @@ import PackLibraryModal from "./components/PackLibraryModal/PackLibraryModal";
 import CubeLibraryModal from "./components/CubeLibraryModal/CubeLibraryModal";
 import JumpCubeBox from "./components/JumpCubeBox/JumpCubeBox";
 import NavBar from "./components/NavBar/NavBar";
+import AuthRequiredModal from "./components/AuthRequiredModal/AuthRequiredModal";
 import UsernameRequiredModal from "./components/UsernameRequiredModal/UsernameRequiredModal";
 import {
   sanitizeDescription,
@@ -140,6 +142,8 @@ function App() {
     profile,
     displayName,
     profileLoading,
+    isAdmin,
+    adminLoading,
     setProfile,
   } = useAuth();
   const { sets } = useSets();
@@ -149,6 +153,7 @@ function App() {
 
   const [isPackLibraryOpen, setIsPackLibraryOpen] = useState(false);
   const [isCubeLibraryOpen, setIsCubeLibraryOpen] = useState(false);
+  const [isAuthRequiredOpen, setIsAuthRequiredOpen] = useState(false);
 
   const [isDraggingCard, setIsDraggingCard] = useState(false);
   const [modalCard, setModalCard] = useState(null);
@@ -245,6 +250,13 @@ function App() {
     onPackDeleted: removePackFromCurrentCube,
   });
 
+  function requireAuth() {
+    if (user) return true;
+
+    setIsAuthRequiredOpen(true);
+    return false;
+  }
+
   async function handleLogout() {
     // Sign out through Supabase, then clear local UI that should not survive
     // into an anonymous session.
@@ -283,6 +295,7 @@ function App() {
   async function saveCurrentPackBeforeLeaving() {
     // Protects edits when opening another pack or starting a new one.
     if (pack.selectedCards.length === 0) return;
+    if (!requireAuth()) return;
 
     await pack.savePack({ promptOnRename: false });
   }
@@ -290,6 +303,7 @@ function App() {
   async function addCurrentPackToCube() {
     // Pack must exist in the database before cube_packs can point at it.
     if (pack.selectedCards.length === 0) return;
+    if (!requireAuth()) return;
 
     const savedPackId = await pack.savePack({ promptOnRename: false });
 
@@ -328,6 +342,8 @@ function App() {
   async function openCubePack(packId) {
     // Opening from the cube loads the pack into PackBox; mobile gets a full
     // screen panel swap so the selected pack is immediately visible.
+    if (!requireAuth()) return;
+
     await saveCurrentPackBeforeLeaving();
     await pack.loadPack(packId);
     setIsPackBoxOpen(true);
@@ -338,11 +354,15 @@ function App() {
   }
 
   async function startNewPack() {
+    if (!requireAuth()) return;
+
     await saveCurrentPackBeforeLeaving();
     pack.newPack();
   }
 
   function newCube() {
+    if (!requireAuth()) return;
+
     setCubeName("Current Jump Cube");
     setCubeDescription("");
     setSelectedPacks([]);
@@ -403,6 +423,8 @@ function App() {
 
   async function openCube(cubeId) {
     // loadCube returns cube metadata plus hydrated pack summaries.
+    if (!requireAuth()) return;
+
     const cube = await userCubes.loadCube(cubeId);
 
     if (!cube) return;
@@ -542,6 +564,12 @@ function App() {
       <NavBar
         user={user}
         displayName={displayName}
+        isAdmin={isAdmin}
+      />
+
+      <AuthRequiredModal
+        isOpen={isAuthRequiredOpen}
+        onClose={() => setIsAuthRequiredOpen(false)}
       />
 
       {user && !profileLoading && !profile?.username && (
@@ -556,6 +584,8 @@ function App() {
           type="button"
           className={isJumpCubeBoxOpen ? "active" : ""}
           onClick={() => {
+            if (!requireAuth()) return;
+
             setIsJumpCubeBoxOpen((current) => !current);
             setIsPackBoxOpen(false);
           }}
@@ -651,8 +681,14 @@ function App() {
                   decreaseCardQuantity={pack.decreaseCardQuantity}
                   onCardOpen={setModalCard}
                   addCurrentPackToCube={addCurrentPackToCube}
-                  onOpenPacks={() => setIsPackLibraryOpen(true)}
-                  deletePack={pack.deletePack}
+                  onOpenPacks={() => {
+                    if (!requireAuth()) return;
+                    setIsPackLibraryOpen(true);
+                  }}
+                  deletePack={async (packId) => {
+                    if (!requireAuth()) return;
+                    await pack.deletePack(packId);
+                  }}
                   savedPackId={pack.savedPackId}
                   newPack={startNewPack}
                   saveStatus={pack.saveStatus}
@@ -663,6 +699,8 @@ function App() {
                   isDraggingCard={isDraggingCard}
                   isOpen={isPackBoxOpen}
                   setIsOpen={setIsPackBoxOpen}
+                  isAuthenticated={Boolean(user)}
+                  onAuthRequired={() => setIsAuthRequiredOpen(true)}
                 />
                 <JumpCubeBox
                   cubeName={cubeName}
@@ -670,13 +708,18 @@ function App() {
                   cubeDescription={cubeDescription}
                   setCubeDescription={setCubeDescription}
                   selectedPacks={selectedPacks}
-                  onOpenCubes={() => setIsCubeLibraryOpen(true)}
+                  onOpenCubes={() => {
+                    if (!requireAuth()) return;
+                    setIsCubeLibraryOpen(true);
+                  }}
                   onOpenPack={openCubePack}
                   removePackFromCube={removePackFromCube}
                   newCube={newCube}
                   saveStatus={cubeSaveStatus}
                   isOpen={isJumpCubeBoxOpen}
                   setIsOpen={setIsJumpCubeBoxOpen}
+                  isAuthenticated={Boolean(user)}
+                  onAuthRequired={() => setIsAuthRequiredOpen(true)}
                 />
               </div>
 
@@ -685,15 +728,18 @@ function App() {
                 packs={packs}
                 onClose={() => setIsPackLibraryOpen(false)}
                 onOpenPack={async (packId) => {
+                  if (!requireAuth()) return;
                   await saveCurrentPackBeforeLeaving();
                   await pack.loadPack(packId);
                   setIsPackLibraryOpen(false);
                 }}
                 onDeletePack={async (packId) => {
+                  if (!requireAuth()) return;
                   await pack.deletePack(packId);
                   await loadPacks();
                 }}
                 onDuplicatePack={async (packId) => {
+                  if (!requireAuth()) return;
                   await pack.duplicatePack(packId);
                 }}
               />
@@ -704,6 +750,7 @@ function App() {
                 onClose={() => setIsCubeLibraryOpen(false)}
                 onOpenCube={openCube}
                 onDeleteCube={async (cubeId) => {
+                  if (!requireAuth()) return;
                   await userCubes.deleteCube(cubeId);
 
                   if (savedCubeId === cubeId) {
@@ -740,7 +787,17 @@ function App() {
                 onLogout={handleLogout}
               />
             ) : (
-              <Navigate to="/auth" replace />
+              <Navigate to="/auth?mode=signup" replace />
+            )
+          }
+        />
+        <Route
+          path="/secret-manager"
+          element={
+            user && !adminLoading && isAdmin ? (
+              <SecretManagerPage />
+            ) : (
+              <Navigate to={user ? "/" : "/auth?mode=signup"} replace />
             )
           }
         />

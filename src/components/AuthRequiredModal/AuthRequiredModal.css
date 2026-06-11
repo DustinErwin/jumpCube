@@ -1,0 +1,68 @@
+/*
+ * AuthRequiredModal.css styles the anonymous-user account prompt.
+ */
+
+.authRequiredOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(5, 7, 10, 0.74);
+  backdrop-filter: blur(8px);
+}
+
+.authRequiredModal {
+  width: min(420px, 100%);
+  box-sizing: border-box;
+  padding: 24px;
+  background: #151a21;
+  border: 1px solid #3b4653;
+  border-radius: 10px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.58);
+}
+
+.authRequiredModal h2 {
+  margin: 0 0 8px;
+  font-size: 1.35rem;
+}
+
+.authRequiredModal p {
+  margin: 0 0 18px;
+  color: #b7c0cb;
+}
+
+.authRequiredActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.authRequiredPrimary,
+.authRequiredSecondary {
+  padding: 11px 12px;
+  border-radius: 8px;
+  text-align: center;
+  text-decoration: none;
+  font-weight: 800;
+}
+
+.authRequiredPrimary {
+  background: #d8b55b;
+  color: #15120a;
+}
+
+.authRequiredSecondary {
+  background: #252a31;
+  color: white;
+  border: 1px solid #414851;
+}
+
+.authRequiredPrimary:hover {
+  background: #e2c56f;
+}
+
+.authRequiredSecondary:hover {
+  background: #303741;
+}

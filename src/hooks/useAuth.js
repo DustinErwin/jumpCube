@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../utils/supabase";
 
 const PENDING_SIGNUP_USERNAME_KEY = "jumpCubePendingSignupUsername";
-const USERNAME_PATTERN = /^[A-Za-z0-9]{3,31}$/;
+const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,31}$/;
 
 /*
  * useAuth() centralizes Supabase auth state.
@@ -15,6 +15,7 @@ const USERNAME_PATTERN = /^[A-Za-z0-9]{3,31}$/;
  *   displayName: username/email fallback for signed-in UI,
  *   authLoading: true until the initial session request completes
  *   profileLoading: true while the current user's profile is being checked
+ *   isAdmin/adminLoading: database-backed admin status for privileged pages
  * }
  */
 export function useAuth() {
@@ -23,6 +24,8 @@ export function useAuth() {
   const [profile, setProfile] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminLoading, setAdminLoading] = useState(true);
 
   useEffect(() => {
     let isCurrent = true;
@@ -115,12 +118,37 @@ export function useAuth() {
       setProfileLoading(false);
     }
 
+    async function loadAdminStatus(authUser) {
+      setAdminLoading(Boolean(authUser));
+
+      if (!authUser) {
+        setIsAdmin(false);
+        setAdminLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase.rpc("is_current_user_admin");
+
+      if (!isCurrent) return;
+
+      if (error) {
+        console.error("Error loading admin status:", error);
+        setIsAdmin(false);
+        setAdminLoading(false);
+        return;
+      }
+
+      setIsAdmin(Boolean(data));
+      setAdminLoading(false);
+    }
+
     function applySession(nextSession) {
       const nextUser = nextSession?.user ?? null;
 
       setSession(nextSession);
       setUser(nextUser);
       loadProfile(nextUser);
+      loadAdminStatus(nextUser);
     }
 
     async function getSession() {
@@ -167,6 +195,8 @@ export function useAuth() {
     displayName,
     authLoading,
     profileLoading,
+    isAdmin,
+    adminLoading,
     setProfile,
   };
 }

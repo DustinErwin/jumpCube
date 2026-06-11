@@ -27,6 +27,7 @@ import "./PackBox.css";
  * - moveCard(draggedCardId, targetCardId)
  * - moveCardToMechanicBucket(cardId, bucketId)
  * - isOpen/setIsOpen: side-panel collapsed state
+ * - isAuthenticated/onAuthRequired: gate save/library/profile workflows
  */
 
 // Update CARD_TYPE_COLORS/LABELS together when changing the type pie chart.
@@ -122,6 +123,8 @@ export default function PackBox({
   isDraggingCard,
   isOpen,
   setIsOpen,
+  isAuthenticated = false,
+  onAuthRequired,
 }) {
   // Drag state controls normal pack-stack reordering and stats-column moves.
   const [draggedCardId, setDraggedCardId] = useState(null);
@@ -300,7 +303,16 @@ export default function PackBox({
     setConfirmingDeletePack(false);
   }
 
+  function requireAuth() {
+    if (isAuthenticated) return true;
+
+    onAuthRequired?.();
+    return false;
+  }
+
   function toggleArchetypeTag(tag) {
+    if (!requireAuth()) return;
+
     // Multiple archetypes are allowed; empty list means no archetype color tags.
     setPackArchetypeTags((currentTags) => {
       if (currentTags.includes(tag)) {
@@ -312,6 +324,8 @@ export default function PackBox({
   }
 
   function togglePackVisibility() {
+    if (!requireAuth()) return;
+
     // Visibility autosaves through usePackBuilder; the message is only local UI.
     const nextVisibility = packVisibility === "public" ? "private" : "public";
 
@@ -418,6 +432,8 @@ export default function PackBox({
           className="packActionButton openPacksButton"
           type="button"
           onClick={() => {
+            if (!requireAuth()) return;
+
             setConfirmingDeletePack(false);
             onOpenPacks();
           }}
@@ -439,6 +455,8 @@ export default function PackBox({
           className="packActionButton newPackButton"
           type="button"
           onClick={() => {
+            if (!requireAuth()) return;
+
             setConfirmingDeletePack(false);
             newPack();
           }}
@@ -453,6 +471,8 @@ export default function PackBox({
           type="button"
           onClick={(event) => {
             event.stopPropagation();
+            if (!requireAuth()) return;
+
             setConfirmingDeletePack((current) => !current);
           }}
           disabled={!savedPackId}
@@ -479,6 +499,8 @@ export default function PackBox({
           className="packActionButton addPackToCubeButton"
           type="button"
           onClick={() => {
+            if (!requireAuth()) return;
+
             setConfirmingDeletePack(false);
             addCurrentPackToCube();
           }}
@@ -504,6 +526,8 @@ export default function PackBox({
           className="packActionButton archetypeMenuButton"
           type="button"
           onClick={() => {
+            if (!requireAuth()) return;
+
             setConfirmingDeletePack(false);
             setIsArchetypeMenuOpen((current) => !current);
           }}
@@ -518,6 +542,8 @@ export default function PackBox({
           className="packActionButton packStatsButton"
           type="button"
           onClick={() => {
+            if (!requireAuth()) return;
+
             setConfirmingDeletePack(false);
             setShowPackStats(true);
           }}
@@ -568,7 +594,13 @@ export default function PackBox({
           }}
         />
       ) : (
-        <h2 className="packTitle" onClick={() => setEditingName(true)}>
+        <h2
+          className="packTitle"
+          onClick={() => {
+            if (!requireAuth()) return;
+            setEditingName(true);
+          }}
+        >
           {packName}
         </h2>
       )}
@@ -587,7 +619,10 @@ export default function PackBox({
       ) : (
         <p
           className="packDescription"
-          onClick={() => setEditingDescription(true)}
+          onClick={() => {
+            if (!requireAuth()) return;
+            setEditingDescription(true);
+          }}
           title="Click to edit description"
         >
           {packDescription || (
@@ -625,11 +660,12 @@ export default function PackBox({
         <button
           type="button"
           className={packVisibility === "public" ? "public" : "private"}
-          onClick={() =>
+          onClick={() => {
+            if (!requireAuth()) return;
             setPackVisibility((currentVisibility) =>
               currentVisibility === "public" ? "private" : "public",
-            )
-          }
+            );
+          }}
           aria-pressed={packVisibility === "public"}
         >
           {packVisibility === "public" ? "Public" : "Private"}
@@ -641,6 +677,8 @@ export default function PackBox({
           className="packActionButton openPacksButton"
           type="button"
           onClick={() => {
+            if (!requireAuth()) return;
+
             setConfirmingDeletePack(false);
             onOpenPacks();
           }}
@@ -662,6 +700,8 @@ export default function PackBox({
           className="packActionButton newPackButton"
           type="button"
           onClick={() => {
+            if (!requireAuth()) return;
+
             setConfirmingDeletePack(false);
             newPack();
           }}
@@ -676,6 +716,8 @@ export default function PackBox({
           type="button"
           onClick={(event) => {
             event.stopPropagation();
+            if (!requireAuth()) return;
+
             setConfirmingDeletePack((current) => !current);
           }}
           disabled={!savedPackId}
@@ -691,6 +733,8 @@ export default function PackBox({
           className="packActionButton addPackToCubeButton"
           type="button"
           onClick={() => {
+            if (!requireAuth()) return;
+
             setConfirmingDeletePack(false);
             addCurrentPackToCube();
           }}
@@ -704,6 +748,8 @@ export default function PackBox({
           className="packActionButton archetypeMenuButton"
           type="button"
           onClick={() => {
+            if (!requireAuth()) return;
+
             setConfirmingDeletePack(false);
             setIsArchetypeMenuOpen((current) => !current);
           }}
@@ -718,6 +764,8 @@ export default function PackBox({
           className="packActionButton packStatsButton"
           type="button"
           onClick={() => {
+            if (!requireAuth()) return;
+
             setConfirmingDeletePack(false);
             setShowPackStats(true);
           }}
@@ -749,7 +797,10 @@ export default function PackBox({
             <span>Archetypes</span>
             <button
               type="button"
-              onClick={() => setPackArchetypeTags([])}
+              onClick={() => {
+                if (!requireAuth()) return;
+                setPackArchetypeTags([]);
+              }}
               disabled={packArchetypeTags.length === 0}
             >
               Clear

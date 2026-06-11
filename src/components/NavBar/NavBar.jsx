@@ -7,8 +7,9 @@ import "./NavBar.css";
  * Props:
  * - user: Supabase user | null
  * - displayName: username/profile display fallback from useAuth()
+ * - isAdmin: whether to show privileged navigation
  */
-export default function NavBar({ user, displayName }) {
+export default function NavBar({ user, displayName, isAdmin }) {
   const location = useLocation();
   const profileTarget = location.pathname === "/profile" ? "/" : "/profile";
 
@@ -24,11 +25,22 @@ export default function NavBar({ user, displayName }) {
 
       <nav className="navActions">
         {user ? (
-          <Link className="navUser" to={profileTarget}>
-            {displayName || user.email}
-          </Link>
+          <>
+            {isAdmin && (
+              <Link className="navAdminLink" to="/secret-manager">
+                Support
+              </Link>
+            )}
+
+            <Link className="navUser" to={profileTarget}>
+              {displayName || user.email}
+            </Link>
+          </>
         ) : (
-          <Link className="navLoginButton" to="/auth">
+          <Link
+            className="navLoginButton"
+            to="/auth?mode=signup"
+          >
             Log In / Sign Up
           </Link>
         )}

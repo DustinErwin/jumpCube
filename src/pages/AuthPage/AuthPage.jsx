@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../utils/supabase";
 import "./AuthPage.css";
 
 const PENDING_SIGNUP_USERNAME_KEY = "jumpCubePendingSignupUsername";
-const USERNAME_PATTERN = /^[A-Za-z0-9]{3,31}$/;
+const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,31}$/;
 
 /*
  * AuthPage handles login/signup routes.
@@ -20,10 +20,13 @@ const USERNAME_PATTERN = /^[A-Za-z0-9]{3,31}$/;
  */
 export default function AuthPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const authRedirectUrl = new URL(import.meta.env.BASE_URL, window.location.origin)
     .href;
 
-  const [mode, setMode] = useState("login");
+  const [mode, setMode] = useState(() =>
+    searchParams.get("mode") === "signup" ? "signup" : "login",
+  );
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -34,9 +37,16 @@ export default function AuthPage() {
   function getValidSignupUsername() {
     const trimmedUsername = username.trim();
 
+    if (!trimmedUsername) {
+      return {
+        error: "",
+        username: "",
+      };
+    }
+
     if (!USERNAME_PATTERN.test(trimmedUsername)) {
       return {
-        error: "Usernames must be 3-31 letters or numbers.",
+        error: "Usernames must be 3-31 letters, numbers, or underscores.",
         username: "",
       };
     }
@@ -131,11 +141,11 @@ export default function AuthPage() {
         return;
       }
 
-      const availabilityResult = await checkUsernameAvailability(
-        usernameResult.username,
-      );
+      const availabilityResult = usernameResult.username
+        ? await checkUsernameAvailability(usernameResult.username)
+        : { error: "", isAvailable: true };
 
-      if (!availabilityResult.isAvailable) {
+      if (usernameResult.username && !availabilityResult.isAvailable) {
         setAuthError(availabilityResult.error);
         setIsSubmitting(false);
         return;
@@ -146,7 +156,9 @@ export default function AuthPage() {
         password,
         options: {
           data: {
-            username: usernameResult.username,
+            ...(usernameResult.username
+              ? { username: usernameResult.username }
+              : {}),
           },
           emailRedirectTo: authRedirectUrl,
         },
@@ -193,19 +205,21 @@ export default function AuthPage() {
         return;
       }
 
-      const availabilityResult = await checkUsernameAvailability(
-        usernameResult.username,
-      );
+      if (usernameResult.username) {
+        const availabilityResult = await checkUsernameAvailability(
+          usernameResult.username,
+        );
 
-      if (!availabilityResult.isAvailable) {
-        setAuthError(availabilityResult.error);
-        return;
+        if (!availabilityResult.isAvailable) {
+          setAuthError(availabilityResult.error);
+          return;
+        }
+
+        window.localStorage.setItem(
+          PENDING_SIGNUP_USERNAME_KEY,
+          usernameResult.username,
+        );
       }
-
-      window.localStorage.setItem(
-        PENDING_SIGNUP_USERNAME_KEY,
-        usernameResult.username,
-      );
     }
 
     const { error } = await supabase.auth.signInWithOAuth({
@@ -245,22 +259,6 @@ export default function AuthPage() {
           : "Create an account to save and share packs."}
         </p>
 
-        {mode === "signup" && (
-          <label className="authUsernameField">
-            Username
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              autoComplete="username"
-              minLength={3}
-              maxLength={31}
-              pattern="[A-Za-z0-9]+"
-              required
-            />
-          </label>
-        )}
-
         <button
           className="googleAuthButton"
           type="button"
@@ -274,6 +272,21 @@ export default function AuthPage() {
         </div>
 
         <form className="authForm" onSubmit={handleEmailAuth}>
+          {mode === "signup" && (
+            <label>
+              Username
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                minLength={3}
+                maxLength={31}
+                pattern="[A-Za-z0-9_]+"
+              />
+            </label>
+          )}
+
           <label>
             Email
             <input

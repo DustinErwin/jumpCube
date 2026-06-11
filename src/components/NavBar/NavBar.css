@@ -46,13 +46,15 @@
   gap: 10px;
 }
 
-.navUser {
+.navUser,
+.navAdminLink {
   color: #aaa;
   font-size: 0.85rem;
   text-decoration: none;
 }
 
-.navUser:hover {
+.navUser:hover,
+.navAdminLink:hover {
   color: white;
 }
 
@@ -121,6 +123,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-size: 0.72rem;
+  }
+
+  .navAdminLink {
     font-size: 0.72rem;
   }
 

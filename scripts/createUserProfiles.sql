@@ -4,7 +4,7 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint profiles_username_format_check
-    check (username ~ '^[A-Za-z0-9]{3,31}$')
+    check (username ~ '^[A-Za-z0-9_]{3,31}$')
 );
 
 alter table public.profiles enable row level security;
@@ -59,7 +59,7 @@ as $$
           both '_' from lower(
             regexp_replace(
               coalesce(nullif(requested_username, ''), split_part(email, '@', 1), 'user'),
-              '[^A-Za-z0-9]+',
+              '[^A-Za-z0-9_]+',
               '',
               'g'
             )
@@ -81,7 +81,7 @@ language sql
 security definer
 set search_path = public
 as $$
-  select requested_username ~ '^[A-Za-z0-9]{3,31}$'
+  select requested_username ~ '^[A-Za-z0-9_]{3,31}$'
     and not exists (
       select 1
       from public.profiles
@@ -125,19 +125,36 @@ declare
   base_username text;
   candidate_username text;
 begin
-  if requested_username is not null
-    and requested_username !~ '^[A-Za-z0-9]{3,31}$'
-  then
-    raise exception 'Username must be 3-31 letters or numbers.';
+  if nullif(requested_username, '') is null then
+    loop
+      candidate_username := 'User_' || lpad(
+        floor(random() * 100000000)::integer::text,
+        8,
+        '0'
+      );
+
+      if not exists (
+        select 1
+        from public.profiles
+        where lower(username) = lower(candidate_username)
+          and id <> user_id
+      ) then
+        return candidate_username;
+      end if;
+    end loop;
   end if;
 
-  if requested_username is not null
-    and exists (
+  if requested_username !~ '^[A-Za-z0-9_]{3,31}$'
+  then
+    raise exception 'Username must be 3-31 letters, numbers, or underscores.';
+  end if;
+
+  if exists (
       select 1
       from public.profiles
       where lower(username) = lower(requested_username)
         and id <> user_id
-    )
+  )
   then
     raise exception 'Username is already taken.';
   end if;
@@ -183,7 +200,7 @@ invalid_usernames as (
       order by profile_scan.id
     ) as username_number
   from profile_scan
-  where profile_scan.username !~ '^[A-Za-z0-9]{3,31}$'
+  where profile_scan.username !~ '^[A-Za-z0-9_]{3,31}$'
     or profile_scan.case_duplicate_number > 1
 ),
 fixed_usernames as (
@@ -212,7 +229,7 @@ alter table public.profiles
 
 alter table public.profiles
   add constraint profiles_username_format_check
-  check (username ~ '^[A-Za-z0-9]{3,31}$');
+  check (username ~ '^[A-Za-z0-9_]{3,31}$');
 
 create unique index if not exists profiles_username_lower_key
   on public.profiles (lower(username));
@@ -248,9 +265,10 @@ create trigger on_auth_user_created_profile
 with auth_usernames as (
   select
     auth_users.id,
-    public.normalize_profile_username(
-      auth_users.raw_user_meta_data->>'username',
-      auth_users.email
+    public.profile_username_for_user(
+      auth_users.id,
+      auth_users.email,
+      auth_users.raw_user_meta_data->>'username'
     ) as base_username
   from auth.users as auth_users
   where not exists (

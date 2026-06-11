@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../utils/supabase";
 import "./ProfilePage.css";
 
-const USERNAME_PATTERN = /^[A-Za-z0-9]{3,31}$/;
+const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,31}$/;
 
 /*
  * ProfilePage lets signed-in users update app-owned profile fields.
@@ -31,7 +31,7 @@ export default function ProfilePage({
     setErrorMessage("");
 
     if (!USERNAME_PATTERN.test(trimmedUsername)) {
-      setErrorMessage("Usernames must be 3-31 letters or numbers.");
+      setErrorMessage("Usernames must be 3-31 letters, numbers, or underscores.");
       return;
     }
 
@@ -102,7 +102,7 @@ export default function ProfilePage({
               autoComplete="username"
               minLength={3}
               maxLength={31}
-              pattern="[A-Za-z0-9]+"
+              pattern="[A-Za-z0-9_]+"
               disabled={profileLoading || isSaving}
               required
             />
