@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "../../utils/supabase";
+import { getContentModerationMessage } from "../../utils/contentModeration";
 import "./UsernameRequiredModal.css";
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,31}$/;
@@ -15,6 +16,7 @@ export default function UsernameRequiredModal({ user, onProfileSaved }) {
   const [username, setUsername] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const usernameModerationMessage = getContentModerationMessage(username);
 
   async function saveUsername(event) {
     event.preventDefault();
@@ -24,6 +26,11 @@ export default function UsernameRequiredModal({ user, onProfileSaved }) {
 
     if (!USERNAME_PATTERN.test(trimmedUsername)) {
       setErrorMessage("Usernames must be 3-31 letters, numbers, or underscores.");
+      return;
+    }
+
+    if (usernameModerationMessage) {
+      setErrorMessage(usernameModerationMessage);
       return;
     }
 
@@ -89,6 +96,7 @@ export default function UsernameRequiredModal({ user, onProfileSaved }) {
             <input
               type="text"
               value={username}
+              aria-invalid={Boolean(usernameModerationMessage)}
               onChange={(event) => setUsername(event.target.value)}
               autoComplete="username"
               minLength={3}
@@ -97,6 +105,11 @@ export default function UsernameRequiredModal({ user, onProfileSaved }) {
               autoFocus
               required
             />
+            {usernameModerationMessage && (
+              <span className="usernameRequiredError" role="alert">
+                {usernameModerationMessage}
+              </span>
+            )}
           </label>
 
           {errorMessage && (

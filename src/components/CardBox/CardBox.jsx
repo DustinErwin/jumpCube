@@ -21,6 +21,7 @@ export default function CardBox({
   onCardDecrease,
   setIsDraggingCard,
   isSelectionDisabled = false,
+  ownedQuantities = new Map(),
 }) {
   const [flippedCards, setFlippedCards] = useState({});
 
@@ -79,6 +80,8 @@ export default function CardBox({
           const flipKey = getFlipKey(card, index);
           const isFlipped = Boolean(flippedCards[flipKey]);
           const quantity = getCardQuantity(card);
+          const ownershipId = card.card_search_id || card.id;
+          const ownedQuantity = ownedQuantities.get(ownershipId) || 0;
 
           return (
             <div
@@ -154,9 +157,21 @@ export default function CardBox({
               )}
 
               <div
-                className="cardQuantityControls"
+                className={`cardQuantityControls${
+                  ownedQuantity > 0 ? " hasOwnedCount" : ""
+                }`}
                 aria-label={`${card.name} pack quantity controls`}
               >
+                {ownedQuantity > 0 && (
+                  <span
+                    className="cardOwnedCount"
+                    aria-label={`${ownedQuantity} owned`}
+                    title={`${ownedQuantity} owned`}
+                  >
+                    {ownedQuantity}
+                  </span>
+                )}
+
                 <button
                   type="button"
                   onClick={(event) => {

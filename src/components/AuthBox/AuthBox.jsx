@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "../../utils/supabase";
+import { getContentModerationMessage } from "../../utils/contentModeration";
 import "./AuthBox.css";
 
 /*
@@ -15,10 +16,19 @@ export default function AuthBox({ user }) {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [authError, setAuthError] = useState("");
+  const usernameModerationMessage = getContentModerationMessage(username);
 
   async function signUp() {
     // Supabase may require email confirmation depending on project settings.
     const trimmedUsername = username.trim();
+
+    setAuthError("");
+
+    if (usernameModerationMessage) {
+      setAuthError(usernameModerationMessage);
+      return;
+    }
 
     if (trimmedUsername && !/^[A-Za-z0-9_]{3,31}$/.test(trimmedUsername)) {
       console.error(
@@ -103,8 +113,13 @@ export default function AuthBox({ user }) {
         type="text"
         placeholder="Username"
         value={username}
+        aria-invalid={Boolean(usernameModerationMessage)}
         onChange={(e) => setUsername(e.target.value)}
       />
+
+      {(usernameModerationMessage || authError) && (
+        <p role="alert">{usernameModerationMessage || authError}</p>
+      )}
 
       <input
         type="email"

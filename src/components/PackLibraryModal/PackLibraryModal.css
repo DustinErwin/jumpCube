@@ -52,6 +52,36 @@
   gap: 8px;
 }
 
+.packModalSelectionBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 10px;
+  padding: 9px 10px;
+  background: #1b2420;
+  color: #b9d8c4;
+  border: 1px solid #355342;
+  border-radius: 9px;
+  font-size: 0.8rem;
+}
+
+.packModalSelectionBar button {
+  min-height: 34px;
+  padding: 5px 12px;
+  background: #427154;
+  color: white;
+  border: 1px solid #679979;
+  border-radius: 7px;
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.packModalSelectionBar button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .packModalItem {
   display: flex;
   align-items: stretch;
@@ -110,6 +140,37 @@
   text-overflow: ellipsis;
 }
 
+.packModalItem.selected {
+  background: rgba(73, 126, 91, 0.2);
+  box-shadow: inset 0 0 0 1px #4e805e;
+}
+
+.packModalItem.alreadyInCube {
+  opacity: 0.62;
+}
+
+.packSelectButton {
+  width: 38px;
+  flex: 0 0 38px;
+  background: #24282a;
+  color: #b8e7c7;
+  border: 1px solid #41484b;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 850;
+}
+
+.packModalItem.selected .packSelectButton {
+  background: #427154;
+  border-color: #78a988;
+}
+
+.packSelectButton:disabled {
+  color: #999;
+  cursor: default;
+}
+
 .packModalTags {
   display: flex;
   flex-wrap: wrap;
@@ -125,9 +186,9 @@
   display: inline-block;
   padding: 2px 6px;
 
-  background: rgba(240, 217, 138, 0.14);
-  color: #f0d98a;
-  border: 1px solid rgba(240, 217, 138, 0.32);
+  background: color-mix(in srgb, var(--pack-tag-color, #a7adb4) 18%, transparent);
+  color: var(--pack-tag-color, #a7adb4);
+  border: 1px solid color-mix(in srgb, var(--pack-tag-color, #a7adb4) 55%, transparent);
   border-radius: 6px;
 
   font-size: 0.72rem;
@@ -254,19 +315,28 @@
 
   .packModalItem {
     display: grid;
-    grid-template-columns: 1fr 92px;
+    grid-template-columns: 44px 1fr 92px;
     gap: 6px;
     min-height: auto;
   }
 
   .packModalOpen {
+    grid-column: 2;
     grid-row: span 2;
     min-height: 72px;
   }
 
   .packDuplicateButton,
   .packDeleteButton {
+    grid-column: 3;
     min-height: 44px;
     padding: 0 8px;
+  }
+
+  .packSelectButton {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    width: 44px;
+    min-height: 72px;
   }
 }

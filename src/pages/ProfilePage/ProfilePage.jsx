@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../utils/supabase";
+import { getContentModerationMessage } from "../../utils/contentModeration";
 import "./ProfilePage.css";
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,31}$/;
@@ -22,6 +23,7 @@ export default function ProfilePage({
   const [saveStatus, setSaveStatus] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const usernameModerationMessage = getContentModerationMessage(username);
 
   async function saveProfile(event) {
     event.preventDefault();
@@ -32,6 +34,11 @@ export default function ProfilePage({
 
     if (!USERNAME_PATTERN.test(trimmedUsername)) {
       setErrorMessage("Usernames must be 3-31 letters, numbers, or underscores.");
+      return;
+    }
+
+    if (usernameModerationMessage) {
+      setErrorMessage(usernameModerationMessage);
       return;
     }
 
@@ -98,6 +105,7 @@ export default function ProfilePage({
             <input
               type="text"
               value={username}
+              aria-invalid={Boolean(usernameModerationMessage)}
               onChange={(event) => setUsername(event.target.value)}
               autoComplete="username"
               minLength={3}
@@ -106,6 +114,11 @@ export default function ProfilePage({
               disabled={profileLoading || isSaving}
               required
             />
+            {usernameModerationMessage && (
+              <span className="profileError" role="alert">
+                {usernameModerationMessage}
+              </span>
+            )}
           </label>
 
           <label>

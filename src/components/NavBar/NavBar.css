@@ -46,15 +46,23 @@
   gap: 10px;
 }
 
+.navMenuButton {
+  display: none;
+}
+
 .navUser,
-.navAdminLink {
+.navAdminLink,
+.navDiscoverLink,
+.navCollectionLink {
   color: #aaa;
   font-size: 0.85rem;
   text-decoration: none;
 }
 
 .navUser:hover,
-.navAdminLink:hover {
+.navAdminLink:hover,
+.navDiscoverLink:hover,
+.navCollectionLink:hover {
   color: white;
 }
 
@@ -97,6 +105,10 @@
     gap: 8px;
   }
 
+  .navBar.menuOpen {
+    z-index: 11000;
+  }
+
   .navBrand {
     min-width: 0;
     gap: 8px;
@@ -113,9 +125,59 @@
     white-space: nowrap;
   }
 
+  .navMenu {
+    position: relative;
+  }
+
+  .navMenuButton {
+    display: grid;
+    place-content: center;
+    gap: 5px;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid #444;
+    border-radius: 8px;
+    background: #252525;
+    cursor: pointer;
+  }
+
+  .navMenuButton span {
+    width: 21px;
+    height: 2px;
+    border-radius: 2px;
+    background: white;
+  }
+
   .navActions {
-    min-width: 0;
-    gap: 6px;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 1;
+    display: none;
+    align-items: stretch;
+    width: min(260px, calc(100vw - 20px));
+    overflow: hidden;
+    border: 1px solid #444;
+    border-radius: 10px;
+    background: rgba(20, 20, 24, 0.98);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.58);
+  }
+
+  .navActions.open {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .navActions a {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    box-sizing: border-box;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: #ddd;
+    font-size: 0.9rem;
   }
 
   .navUser {
@@ -127,6 +189,14 @@
   }
 
   .navAdminLink {
+    font-size: 0.72rem;
+  }
+
+  .navDiscoverLink {
+    font-size: 0.72rem;
+  }
+
+  .navCollectionLink {
     font-size: 0.72rem;
   }
 

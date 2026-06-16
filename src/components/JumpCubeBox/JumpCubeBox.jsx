@@ -1,10 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   DESCRIPTION_MAX_LENGTH,
   TITLE_MAX_LENGTH,
-  sanitizeDescription,
-  sanitizeTitle,
+  sanitizeDescriptionInput,
+  sanitizeTitleInput,
 } from "../../utils/userText";
+import { getContentModerationMessage } from "../../utils/contentModeration";
+import {
+  getPackTagColor,
+  normalizePackTags,
+} from "../../utils/packTags";
 import "./JumpCubeBox.css";
 
 /*
@@ -32,6 +37,23 @@ const MANA_COLORS = {
   C: "#9ea3a6",
 };
 const MANA_ORDER = ["W", "U", "B", "R", "G", "C"];
+const MANA_LABELS = {
+  W: "White",
+  U: "Blue",
+  B: "Black",
+  R: "Red",
+  G: "Green",
+  C: "Colorless",
+};
+const CUBE_MANA_CURVE_VALUES = [1, 2, 3, 4, 5, 6];
+const CUBE_TAG_CHART_LIMIT = 6;
+const CUBE_OTHER_TAG_COLOR = "#6f7782";
+const MOBILE_PACK_REORDER_HOLD_MS = 400;
+const MOBILE_PACK_REMOVE_HOLD_MS = 1500;
+const MOBILE_PACK_REMOVE_THRESHOLD = 88;
+const MOBILE_PACK_REMOVE_CANCEL_THRESHOLD = 56;
+const MOBILE_PACK_REMOVE_MAX_DISTANCE = 124;
+const MOBILE_PACK_GESTURE_TOLERANCE = 8;
 const CUBE_COLOR_COLUMNS = [
   // Stats view groups packs by overall color identity, not mana-cost pips.
   { id: "W", label: "White" },
@@ -156,17 +178,143 @@ function getPackManaBackdrop(pack) {
   );
 }
 
+function getCardCurveColors(card) {
+  const cardColors = Array.isArray(card.colors) ? card.colors : [];
+  const recognizedColors = MANA_ORDER.filter((color) =>
+    cardColors.includes(color),
+  );
+
+  return recognizedColors.length > 0 ? recognizedColors : ["C"];
+}
+
+function getCubeManaCurveColumns(packs) {
+  return CUBE_MANA_CURVE_VALUES.map((manaValue) => {
+    const packSegments = packs
+      .map((pack) => {
+        const colorCounts = MANA_ORDER.reduce(
+          (counts, color) => ({ ...counts, [color]: 0 }),
+          {},
+        );
+        let cardCount = 0;
+
+        (pack.cards || []).forEach((card) => {
+          const cardManaValue = Number(card.mana_value || 0);
+          const bucket = cardManaValue >= 6 ? 6 : Math.max(0, cardManaValue);
+
+          if (bucket !== manaValue) return;
+
+          const quantity = Number(card.quantity) || 1;
+          const colors = getCardCurveColors(card);
+          const colorShare = quantity / colors.length;
+
+          cardCount += quantity;
+          colors.forEach((color) => {
+            colorCounts[color] += colorShare;
+          });
+        });
+
+        return {
+          id: pack.savedPackId || pack.id,
+          name: pack.name || "Untitled Pack",
+          cardCount,
+          colors: MANA_ORDER.map((color) => ({
+            color,
+            count: colorCounts[color],
+          })).filter((color) => color.count > 0),
+        };
+      })
+      .filter((pack) => pack.cardCount > 0);
+
+    return {
+      manaValue,
+      label: manaValue === 6 ? "6+" : String(manaValue),
+      packSegments,
+      cardCount: packSegments.reduce(
+        (total, pack) => total + pack.cardCount,
+        0,
+      ),
+    };
+  });
+}
+
+function getCubeTagChart(packs) {
+  const tagCounts = new Map();
+
+  packs.forEach((pack) => {
+    normalizePackTags(pack.archetypeTags).forEach((tag) => {
+      const currentTag = tagCounts.get(tag.normalizedName);
+
+      tagCounts.set(tag.normalizedName, {
+        ...tag,
+        count: (currentTag?.count || 0) + 1,
+      });
+    });
+  });
+
+  const rankedTags = [...tagCounts.values()].sort(
+    (tagA, tagB) =>
+      tagB.count - tagA.count || tagA.name.localeCompare(tagB.name),
+  );
+  const visibleTags = rankedTags.slice(0, CUBE_TAG_CHART_LIMIT).map((tag) => ({
+    ...tag,
+    colorValue: getPackTagColor(tag.color).value,
+  }));
+  const otherCount = rankedTags
+    .slice(CUBE_TAG_CHART_LIMIT)
+    .reduce((total, tag) => total + tag.count, 0);
+  const chartTags =
+    otherCount > 0
+      ? [
+          ...visibleTags,
+          {
+            normalizedName: "other",
+            name: "Other",
+            count: otherCount,
+            colorValue: CUBE_OTHER_TAG_COLOR,
+          },
+        ]
+      : visibleTags;
+  const totalCount = chartTags.reduce((total, tag) => total + tag.count, 0);
+  let currentOffset = 0;
+  const segments = chartTags.map((tag) => {
+    const percentage = totalCount === 0 ? 0 : (tag.count / totalCount) * 100;
+    const start = currentOffset;
+    const end = start + percentage;
+
+    currentOffset = end;
+    return { ...tag, percentage, start, end };
+  });
+
+  return {
+    totalCount,
+    segments,
+    background:
+      totalCount === 0
+        ? "#252525"
+        : `conic-gradient(${segments
+            .map(
+              (segment) =>
+                `${segment.colorValue} ${segment.start}% ${segment.end}%`,
+            )
+            .join(", ")})`,
+  };
+}
+
 export default function JumpCubeBox({
   cubeName,
   setCubeName,
   cubeDescription,
   setCubeDescription,
+  cubeVisibility = "private",
+  setCubeVisibility,
   selectedPacks,
   onOpenCubes,
   onOpenPack,
   removePackFromCube,
+  movePackInCube,
   newCube,
   saveStatus,
+  saveErrorMessage = "",
   isOpen,
   setIsOpen,
   isAuthenticated = false,
@@ -177,6 +325,47 @@ export default function JumpCubeBox({
   const [confirmingDeleteCube, setConfirmingDeleteCube] = useState(false);
   const [pendingRemovePackId, setPendingRemovePackId] = useState(null);
   const [showCubeStats, setShowCubeStats] = useState(false);
+  const [visibilityMessage, setVisibilityMessage] = useState("");
+  const visibilityMessageTimeoutRef = useRef(null);
+  const mobilePackGestureRef = useRef(null);
+  const mobilePackReorderTimerRef = useRef(null);
+  const mobilePackRemoveTimerRef = useRef(null);
+  const suppressPackClickRef = useRef(false);
+  const [mobilePackGestureState, setMobilePackGestureState] = useState({
+    packId: null,
+    offsetX: 0,
+    removing: false,
+    reordering: false,
+  });
+  const cubeNameModerationMessage = getContentModerationMessage(cubeName);
+  const cubeDescriptionModerationMessage =
+    getContentModerationMessage(cubeDescription);
+
+  function toggleCubeVisibility() {
+    if (!requireAuth()) return;
+
+    const nextVisibility = cubeVisibility === "public" ? "private" : "public";
+
+    setCubeVisibility(nextVisibility);
+    setVisibilityMessage(nextVisibility === "public" ? "Public" : "Private");
+
+    if (visibilityMessageTimeoutRef.current) {
+      window.clearTimeout(visibilityMessageTimeoutRef.current);
+    }
+
+    visibilityMessageTimeoutRef.current = window.setTimeout(() => {
+      setVisibilityMessage("");
+      visibilityMessageTimeoutRef.current = null;
+    }, 1800);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (visibilityMessageTimeoutRef.current) {
+        window.clearTimeout(visibilityMessageTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     // Pack removal is a two-step right-click flow: first right-click arms the
@@ -220,6 +409,121 @@ export default function JumpCubeBox({
       window.removeEventListener("click", cancelDeleteConfirmation);
     };
   }, [confirmingDeleteCube]);
+
+  function clearMobilePackTimers() {
+    window.clearTimeout(mobilePackReorderTimerRef.current);
+    window.clearTimeout(mobilePackRemoveTimerRef.current);
+    mobilePackReorderTimerRef.current = null;
+    mobilePackRemoveTimerRef.current = null;
+  }
+
+  function resetMobilePackGesture() {
+    clearMobilePackTimers();
+    mobilePackGestureRef.current = null;
+    setMobilePackGestureState({ packId: null, offsetX: 0, removing: false, reordering: false });
+  }
+
+  function handleMobilePackPointerDown(event, pack) {
+    if (!window.matchMedia("(max-width: 760px)").matches || event.pointerType === "mouse") return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    clearMobilePackTimers();
+    mobilePackGestureRef.current = {
+      packId: String(pack.id), pointerId: event.pointerId,
+      startX: event.clientX, startY: event.clientY, lastY: event.clientY,
+      offsetX: 0, targetPackId: String(pack.id), removing: false,
+      removeArmed: false, reordering: false,
+    };
+    mobilePackReorderTimerRef.current = window.setTimeout(() => {
+      const gesture = mobilePackGestureRef.current;
+      if (!gesture || gesture.pointerId !== event.pointerId) return;
+      gesture.reordering = true;
+      suppressPackClickRef.current = true;
+      setMobilePackGestureState({ packId: gesture.packId, offsetX: 0, removing: false, reordering: true });
+    }, MOBILE_PACK_REORDER_HOLD_MS);
+  }
+
+  function updateMobilePackRemoval(gesture) {
+    if (gesture.offsetX >= MOBILE_PACK_REMOVE_THRESHOLD && !gesture.removing) {
+      gesture.removing = true;
+      mobilePackRemoveTimerRef.current = window.setTimeout(() => {
+        const active = mobilePackGestureRef.current;
+        if (active?.offsetX >= MOBILE_PACK_REMOVE_THRESHOLD) active.removeArmed = true;
+      }, MOBILE_PACK_REMOVE_HOLD_MS);
+    } else if (gesture.offsetX < MOBILE_PACK_REMOVE_CANCEL_THRESHOLD && gesture.removing) {
+      gesture.removing = false;
+      gesture.removeArmed = false;
+      window.clearTimeout(mobilePackRemoveTimerRef.current);
+    }
+    setMobilePackGestureState({
+      packId: gesture.packId, offsetX: gesture.offsetX,
+      removing: gesture.removing, reordering: false,
+    });
+  }
+
+  function handleMobilePackPointerMove(event) {
+    const gesture = mobilePackGestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+
+    if (gesture.reordering) {
+      event.preventDefault();
+      const target = [...document.querySelectorAll(".cubePackItem")]
+        .filter((item) => item.dataset.packId !== gesture.packId)
+        .map((item) => ({
+          id: item.dataset.packId,
+          distance: Math.abs(event.clientY - (item.getBoundingClientRect().top + item.offsetHeight / 2)),
+        }))
+        .sort((a, b) => a.distance - b.distance)[0];
+      if (target?.id) gesture.targetPackId = target.id;
+      setMobilePackGestureState({
+        packId: gesture.packId, offsetX: 0, offsetY: event.clientY - gesture.startY,
+        targetPackId: gesture.targetPackId, removing: false, reordering: true,
+      });
+      return;
+    }
+
+    const deltaX = event.clientX - gesture.startX;
+    const deltaY = event.clientY - gesture.startY;
+    if (Math.abs(deltaY) > MOBILE_PACK_GESTURE_TOLERANCE && Math.abs(deltaY) > Math.abs(deltaX)) {
+      clearMobilePackTimers();
+      event.preventDefault();
+      suppressPackClickRef.current = true;
+      const scrollArea = event.currentTarget.closest(".cubePackScrollArea");
+      if (scrollArea) scrollArea.scrollTop += gesture.lastY - event.clientY;
+      gesture.lastY = event.clientY;
+      return;
+    }
+
+    if (Math.abs(deltaX) > MOBILE_PACK_GESTURE_TOLERANCE) {
+      window.clearTimeout(mobilePackReorderTimerRef.current);
+    }
+    gesture.offsetX = Math.min(MOBILE_PACK_REMOVE_MAX_DISTANCE, Math.max(0, deltaX));
+    updateMobilePackRemoval(gesture);
+  }
+
+  function handleMobilePackPointerEnd(event) {
+    const gesture = mobilePackGestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+
+    suppressPackClickRef.current = gesture.reordering || gesture.offsetX > 6;
+
+    if (gesture.reordering && gesture.targetPackId !== gesture.packId) {
+      movePackInCube?.(gesture.packId, gesture.targetPackId);
+    } else if (
+      gesture.removeArmed &&
+      gesture.offsetX >= MOBILE_PACK_REMOVE_THRESHOLD
+    ) {
+      removePackFromCube(gesture.packId);
+    }
+
+    resetMobilePackGesture();
+  }
+
+  function handleMobilePackPointerCancel(event) {
+    if (mobilePackGestureRef.current?.pointerId !== event.pointerId) return;
+
+    suppressPackClickRef.current = true;
+    resetMobilePackGesture();
+  }
 
   function requireAuth() {
     if (isAuthenticated) return true;
@@ -280,6 +584,20 @@ export default function JumpCubeBox({
     1,
     ...colorIdentityColumns.map((column) => column.packs.length),
   );
+  const cubeManaCurveColumns = getCubeManaCurveColumns(selectedPacks);
+  const largestCubeManaCurveCount = Math.max(
+    1,
+    ...cubeManaCurveColumns.map((column) => column.cardCount),
+  );
+  const cubeManaCurveLevels = Array.from(
+    { length: Math.min(largestCubeManaCurveCount, 6) },
+    (_, index) =>
+      Math.round(
+        (largestCubeManaCurveCount * (index + 1)) /
+          Math.min(largestCubeManaCurveCount, 6),
+      ),
+  ).filter((level, index, levels) => index === 0 || level !== levels[index - 1]);
+  const cubeTagChart = getCubeTagChart(selectedPacks);
 
   function handlePackContextMenu(event, packId) {
     // Right-click/touch context menu removal flow.
@@ -297,6 +615,11 @@ export default function JumpCubeBox({
   }
 
   function handlePackClick(pack) {
+    if (suppressPackClickRef.current) {
+      suppressPackClickRef.current = false;
+      return;
+    }
+
     // Left click opens the saved pack in PackBox.
     const packId = pack.savedPackId || pack.id;
 
@@ -330,12 +653,15 @@ export default function JumpCubeBox({
         <input
           className="cubeNameInput"
           value={cubeName}
+          aria-invalid={Boolean(cubeNameModerationMessage)}
           maxLength={TITLE_MAX_LENGTH}
           autoFocus
           onChange={(e) =>
-            setCubeName(sanitizeTitle(e.target.value, ""))
+            setCubeName(sanitizeTitleInput(e.target.value))
           }
-          onBlur={() => setEditingName(false)}
+          onBlur={() => {
+            if (!cubeNameModerationMessage) setEditingName(false);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") setEditingName(false);
           }}
@@ -351,18 +677,26 @@ export default function JumpCubeBox({
           {cubeName}
         </h2>
       )}
+      {cubeNameModerationMessage && (
+        <p className="contentModerationMessage" role="alert">
+          {cubeNameModerationMessage}
+        </p>
+      )}
 
       {editingDescription ? (
         <textarea
           className="cubeDescriptionInput"
           value={cubeDescription}
+          aria-invalid={Boolean(cubeDescriptionModerationMessage)}
           maxLength={DESCRIPTION_MAX_LENGTH}
           placeholder="Click to add a cube description..."
           autoFocus
           onChange={(e) =>
-            setCubeDescription(sanitizeDescription(e.target.value))
+            setCubeDescription(sanitizeDescriptionInput(e.target.value))
           }
-          onBlur={() => setEditingDescription(false)}
+          onBlur={() => {
+            if (!cubeDescriptionModerationMessage) setEditingDescription(false);
+          }}
         />
       ) : (
         <p
@@ -380,10 +714,44 @@ export default function JumpCubeBox({
           )}
         </p>
       )}
+      {cubeDescriptionModerationMessage && (
+        <p className="contentModerationMessage" role="alert">
+          {cubeDescriptionModerationMessage}
+        </p>
+      )}
 
       <p className="cubeCount">{selectedPacks.length} packs selected</p>
 
+      <div className="cubeVisibilityToggle" aria-label="Cube visibility">
+        <span>Visibility</span>
+        <button
+          type="button"
+          className={cubeVisibility === "public" ? "public" : "private"}
+          onClick={toggleCubeVisibility}
+          aria-pressed={cubeVisibility === "public"}
+        >
+          {cubeVisibility === "public" ? "Public" : "Private"}
+        </button>
+      </div>
+
       <div className="cubeActionToolbar" aria-label="Cube actions">
+        <button
+          className={`cubeVisibilitySwitch ${cubeVisibility}`}
+          type="button"
+          onClick={toggleCubeVisibility}
+          aria-label={`Cube visibility: ${
+            cubeVisibility === "public" ? "Public" : "Private"
+          }`}
+          aria-pressed={cubeVisibility === "public"}
+          title={
+            cubeVisibility === "public"
+              ? "Cube is public"
+              : "Cube is private"
+          }
+        >
+          <span aria-hidden="true" />
+        </button>
+
         <button
           className="cubeActionButton openCubesButton"
           type="button"
@@ -466,6 +834,16 @@ export default function JumpCubeBox({
         </button>
       </div>
 
+      {visibilityMessage && (
+        <p
+          className={`visibilityMessage ${
+            visibilityMessage === "Public" ? "public" : "private"
+          }`}
+        >
+          {visibilityMessage}
+        </p>
+      )}
+
       {confirmingDeleteCube && (
         <button
           className="confirmDeleteCubeButton"
@@ -487,7 +865,9 @@ export default function JumpCubeBox({
       )}
 
       {saveStatus === "error" && (
-        <p className="saveMessage error">Save failed</p>
+        <p className="saveMessage error">
+          {saveErrorMessage || "Save failed"}
+        </p>
       )}
 
       {showCubeStats && (
@@ -507,6 +887,137 @@ export default function JumpCubeBox({
             >
               x
             </button>
+          </div>
+
+          <div className="cubeStatsVisuals">
+            <section
+              className="cubeManaCurve"
+              aria-label="Cube mana curve by pack and color"
+            >
+              <div className="cubeManaCurveHeading">
+                <div>
+                  <h3>Mana Curve</h3>
+                  <p>Card colors stacked by pack</p>
+                </div>
+
+                <div
+                  className="cubeManaCurveLegend"
+                  aria-label="Card color legend"
+                >
+                  {MANA_ORDER.map((color) => (
+                    <span key={color}>
+                      <i style={{ "--mana-color": MANA_COLORS[color] }} />
+                      {MANA_LABELS[color]}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="cubeManaCurveChart">
+                <div className="cubeManaCurveGrid" aria-hidden="true">
+                  {cubeManaCurveLevels.map((level) => (
+                    <div
+                      className="cubeManaCurveGridLine"
+                      key={level}
+                      style={{
+                        bottom: `${(level / largestCubeManaCurveCount) * 100}%`,
+                      }}
+                    >
+                      <span>{level}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {cubeManaCurveColumns.map((column) => (
+                  <div className="cubeManaCurveColumn" key={column.manaValue}>
+                    <span className="cubeManaCurveCount">
+                      {column.cardCount}
+                    </span>
+                    <div className="cubeManaCurveTrack">
+                      <div
+                        className="cubeManaCurveBar"
+                        style={{
+                          height:
+                            column.cardCount === 0
+                              ? "0%"
+                              : `${(column.cardCount / largestCubeManaCurveCount) * 100}%`,
+                        }}
+                      >
+                        {column.packSegments.map((pack, packIndex) => (
+                          <div
+                            className={`cubeManaCurvePack ${
+                              packIndex > 0 ? "separated" : ""
+                            }`}
+                            key={pack.id}
+                            style={{ flexGrow: pack.cardCount }}
+                            tabIndex={0}
+                          >
+                            {pack.colors.map((color) => (
+                              <span
+                                className="cubeManaCurveColor"
+                                key={color.color}
+                                style={{
+                                  "--mana-color": MANA_COLORS[color.color],
+                                  flexGrow: color.count,
+                                }}
+                              />
+                            ))}
+                            <span
+                              className="cubeManaCurveTooltip"
+                              role="tooltip"
+                            >
+                              <strong>{pack.name}</strong>
+                              <small>
+                                {pack.cardCount}{" "}
+                                {pack.cardCount === 1 ? "card" : "cards"} at{" "}
+                                {column.label} mana
+                              </small>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <strong className="cubeManaCurveLabel">
+                      {column.label}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="cubeTagChart" aria-label="Most common pack tags">
+              <div
+                className="cubeTagPie"
+                style={{ "--tag-chart": cubeTagChart.background }}
+                role="img"
+                aria-label={`${cubeTagChart.totalCount} tag assignments across included packs`}
+              />
+
+              <div className="cubeTagChartDetails">
+                <div>
+                  <h3>Pack Tags</h3>
+                  <p>Top tags across this cube</p>
+                </div>
+
+                {cubeTagChart.segments.length === 0 ? (
+                  <p className="cubeTagChartEmpty">No tags assigned</p>
+                ) : (
+                  <div className="cubeTagLegend">
+                    {cubeTagChart.segments.map((tag) => (
+                      <div className="cubeTagLegendItem" key={tag.normalizedName}>
+                        <span
+                          className="cubeTagSwatch"
+                          style={{ "--tag-color": tag.colorValue }}
+                        />
+                        <span className="cubeTagCount">{tag.count}</span>
+                        <span className="cubeTagName">{tag.name}</span>
+                        <strong>{Math.round(tag.percentage)}%</strong>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
 
           <div className="cubeStatsColumns" aria-label="Packs by color identity">
@@ -579,9 +1090,31 @@ export default function JumpCubeBox({
                 type="button"
                 className={`cubePackItem ${
                   pendingRemovePackId === pack.id ? "pendingRemove" : ""
+                }${
+                  mobilePackGestureState.packId === String(pack.id) &&
+                  mobilePackGestureState.removing
+                    ? " mobileRemoving"
+                    : ""
+                }${
+                  mobilePackGestureState.packId === String(pack.id) &&
+                  mobilePackGestureState.reordering
+                    ? " mobileReordering"
+                    : ""
+                }${
+                  mobilePackGestureState.targetPackId === String(pack.id)
+                    ? " mobileReorderTarget"
+                    : ""
                 }`}
                 data-pack-id={pack.id}
                 key={pack.id}
+                style={
+                  mobilePackGestureState.packId === String(pack.id)
+                    ? {
+                        "--cube-pack-remove-offset": `${mobilePackGestureState.offsetX || 0}px`,
+                        "--cube-pack-reorder-offset": `${mobilePackGestureState.offsetY || 0}px`,
+                      }
+                    : undefined
+                }
                 onClick={() => handlePackClick(pack)}
                 onContextMenu={(event) =>
                   handlePackContextMenu(event, pack.id)
@@ -610,6 +1143,16 @@ export default function JumpCubeBox({
                     ))
                   )}
                 </span>
+                <span
+                  className="cubePackGestureLayer"
+                  aria-hidden="true"
+                  onPointerDown={(event) =>
+                    handleMobilePackPointerDown(event, pack)
+                  }
+                  onPointerMove={handleMobilePackPointerMove}
+                  onPointerUp={handleMobilePackPointerEnd}
+                  onPointerCancel={handleMobilePackPointerCancel}
+                />
               </button>
             ))}
           </div>

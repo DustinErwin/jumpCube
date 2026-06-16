@@ -53,6 +53,12 @@ export default function FilterBox({
   sets,
   selectedSets,
   setSelectedSets,
+  hasCollection = false,
+  includeOwned = false,
+  setIncludeOwned,
+  includeUnowned = true,
+  setIncludeUnowned,
+  ownershipWarningNonce = 0,
 }) {
   const filterBoxRef = useRef(null);
   const [openFilter, setOpenFilter] = useState(null);
@@ -97,6 +103,8 @@ export default function FilterBox({
     setTypes([]);
     setFormats([]);
     setSelectedSets([]);
+    setIncludeOwned?.(false);
+    setIncludeUnowned?.(true);
     setOpenFilter(null);
   }
 
@@ -298,6 +306,44 @@ export default function FilterBox({
             </div>
           )}
         </div>
+
+        {hasCollection && (
+          <div className="filterChipWrap">
+            <button
+              className={`filterChip ${
+                includeOwned !== includeUnowned ? "active" : ""
+              } ${ownershipWarningNonce ? "ownershipWarning" : ""}`}
+              key={ownershipWarningNonce}
+              onClick={() => toggleOpen("ownership")}
+              aria-label="Collection ownership filter"
+            >
+              Ownership {"\u25BC"}
+            </button>
+
+            {openFilter === "ownership" && (
+              <div className="filterDropdown">
+                <div className="filterOptionsList">
+                  <label className="filterOption">
+                    <input
+                      type="checkbox"
+                      checked={includeOwned}
+                      onChange={() => setIncludeOwned((current) => !current)}
+                    />
+                    Owned
+                  </label>
+                  <label className="filterOption">
+                    <input
+                      type="checkbox"
+                      checked={includeUnowned}
+                      onChange={() => setIncludeUnowned((current) => !current)}
+                    />
+                    Unowned
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <button className="clearFiltersButton" onClick={clearAllFilters}>
           Clear

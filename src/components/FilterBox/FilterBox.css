@@ -250,6 +250,15 @@
   color: #ccc;
 }
 
+.filterChip.ownershipWarning {
+  animation: ownershipFilterWarning 0.34s ease-in-out 3;
+}
+
+@keyframes ownershipFilterWarning {
+  0%, 100% { background: #202020; border-color: #444; }
+  50% { background: #79521c; border-color: #f0b85c; color: #fff1cf; }
+}
+
 @media (max-width: 760px) {
   .compactFilterBox {
     margin: 10px auto 12px;

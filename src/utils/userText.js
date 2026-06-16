@@ -45,6 +45,7 @@ export function sanitizeUserText(value, {
   maxLength = DESCRIPTION_MAX_LENGTH,
   fallback = "",
   singleLine = false,
+  trim = true,
 } = {}) {
   /*
    * value: unknown user input.
@@ -60,14 +61,36 @@ export function sanitizeUserText(value, {
   const normalizedLines = singleLine
     ? withoutControls.replace(LINE_BREAK_PATTERN, " ")
     : withoutControls.replace(LINE_BREAK_PATTERN, "\n");
-  const cleanedText = normalizedLines
+  const normalizedText = normalizedLines
     .split("\n")
-    .map((line) => line.replace(HORIZONTAL_SPACE_PATTERN, " ").trim())
+    .map((line) =>
+      trim
+        ? line.replace(HORIZONTAL_SPACE_PATTERN, " ").trim()
+        : line.replace(HORIZONTAL_SPACE_PATTERN, " "),
+    )
     .join("\n")
-    .trim()
     .slice(0, maxLength);
+  const cleanedText = trim ? normalizedText.trim() : normalizedText;
 
   return cleanedText || fallback;
+}
+
+export function sanitizeTitleInput(value) {
+  return sanitizeUserText(value, {
+    maxLength: TITLE_MAX_LENGTH,
+    fallback: "",
+    singleLine: true,
+    trim: false,
+  });
+}
+
+export function sanitizeDescriptionInput(value) {
+  return sanitizeUserText(value, {
+    maxLength: DESCRIPTION_MAX_LENGTH,
+    fallback: "",
+    singleLine: true,
+    trim: false,
+  });
 }
 
 export function sanitizeTitle(value, fallback = "Untitled") {

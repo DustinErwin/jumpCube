@@ -110,6 +110,14 @@
   font-size: 0.9rem;
 }
 
+.contentModerationMessage {
+  margin: -4px 0 8px;
+  color: #ffaaaa;
+  font-size: 0.75rem;
+  line-height: 1.3;
+  text-align: center;
+}
+
 .cubeNameInput,
 .cubeDescriptionInput {
   width: 100%;
@@ -137,15 +145,16 @@
 }
 
 .cubeActionToolbar {
+  position: relative;
   order: -1;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 7px;
 
   margin: -14px -14px 12px;
-  padding: 8px 10px;
+  padding: 8px 56px 8px 10px;
   box-sizing: border-box;
 
   background: rgba(8, 8, 8, 0.64);
@@ -212,6 +221,54 @@
 
 .cubeStatsButton {
   color: #b7f0d0;
+}
+
+.cubeVisibilitySwitch {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  width: 38px;
+  height: 22px;
+  padding: 3px;
+  box-sizing: border-box;
+  background: #762828;
+  border: 1px solid rgba(255, 184, 184, 0.52);
+  border-radius: 999px;
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.cubeVisibilitySwitch span {
+  width: 14px;
+  height: 14px;
+  display: block;
+  background: #f2f2f2;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.55),
+    0 1px 4px rgba(0, 0, 0, 0.55);
+  transition: transform 0.16s ease;
+}
+
+.cubeVisibilitySwitch.public {
+  background: #276b3a;
+  border-color: rgba(142, 233, 142, 0.62);
+}
+
+.cubeVisibilitySwitch.public span {
+  transform: translateX(16px);
+}
+
+.cubeVisibilitySwitch:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+
+.cubeVisibilityToggle {
+  display: none;
 }
 
 .confirmDeleteCubeButton {
@@ -412,6 +469,10 @@
   z-index: 30;
 }
 
+.cubePackGestureLayer {
+  display: none;
+}
+
 .cubeManaSymbolW {
   background: #f5e7b2;
 }
@@ -493,6 +554,300 @@
   cursor: pointer;
   font-size: 1rem;
   font-weight: 800;
+}
+
+.cubeStatsVisuals {
+  flex: 0 0 clamp(220px, 34vh, 330px);
+  min-height: 220px;
+  display: flex;
+  gap: 12px;
+}
+
+.cubeManaCurve {
+  flex: 1 1 auto;
+  min-width: 470px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px 18px 10px 32px;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+}
+
+.cubeTagChart {
+  flex: 0 0 min(390px, 32vw);
+  min-width: 320px;
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(165px, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding: 16px;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+}
+
+.cubeTagPie {
+  width: min(100%, 170px);
+  aspect-ratio: 1;
+  justify-self: center;
+  background: var(--tag-chart, #252525);
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.13),
+    0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.cubeTagChartDetails {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 12px;
+}
+
+.cubeTagChartDetails h3,
+.cubeTagChartDetails p {
+  margin: 0;
+}
+
+.cubeTagChartDetails h3 {
+  font-size: 1rem;
+}
+
+.cubeTagChartDetails > div:first-child p {
+  margin-top: 3px;
+  color: #9ea6b3;
+  font-size: 0.72rem;
+}
+
+.cubeTagLegend {
+  display: grid;
+  gap: 6px;
+}
+
+.cubeTagLegendItem {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 10px 2ch minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  color: #c5c9ce;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.cubeTagSwatch {
+  width: 10px;
+  height: 10px;
+  background: var(--tag-color);
+}
+
+.cubeTagCount {
+  color: #d5d8dc;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cubeTagName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cubeTagLegendItem strong {
+  color: #d5d8dc;
+}
+
+.cubeTagChartEmpty {
+  color: #8f8f8f;
+  font-size: 0.78rem;
+  font-style: italic;
+}
+
+.cubeManaCurveHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.cubeManaCurveHeading h3,
+.cubeManaCurveHeading p {
+  margin: 0;
+}
+
+.cubeManaCurveHeading h3 {
+  font-size: 1rem;
+}
+
+.cubeManaCurveHeading p {
+  margin-top: 3px;
+  color: #9ea6b3;
+  font-size: 0.72rem;
+}
+
+.cubeManaCurveLegend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px 12px;
+  color: #c1c6ce;
+  font-size: 0.67rem;
+  font-weight: 700;
+}
+
+.cubeManaCurveLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cubeManaCurveLegend i {
+  width: 9px;
+  height: 9px;
+  display: inline-block;
+  background: var(--mana-color);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+}
+
+.cubeManaCurveChart {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(40px, 1fr));
+  align-items: stretch;
+  gap: clamp(8px, 2vw, 28px);
+}
+
+.cubeManaCurveGrid {
+  position: absolute;
+  inset: 18px 0 24px;
+  pointer-events: none;
+}
+
+.cubeManaCurveGridLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed rgba(184, 190, 197, 0.2);
+}
+
+.cubeManaCurveGridLine span {
+  position: absolute;
+  right: calc(100% + 7px);
+  top: -7px;
+  color: rgba(184, 190, 197, 0.62);
+  font-size: 0.58rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.cubeManaCurveColumn {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 18px minmax(0, 1fr) 20px;
+  gap: 3px;
+}
+
+.cubeManaCurveCount,
+.cubeManaCurveLabel {
+  color: #bec4cc;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.cubeManaCurveTrack {
+  position: relative;
+  min-height: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.cubeManaCurveBar {
+  position: relative;
+  width: min(54px, 76%);
+  min-height: 0;
+  display: flex;
+  flex-direction: column-reverse;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px 4px 2px 2px;
+  box-sizing: border-box;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.24);
+}
+
+.cubeManaCurvePack {
+  position: relative;
+  flex-basis: 0;
+  min-height: 2px;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+}
+
+.cubeManaCurvePack.separated {
+  border-bottom: 2px solid rgba(10, 12, 18, 0.92);
+}
+
+.cubeManaCurvePack:hover,
+.cubeManaCurvePack:focus-visible {
+  z-index: 5;
+  filter: brightness(1.16);
+}
+
+.cubeManaCurveColor {
+  flex-basis: 0;
+  min-height: 1px;
+  display: block;
+  background: var(--mana-color);
+}
+
+.cubeManaCurveTooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  width: max-content;
+  max-width: 210px;
+  display: grid;
+  gap: 2px;
+  padding: 7px 9px;
+  background: #10131a;
+  color: #f3f3f3;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 6px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.44);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.cubeManaCurveTooltip strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.76rem;
+}
+
+.cubeManaCurveTooltip small {
+  color: #b9c0cb;
+  font-size: 0.65rem;
+  white-space: nowrap;
+}
+
+.cubeManaCurvePack:hover .cubeManaCurveTooltip,
+.cubeManaCurvePack:focus-visible .cubeManaCurveTooltip {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .cubeStatsColumns {
@@ -637,6 +992,11 @@
 }
 
 @media (max-width: 760px) {
+  body:has(.jumpCubeBox.open) {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
   .jumpCubeBox {
     top: var(--side-panel-top, 64px);
     left: 0;
@@ -648,6 +1008,8 @@
 
     z-index: 210;
     overflow: hidden;
+    background: #121212;
+    overscroll-behavior: contain;
   }
 
   .jumpCubeToggle {
@@ -678,7 +1040,7 @@
   .cubeActionToolbar {
     gap: 8px;
     margin: -12px -12px 10px;
-    padding: 8px 10px;
+    padding: 8px 54px 8px 10px;
   }
 
   .cubeActionButton {
@@ -688,6 +1050,39 @@
 
   .cubeStatsOverlay {
     padding: 12px;
+  }
+
+  .cubeStatsVisuals {
+    flex-basis: 250px;
+    min-height: 250px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .cubeManaCurve {
+    flex: 0 0 560px;
+    padding: 10px 12px 8px 26px;
+  }
+
+  .cubeTagChart {
+    flex: 0 0 330px;
+  }
+
+  .cubeManaCurveHeading {
+    align-items: flex-start;
+  }
+
+  .cubeManaCurveLegend {
+    max-width: 210px;
+    gap: 5px 8px;
+  }
+
+  .cubeManaCurveChart {
+    gap: 7px;
+  }
+
+  .cubeManaCurveBar {
+    width: 70%;
   }
 
   .cubeStatsColumns {
@@ -704,14 +1099,74 @@
   }
 
   .cubePackScrollArea {
+    overscroll-behavior: contain;
     margin-top: 6px;
   }
 
   .cubePackItem {
     min-height: 44px;
+    touch-action: none;
   }
 
   .cubePackItem:hover {
     transform: none;
+  }
+
+  .cubePackGestureLayer {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: block;
+    background: transparent;
+    touch-action: none;
+  }
+
+  .cubePackItem.mobileRemoving {
+    z-index: 140;
+    transform: translateX(var(--cube-pack-remove-offset, 0)) !important;
+    transition: none;
+  }
+
+  .cubePackItem.mobileRemoving::before {
+    content: "Remove";
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(255, 188, 188, 0.88);
+    background: rgba(151, 27, 35, 0.88);
+    color: white;
+    font-size: 0.9rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    pointer-events: none;
+    animation: cubePackRemoveHold 1500ms linear forwards;
+  }
+
+  .cubePackItem.mobileReordering {
+    z-index: 160;
+    transform: translateY(var(--cube-pack-reorder-offset, 0)) scale(1.02) !important;
+    transition: none;
+    outline: 2px solid rgba(120, 210, 255, 0.95);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.62);
+  }
+
+  .cubePackItem.mobileReorderTarget {
+    outline: 2px solid rgba(120, 210, 255, 0.9);
+    outline-offset: 2px;
+  }
+}
+
+@keyframes cubePackRemoveHold {
+  from {
+    background: rgba(151, 27, 35, 0.22);
+    box-shadow: inset 0 0 0 0 rgba(255, 90, 90, 0);
+  }
+
+  to {
+    background: rgba(151, 27, 35, 0.94);
+    box-shadow: inset 0 0 34px rgba(255, 90, 90, 0.3);
   }
 }

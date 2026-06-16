@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getPackTagStyle, normalizePackTags } from "../../utils/packTags";
 import "./PackLibraryModal.css";
 
 /*
@@ -14,11 +15,9 @@ import "./PackLibraryModal.css";
  */
 
 function getPackArchetypeTags(pack) {
-  // Supports both the current archetype_tags array and older archetype_tag data.
-  if (Array.isArray(pack.archetype_tags)) return pack.archetype_tags;
-  if (pack.archetype_tag) return [pack.archetype_tag];
-
-  return [];
+  return normalizePackTags(
+    pack.packTags || pack.archetype_tags || pack.archetype_tag,
+  );
 }
 
 export default function PackLibraryModal({
@@ -28,9 +27,33 @@ export default function PackLibraryModal({
   onOpenPack,
   onDeletePack,
   onDuplicatePack,
+  onAddPacksToCube,
+  cubePackIds = [],
 }) {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [packSearch, setPackSearch] = useState("");
+  const [selectedPackIds, setSelectedPackIds] = useState([]);
+  const [isAddingPacks, setIsAddingPacks] = useState(false);
+  const cubePackIdSet = new Set(cubePackIds);
+
+  function togglePackSelection(packId) {
+    if (cubePackIdSet.has(packId)) return;
+
+    setSelectedPackIds((currentIds) =>
+      currentIds.includes(packId)
+        ? currentIds.filter((id) => id !== packId)
+        : [...currentIds, packId],
+    );
+  }
+
+  async function addSelectedPacks() {
+    if (selectedPackIds.length === 0 || isAddingPacks) return;
+
+    setIsAddingPacks(true);
+    await onAddPacksToCube?.(selectedPackIds);
+    setIsAddingPacks(false);
+    setSelectedPackIds([]);
+  }
 
   const filteredPacks = packs.filter((pack) => {
     // Local library search only filters loaded metadata; opening a pack hydrates
@@ -42,6 +65,7 @@ export default function PackLibraryModal({
     const name = pack.name?.toLowerCase() || "";
     const description = pack.description?.toLowerCase() || "";
     const archetypes = getPackArchetypeTags(pack)
+      .map((tag) => tag.name)
       .join(" ")
       .toLowerCase();
 
@@ -69,12 +93,50 @@ export default function PackLibraryModal({
           <button onClick={onClose}>×</button>
         </div>
 
+        <div className="packModalSelectionBar">
+          <span>
+            {selectedPackIds.length > 0
+              ? `${selectedPackIds.length} selected`
+              : "Select packs to add them together"}
+          </span>
+          <button
+            type="button"
+            onClick={addSelectedPacks}
+            disabled={selectedPackIds.length === 0 || isAddingPacks}
+          >
+            {isAddingPacks ? "Adding..." : "Add to Cube"}
+          </button>
+        </div>
+
         {filteredPacks.length === 0 ? (
           <p className="emptyPackList">No saved packs yet.</p>
         ) : (
           <div className="packModalList">
             {filteredPacks.map((pack) => (
-              <div className="packModalItem" key={pack.id}>
+              <div
+                className={`packModalItem ${
+                  selectedPackIds.includes(pack.id) ? "selected" : ""
+                } ${cubePackIdSet.has(pack.id) ? "alreadyInCube" : ""}`}
+                key={pack.id}
+              >
+                <button
+                  type="button"
+                  className="packSelectButton"
+                  onClick={() => togglePackSelection(pack.id)}
+                  disabled={cubePackIdSet.has(pack.id)}
+                  aria-pressed={selectedPackIds.includes(pack.id)}
+                  aria-label={
+                    cubePackIdSet.has(pack.id)
+                      ? `${pack.name} is already in the cube`
+                      : `Select ${pack.name}`
+                  }
+                >
+                  {cubePackIdSet.has(pack.id)
+                    ? "In"
+                    : selectedPackIds.includes(pack.id)
+                      ? "✓"
+                      : "+"}
+                </button>
                 <button
                   className="packModalOpen"
                   onClick={() => onOpenPack(pack.id)}
@@ -83,8 +145,12 @@ export default function PackLibraryModal({
 
                   <div className="packModalTags">
                     {getPackArchetypeTags(pack).map((tag) => (
-                      <strong className="packModalTag" key={tag}>
-                        {tag}
+                      <strong
+                        className="packModalTag"
+                        key={tag.id || tag.normalizedName}
+                        style={getPackTagStyle(tag)}
+                      >
+                        {tag.name}
                       </strong>
                     ))}
                   </div>

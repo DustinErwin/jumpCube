@@ -1,8 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  PACK_ARCHETYPE_TAGS,
-  PACK_CARD_LIMIT,
-} from "../../hooks/usePackBuilder";
+import { PACK_CARD_LIMIT } from "../../hooks/usePackBuilder";
 import {
   getPrimaryCardMechanicBucket,
   PACK_MECHANIC_BUCKETS,
@@ -10,9 +7,18 @@ import {
 import {
   DESCRIPTION_MAX_LENGTH,
   TITLE_MAX_LENGTH,
-  sanitizeDescription,
-  sanitizeTitle,
+  sanitizeDescriptionInput,
+  sanitizeTitleInput,
 } from "../../utils/userText";
+import {
+  formatPackTagName,
+  getPackTagStyle,
+  normalizePackTagName,
+  PACK_TAG_COLORS,
+  PACK_TAG_LIMIT,
+  validatePackTagName,
+} from "../../utils/packTags";
+import { getContentModerationMessage } from "../../utils/contentModeration";
 import "./PackBox.css";
 
 /*
@@ -51,15 +57,12 @@ const CARD_TYPE_LABELS = {
   Sorcery: "Sorceries",
 };
 const IDEAL_MANA_CURVE = [1, 4, 3, 2, 1, 1];
-// Pack archetype tag colors. Keep keys synced with PACK_ARCHETYPE_TAGS.
-const ARCHETYPE_COLORS = {
-  Aggro: { background: "#c93f32", color: "white" },
-  Control: { background: "#2f77c8", color: "white" },
-  Midrange: { background: "#d8c58f", color: "white" },
-  Combo: { background: "#7b4aa1", color: "white" },
-  Ramp: { background: "#3f9650", color: "white" },
-  Tempo: { background: "#727a80", color: "white" },
-};
+const SWIPE_REMOVE_THRESHOLD = 88;
+const SWIPE_REMOVE_CANCEL_THRESHOLD = 56;
+const SWIPE_REMOVE_MAX_DISTANCE = 124;
+const SWIPE_REMOVE_HOLD_MS = 1500;
+const MOBILE_REORDER_HOLD_MS = 400;
+const MOBILE_GESTURE_MOVE_TOLERANCE = 8;
 
 function getCardPrice(card) {
   // Uses normalized price_usd first, with old raw prices fallback.
@@ -74,18 +77,6 @@ function formatUsd(value) {
     style: "currency",
     currency: "USD",
   }).format(value);
-}
-
-function getArchetypeTagStyle(tag) {
-  const colors = ARCHETYPE_COLORS[tag] || {
-    background: "#252525",
-    color: "white",
-  };
-
-  return {
-    "--archetype-tag-bg": colors.background,
-    "--archetype-tag-text": colors.color,
-  };
 }
 
 function getCardTypes(card) {
@@ -112,10 +103,14 @@ export default function PackBox({
   setPackDescription,
   packArchetypeTags = [],
   setPackArchetypeTags,
+  availablePackTags = [],
+  createPackTag,
+  packTagLimit = PACK_TAG_LIMIT,
   packVisibility = "private",
   setPackVisibility,
   newPack,
   saveStatus,
+  saveErrorMessage = "",
   showRenameChoice,
   pendingSaveAction,
   moveCard,
@@ -134,15 +129,297 @@ export default function PackBox({
   const droppedInsidePackRef = useRef(false);
   const [isDragOverPack, setIsDragOverPack] = useState(false);
   const cardDragStartedRef = useRef(false);
+  const swipeRemoveGestureRef = useRef({
+    stackId: null,
+    cardId: null,
+    pointerId: null,
+    startX: 0,
+    offset: 0,
+    holding: false,
+    armed: false,
+  });
+  const swipeRemoveTimeoutRef = useRef(null);
+  const mobileReorderTimeoutRef = useRef(null);
+  const suppressCardClickRef = useRef(false);
+  const mobileReorderRef = useRef({
+    stackId: null,
+    cardId: null,
+    pointerId: null,
+    targetCardId: null,
+    startX: 0,
+    startY: 0,
+    lastY: 0,
+    armed: false,
+    cardElement: null,
+  });
+  const [swipeRemoveState, setSwipeRemoveState] = useState({
+    stackId: null,
+    offset: 0,
+    holding: false,
+    armed: false,
+  });
 
   const [editingName, setEditingName] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
   const [confirmingDeletePack, setConfirmingDeletePack] = useState(false);
   const [isArchetypeMenuOpen, setIsArchetypeMenuOpen] = useState(false);
+  const [tagSearch, setTagSearch] = useState("");
+  const [newTagColor, setNewTagColor] = useState("gray");
+  const [tagMessage, setTagMessage] = useState("");
+  const [isCreatingTag, setIsCreatingTag] = useState(false);
   const [showPackStats, setShowPackStats] = useState(false);
   const [visibilityMessage, setVisibilityMessage] = useState("");
   const visibilityMessageTimeoutRef = useRef(null);
   // const [showManaCurve, setShowManaCurve] = useState(false);
+
+  function clearSwipeRemoveTimer() {
+    if (swipeRemoveTimeoutRef.current) {
+      window.clearTimeout(swipeRemoveTimeoutRef.current);
+      swipeRemoveTimeoutRef.current = null;
+    }
+  }
+
+  function clearMobileReorderTimer() {
+    if (mobileReorderTimeoutRef.current) {
+      window.clearTimeout(mobileReorderTimeoutRef.current);
+      mobileReorderTimeoutRef.current = null;
+    }
+  }
+
+  function resetSwipeRemove() {
+    clearSwipeRemoveTimer();
+    swipeRemoveGestureRef.current = {
+      stackId: null,
+      cardId: null,
+      pointerId: null,
+      startX: 0,
+      offset: 0,
+      holding: false,
+      armed: false,
+    };
+    setSwipeRemoveState({
+      stackId: null,
+      offset: 0,
+      holding: false,
+      armed: false,
+    });
+  }
+
+  function handleSwipeRemoveStart(event, card) {
+    const isMobileViewport = window.matchMedia("(max-width: 760px)").matches;
+    if (!isMobileViewport || event.pointerType === "mouse") return;
+
+    clearSwipeRemoveTimer();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    swipeRemoveGestureRef.current = {
+      stackId: card.stackId,
+      cardId: card.id,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      offset: 0,
+      holding: false,
+      armed: false,
+    };
+    setSwipeRemoveState({
+      stackId: card.stackId,
+      offset: 0,
+      holding: false,
+      armed: false,
+    });
+
+    clearMobileReorderTimer();
+    mobileReorderRef.current = {
+      stackId: card.stackId,
+      cardId: card.id,
+      pointerId: event.pointerId,
+      targetCardId: card.id,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastY: event.clientY,
+      armed: false,
+      cardElement: event.currentTarget.closest(".stackedPackCard"),
+    };
+    mobileReorderTimeoutRef.current = window.setTimeout(() => {
+      const reorder = mobileReorderRef.current;
+
+      if (reorder.pointerId !== event.pointerId) return;
+
+      reorder.armed = true;
+      reorder.cardElement?.classList.add("mobileReordering");
+      suppressCardClickRef.current = true;
+      resetSwipeRemove();
+      setDraggedCardId(card.id);
+      setDragOverCardId(card.id);
+    }, MOBILE_REORDER_HOLD_MS);
+  }
+
+  function handleSwipeRemoveMove(event) {
+    const reorder = mobileReorderRef.current;
+
+    if (reorder.armed && reorder.pointerId === event.pointerId) {
+      event.preventDefault();
+      reorder.cardElement?.style.setProperty(
+        "--mobile-reorder-offset",
+        `${event.clientY - reorder.startY}px`,
+      );
+      const targetCard = [...document.querySelectorAll(".stackedPackCard")]
+        .filter((element) => element !== reorder.cardElement)
+        .map((element) => ({
+          id: element.dataset.cardId,
+          distance: Math.abs(
+            event.clientY -
+              (element.getBoundingClientRect().top +
+                element.getBoundingClientRect().height / 2),
+          ),
+        }))
+        .sort((a, b) => a.distance - b.distance)[0];
+
+      if (targetCard?.id) {
+        reorder.targetCardId = targetCard.id;
+        setDragOverCardId(targetCard.id);
+      }
+
+      return;
+    }
+
+    const gesture = swipeRemoveGestureRef.current;
+    if (gesture.pointerId !== event.pointerId) return;
+
+    const horizontalDistance = event.clientX - reorder.startX;
+    const verticalDistance = event.clientY - reorder.startY;
+
+    if (
+      Math.abs(verticalDistance) > MOBILE_GESTURE_MOVE_TOLERANCE &&
+      Math.abs(verticalDistance) > Math.abs(horizontalDistance)
+    ) {
+      clearMobileReorderTimer();
+      event.preventDefault();
+      const scrollArea = event.currentTarget.closest(".packCardScrollArea");
+
+      if (scrollArea) {
+        scrollArea.scrollTop += reorder.lastY - event.clientY;
+      }
+
+      reorder.lastY = event.clientY;
+      return;
+    }
+
+    if (
+      Math.abs(horizontalDistance) > MOBILE_GESTURE_MOVE_TOLERANCE ||
+      Math.abs(verticalDistance) > MOBILE_GESTURE_MOVE_TOLERANCE
+    ) {
+      clearMobileReorderTimer();
+    }
+
+    const offset = Math.min(
+      SWIPE_REMOVE_MAX_DISTANCE,
+      Math.max(0, event.clientX - gesture.startX),
+    );
+    gesture.offset = offset;
+
+    if (offset >= SWIPE_REMOVE_THRESHOLD && !gesture.holding) {
+      gesture.holding = true;
+      clearSwipeRemoveTimer();
+      swipeRemoveTimeoutRef.current = window.setTimeout(() => {
+        const activeGesture = swipeRemoveGestureRef.current;
+
+        if (
+          activeGesture.stackId === gesture.stackId &&
+          activeGesture.offset >= SWIPE_REMOVE_THRESHOLD
+        ) {
+          activeGesture.armed = true;
+          setSwipeRemoveState({
+            stackId: activeGesture.stackId,
+            offset: activeGesture.offset,
+            holding: true,
+            armed: true,
+          });
+        }
+      }, SWIPE_REMOVE_HOLD_MS);
+    } else if (
+      offset < SWIPE_REMOVE_CANCEL_THRESHOLD &&
+      gesture.holding
+    ) {
+      gesture.holding = false;
+      gesture.armed = false;
+      clearSwipeRemoveTimer();
+    }
+
+    setSwipeRemoveState({
+      stackId: gesture.stackId,
+      offset,
+      holding: gesture.holding,
+      armed: gesture.armed,
+    });
+  }
+
+  function handleSwipeRemoveEnd(event) {
+    const reorder = mobileReorderRef.current;
+
+    if (reorder.armed && reorder.pointerId === event.pointerId) {
+      if (reorder.targetCardId && reorder.targetCardId !== reorder.cardId) {
+        moveCard(reorder.cardId, reorder.targetCardId);
+      }
+
+      resetMobileReorder();
+      resetSwipeRemove();
+      return;
+    }
+
+    const gesture = swipeRemoveGestureRef.current;
+    if (gesture.pointerId !== event.pointerId) return;
+
+    suppressCardClickRef.current = gesture.offset > 6;
+
+    if (gesture.armed && gesture.offset >= SWIPE_REMOVE_THRESHOLD) {
+      decreaseCardQuantity(gesture.cardId);
+    }
+
+    resetSwipeRemove();
+    resetMobileReorder();
+  }
+
+  function handleSwipeRemoveCancel(event) {
+    if (
+      swipeRemoveGestureRef.current.pointerId !== event.pointerId &&
+      mobileReorderRef.current.pointerId !== event.pointerId
+    ) {
+      return;
+    }
+
+    suppressCardClickRef.current = true;
+    resetSwipeRemove();
+    resetMobileReorder();
+  }
+
+  function resetMobileReorder() {
+    clearMobileReorderTimer();
+    mobileReorderRef.current.cardElement?.classList.remove("mobileReordering");
+    mobileReorderRef.current.cardElement?.style.removeProperty(
+      "--mobile-reorder-offset",
+    );
+    mobileReorderRef.current = {
+      stackId: null,
+      cardId: null,
+      pointerId: null,
+      targetCardId: null,
+      startX: 0,
+      startY: 0,
+      lastY: 0,
+      armed: false,
+      cardElement: null,
+    };
+    setDraggedCardId(null);
+    setDragOverCardId(null);
+  }
+
+  useEffect(
+    () => () => {
+      clearSwipeRemoveTimer();
+      clearMobileReorderTimer();
+    },
+    [],
+  );
 
   const totalCards = selectedCards.reduce(
     (sum, card) => sum + card.quantity,
@@ -152,6 +429,9 @@ export default function PackBox({
     (sum, card) => sum + getCardPrice(card) * card.quantity,
     0,
   );
+  const packNameModerationMessage = getContentModerationMessage(packName);
+  const packDescriptionModerationMessage =
+    getContentModerationMessage(packDescription);
 
   const packColorIdentity = [
     ...new Set(selectedCards.flatMap((card) => card.color_identity || [])),
@@ -313,15 +593,79 @@ export default function PackBox({
   function toggleArchetypeTag(tag) {
     if (!requireAuth()) return;
 
-    // Multiple archetypes are allowed; empty list means no archetype color tags.
-    setPackArchetypeTags((currentTags) => {
-      if (currentTags.includes(tag)) {
-        return currentTags.filter((currentTag) => currentTag !== tag);
-      }
+    const isSelected = packArchetypeTags.some(
+      (currentTag) => currentTag.normalizedName === tag.normalizedName,
+    );
 
-      return [...currentTags, tag];
-    });
+    if (isSelected) {
+      setPackArchetypeTags(
+        packArchetypeTags.filter(
+          (currentTag) => currentTag.normalizedName !== tag.normalizedName,
+        ),
+      );
+      setTagMessage("");
+      return;
+    }
+
+    if (packArchetypeTags.length >= packTagLimit) {
+      setTagMessage(`Packs can have up to ${packTagLimit} tags.`);
+      return;
+    }
+
+    setPackArchetypeTags([...packArchetypeTags, tag]);
+    setTagMessage("");
   }
+
+  async function handleCreateTag() {
+    if (!requireAuth() || isCreatingTag) return;
+
+    const validationMessage = validatePackTagName(tagSearch);
+
+    if (validationMessage) {
+      setTagMessage(validationMessage);
+      return;
+    }
+
+    if (packArchetypeTags.length >= packTagLimit) {
+      setTagMessage(`Packs can have up to ${packTagLimit} tags.`);
+      return;
+    }
+
+    setIsCreatingTag(true);
+    const createdTag = await createPackTag?.(tagSearch, newTagColor);
+    setIsCreatingTag(false);
+
+    if (!createdTag || createdTag.error) {
+      setTagMessage(createdTag?.error || "Tag could not be created.");
+      return;
+    }
+
+    toggleArchetypeTag(createdTag);
+    setTagSearch("");
+  }
+
+  const normalizedTagSearch = normalizePackTagName(tagSearch);
+  const filteredPackTags = availablePackTags.filter((tag) => {
+    const isSelected = packArchetypeTags.some(
+      (selectedTag) => selectedTag.normalizedName === tag.normalizedName,
+    );
+
+    return (
+      !isSelected &&
+      (!normalizedTagSearch || tag.normalizedName.includes(normalizedTagSearch))
+    );
+  });
+  const exactTagMatch = availablePackTags.some(
+    (tag) => tag.normalizedName === normalizedTagSearch,
+  );
+  const tagValidationMessage = tagSearch
+    ? validatePackTagName(tagSearch)
+    : "";
+  const canOfferTagCreation =
+    normalizedTagSearch &&
+    !exactTagMatch &&
+    !tagValidationMessage &&
+    packArchetypeTags.length < packTagLimit;
 
   function togglePackVisibility() {
     if (!requireAuth()) return;
@@ -370,6 +714,27 @@ export default function PackBox({
       window.removeEventListener("click", cancelDeleteConfirmation);
     };
   }, [confirmingDeletePack]);
+
+  useEffect(() => {
+    if (!isArchetypeMenuOpen) return undefined;
+
+    function closeTagMenu(event) {
+      if (
+        event.target.closest(".archetypeMenu") ||
+        event.target.closest(".archetypeMenuButton")
+      ) {
+        return;
+      }
+
+      setIsArchetypeMenuOpen(false);
+    }
+
+    window.addEventListener("click", closeTagMenu);
+
+    return () => {
+      window.removeEventListener("click", closeTagMenu);
+    };
+  }, [isArchetypeMenuOpen]);
 
   return (
     <aside
@@ -583,12 +948,15 @@ export default function PackBox({
         <input
           className="packNameInput"
           value={packName}
+          aria-invalid={Boolean(packNameModerationMessage)}
           maxLength={TITLE_MAX_LENGTH}
           autoFocus
           onChange={(e) =>
-            setPackName(sanitizeTitle(e.target.value, ""))
+            setPackName(sanitizeTitleInput(e.target.value))
           }
-          onBlur={() => setEditingName(false)}
+          onBlur={() => {
+            if (!packNameModerationMessage) setEditingName(false);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") setEditingName(false);
           }}
@@ -604,17 +972,25 @@ export default function PackBox({
           {packName}
         </h2>
       )}
+      {packNameModerationMessage && (
+        <p className="contentModerationMessage" role="alert">
+          {packNameModerationMessage}
+        </p>
+      )}
       {editingDescription ? (
         <textarea
           className="packDescriptionInput"
           value={packDescription}
+          aria-invalid={Boolean(packDescriptionModerationMessage)}
           maxLength={DESCRIPTION_MAX_LENGTH}
           placeholder="Click to add a description..."
           autoFocus
           onChange={(e) =>
-            setPackDescription(sanitizeDescription(e.target.value))
+            setPackDescription(sanitizeDescriptionInput(e.target.value))
           }
-          onBlur={() => setEditingDescription(false)}
+          onBlur={() => {
+            if (!packDescriptionModerationMessage) setEditingDescription(false);
+          }}
         />
       ) : (
         <p
@@ -630,6 +1006,11 @@ export default function PackBox({
               Click to add a description...
             </span>
           )}
+        </p>
+      )}
+      {packDescriptionModerationMessage && (
+        <p className="contentModerationMessage" role="alert">
+          {packDescriptionModerationMessage}
         </p>
       )}
       <div className="packMetadata">
@@ -780,13 +1161,16 @@ export default function PackBox({
       {packArchetypeTags.length > 0 && (
         <div className="packArchetypeTags" aria-label="Selected archetypes">
           {packArchetypeTags.map((tag) => (
-            <span
+            <button
+              type="button"
               className="packArchetypeTag"
-              key={tag}
-              style={getArchetypeTagStyle(tag)}
+              key={tag.id || tag.normalizedName}
+              style={getPackTagStyle(tag)}
+              onClick={() => toggleArchetypeTag(tag)}
+              title={`Remove ${tag.name}`}
             >
-              {tag}
-            </span>
+              {tag.name}<span aria-hidden="true">&times;</span>
+            </button>
           ))}
         </div>
       )}
@@ -794,7 +1178,7 @@ export default function PackBox({
       {isArchetypeMenuOpen && (
         <div className="archetypeMenu" aria-label="Archetype tags">
           <div className="archetypeMenuHeader">
-            <span>Archetypes</span>
+            <span>Tags ({packArchetypeTags.length}/{packTagLimit})</span>
             <button
               type="button"
               onClick={() => {
@@ -807,18 +1191,73 @@ export default function PackBox({
             </button>
           </div>
 
+          <input
+            className="tagSearchInput"
+            type="text"
+            value={tagSearch}
+            onChange={(event) => {
+              setTagSearch(event.target.value);
+              setTagMessage("");
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && canOfferTagCreation) {
+                event.preventDefault();
+                handleCreateTag();
+              }
+            }}
+            placeholder="Search or create a tag"
+            autoComplete="off"
+          />
+
           <div className="archetypeOptions">
-            {PACK_ARCHETYPE_TAGS.map((tag) => (
-              <label className="archetypeOption" key={tag}>
-                <input
-                  type="checkbox"
-                  checked={packArchetypeTags.includes(tag)}
-                  onChange={() => toggleArchetypeTag(tag)}
-                />
-                {tag}
-              </label>
+            {filteredPackTags.slice(0, 8).map((tag) => (
+              <button
+                type="button"
+                className="archetypeOption"
+                key={tag.id || tag.normalizedName}
+                onClick={() => toggleArchetypeTag(tag)}
+                disabled={packArchetypeTags.length >= packTagLimit}
+              >
+                <span className="tagColorDot" style={getPackTagStyle(tag)} />
+                <span>{tag.name}</span>
+                {tag.usageCount > 0 && <small>{tag.usageCount}</small>}
+              </button>
             ))}
           </div>
+
+          {canOfferTagCreation && (
+            <div className="tagCreationPanel">
+              <p>Create <strong>{formatPackTagName(tagSearch)}</strong></p>
+              <div className="tagColorOptions" aria-label="Tag color">
+                {PACK_TAG_COLORS.map((color) => (
+                  <button
+                    type="button"
+                    key={color.id}
+                    className={newTagColor === color.id ? "selected" : ""}
+                    style={{ "--pack-tag-color": color.value }}
+                    onClick={() => setNewTagColor(color.id)}
+                    aria-label={color.label}
+                    title={color.label}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                className="createTagButton"
+                onClick={handleCreateTag}
+                disabled={isCreatingTag}
+              >
+                {isCreatingTag ? "Creating..." : "Create Tag"}
+              </button>
+            </div>
+          )}
+
+          {(tagMessage || tagValidationMessage) && (
+            <p className="tagMessage" role="alert">
+              {tagMessage || tagValidationMessage}
+            </p>
+          )}
+          <p className="tagGuidance">Letters only. Up to three words; one idea per tag.</p>
         </div>
       )}
 
@@ -831,7 +1270,13 @@ export default function PackBox({
       )}
 
       {saveStatus === "error" && (
-        <p className="saveMessage error">Save failed</p>
+        <p className="saveMessage error">
+          {saveErrorMessage || "Save failed"}
+        </p>
+      )}
+
+      {saveStatus === "blocked" && (
+        <p className="saveMessage error">Text needs review</p>
       )}
 
       {showPackStats && (
@@ -1167,10 +1612,38 @@ export default function PackBox({
               <div
                 className={`stackedPackCard ${
                   dragOverCardId === card.id ? "dragOver" : ""
+                }${
+                  swipeRemoveState.stackId === card.stackId
+                    ? " isSwipeRemoving"
+                    : ""
+                }${
+                  swipeRemoveState.stackId === card.stackId &&
+                  swipeRemoveState.holding
+                    ? " swipeRemoveHolding"
+                    : ""
                 }`}
                 key={card.stackId}
+                data-card-id={card.id}
                 draggable
+                style={{
+                  touchAction: "none",
+                  ...(swipeRemoveState.stackId === card.stackId
+                    ? {
+                        "--swipe-remove-offset": `${swipeRemoveState.offset}px`,
+                      }
+                    : {}),
+                }}
                 onDragStart={(e) => {
+                  if (window.matchMedia("(max-width: 760px)").matches) {
+                    e.preventDefault();
+                    return;
+                  }
+
+                  if (swipeRemoveGestureRef.current.stackId === card.stackId) {
+                    e.preventDefault();
+                    return;
+                  }
+
                   cardDragStartedRef.current = true;
                   setDraggedCardId(card.id);
                   setSuppressStackHover(true);
@@ -1228,6 +1701,12 @@ export default function PackBox({
                   }
                 }}
                 onDragEnd={() => {
+                  if (window.matchMedia("(max-width: 760px)").matches) {
+                    cardDragStartedRef.current = false;
+                    droppedInsidePackRef.current = false;
+                    return;
+                  }
+
                   if (
                     cardDragStartedRef.current &&
                     !droppedInsidePackRef.current
@@ -1243,9 +1722,19 @@ export default function PackBox({
                 }}
                 onContextMenu={(e) => {
                   e.preventDefault();
+
+                  if (window.matchMedia("(max-width: 760px)").matches) {
+                    return;
+                  }
+
                   decreaseCardQuantity(card.id);
                 }}
                 onClick={() => {
+                  if (suppressCardClickRef.current) {
+                    suppressCardClickRef.current = false;
+                    return;
+                  }
+
                   if (cardDragStartedRef.current) return;
 
                   onCardOpen?.(card);
@@ -1253,18 +1742,16 @@ export default function PackBox({
               >
                 <img src={card.image_url} alt={card.name} />
                 <button
-                  className="mobileRemoveCardButton"
                   type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    decreaseCardQuantity(card.id);
-                  }}
-                  aria-label={`Remove one ${card.name} from pack`}
-                  title={`Remove one ${card.name}`}
-                >
-                  <span aria-hidden="true">×</span>
-                </button>
+                  className="mobileCardGestureLayer"
+                  aria-label={`${card.name}: hold and drag to reorder, or swipe right to remove`}
+                  onPointerDown={(event) =>
+                    handleSwipeRemoveStart(event, card)
+                  }
+                  onPointerMove={handleSwipeRemoveMove}
+                  onPointerUp={handleSwipeRemoveEnd}
+                  onPointerCancel={handleSwipeRemoveCancel}
+                />
               </div>
             ))}
           </div>

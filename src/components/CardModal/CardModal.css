@@ -64,6 +64,12 @@
   position: relative;
   aspect-ratio: 488 / 680;
   perspective: 1100px;
+  cursor: zoom-in;
+  outline: none;
+}
+
+.cardModalFlipFrame:focus-visible {
+  box-shadow: 0 0 0 3px rgba(216, 180, 95, 0.78);
 }
 
 .cardModalFlipInner {
@@ -90,6 +96,31 @@
 
 .cardModalFaceBack {
   transform: rotateY(180deg);
+}
+
+.cardModalEnlargeHint {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 2;
+  padding: 6px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 4px;
+  background: rgba(10, 14, 20, 0.84);
+  color: white;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.cardModalFlipFrame:hover .cardModalEnlargeHint,
+.cardModalFlipFrame:focus-visible .cardModalEnlargeHint {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .cardModalFlipButton {
@@ -358,6 +389,52 @@
   font-variant-numeric: tabular-nums;
 }
 
+.cardImageLightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.92);
+  cursor: zoom-out;
+}
+
+.cardImageLightbox img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: calc(100vw - 48px);
+  max-height: calc(100svh - 48px);
+  border-radius: 16px;
+  object-fit: contain;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.75);
+  cursor: default;
+}
+
+.cardImageLightboxClose {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 1;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  background: rgba(16, 20, 29, 0.9);
+  color: white;
+  cursor: pointer;
+  font-size: 21px;
+  font-weight: 800;
+}
+
+.cardImageLightboxClose:hover,
+.cardImageLightboxClose:focus-visible {
+  border-color: white;
+  background: #2c3546;
+}
+
 @media (max-width: 760px) {
   .cardModalOverlay {
     padding: 0;
@@ -397,7 +474,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cardModalFlipInner {
+  .cardModalFlipInner,
+  .cardModalEnlargeHint {
     transition: none;
   }
 }

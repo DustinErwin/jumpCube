@@ -99,6 +99,20 @@ const CARD_SEARCH_ID_BATCH_SIZE = 50;
 const SCRYFALL_SYNTAX_PATTERN =
   /(?:^|[\s(])-?[a-z][a-z0-9_]*(?::|[<>=])/i;
 const BASIC_LAND_TYPE_FILTER = "Basic Land";
+const PLAYABLE_CARD_TYPE_FILTER = [
+  "Artifact",
+  "Battle",
+  "Creature",
+  "Enchantment",
+  "Instant",
+  "Kindred",
+  "Land",
+  "Planeswalker",
+  "Sorcery",
+  "Tribal",
+]
+  .map((type) => `type_line.ilike.%${type}%`)
+  .join(",");
 const BASIC_LAND_NAMES = [
   "Plains",
   "Island",
@@ -440,6 +454,9 @@ export function useCards({
   formats = [],
   selectedSets = [],
   showAllPrintings = false,
+  hasCollection = false,
+  includeOwned = false,
+  includeUnowned = true,
   limit = 50,
 }) {
   const [cardList, setCardList] = useState([]);
@@ -449,6 +466,13 @@ export function useCards({
   const [hasMoreCards, setHasMoreCards] = useState(false);
   const requestIdRef = useRef(0);
   const nextRowStartRef = useRef(0);
+  const ownershipMode = !hasCollection || (includeOwned && includeUnowned)
+    ? "all"
+    : includeOwned
+      ? "owned"
+      : includeUnowned
+        ? "unowned"
+        : "none";
 
   const hasActiveFilters =
     search.trim() !== "" ||
@@ -457,7 +481,8 @@ export function useCards({
     rarities.length > 0 ||
     types.length > 0 ||
     formats.length > 0 ||
-    selectedSets.length > 0;
+    selectedSets.length > 0 ||
+    ownershipMode !== "all";
   const buildCardsQuery = useCallback(
     (
       start,
@@ -480,7 +505,14 @@ export function useCards({
        */
       const hasSplitSearchField = Boolean(searchField);
       const searchesVariants = showAllPrintings || selectedSets.length > 0;
-      const searchTable = searchesVariants ? "card_variants" : "card_search";
+      const usesOwnershipView = ownershipMode === "owned" || ownershipMode === "unowned";
+      const searchTable = usesOwnershipView
+        ? searchesVariants
+          ? "card_variants_with_ownership"
+          : "card_search_with_ownership"
+        : searchesVariants
+          ? "card_variants"
+          : "card_search";
       const searchColumns = searchesVariants ? CARD_VARIANT_COLUMNS : CARD_COLUMNS;
       let query = supabase
         .from(searchTable)
@@ -491,7 +523,9 @@ export function useCards({
         .eq("is_token", false)
         .eq("is_funny", false)
         .eq("is_planechase", false)
-        .neq("layout", "art_series");
+        .neq("layout", "art_series")
+        .neq("layout", "scheme")
+        .or(PLAYABLE_CARD_TYPE_FILTER);
 
       query = query.order("name", { ascending: true });
 
@@ -499,6 +533,10 @@ export function useCards({
 
       if (searchesVariants) {
         query = query.eq("lang", "en").neq("set_type", "funny");
+      }
+
+      if (usesOwnershipView) {
+        query = query.eq("is_owned", ownershipMode === "owned");
       }
 
       if (selectedSets.length > 0) {
@@ -622,6 +660,7 @@ export function useCards({
       formats,
       selectedSets,
       showAllPrintings,
+      ownershipMode,
     ],
   );
 
@@ -637,6 +676,11 @@ export function useCards({
       setCardList([]);
       setHasMoreCards(false);
       nextRowStartRef.current = 0;
+
+      if (ownershipMode === "none") {
+        setLoadingCards(false);
+        return;
+      }
 
       if (!hasActiveFilters) {
         setLoadingCards(false);
@@ -782,6 +826,7 @@ export function useCards({
     selectedSets,
     showAllPrintings,
     types,
+    ownershipMode,
   ]);
 
   const loadMoreCards = useCallback(async () => {

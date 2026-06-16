@@ -1,0 +1,282 @@
+.discoverPage {
+  min-height: calc(100vh - 58px);
+  padding: 54px clamp(18px, 5vw, 72px) 80px;
+  box-sizing: border-box;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(76, 131, 105, 0.18), transparent 34%),
+    radial-gradient(circle at 88% 12%, rgba(93, 91, 155, 0.17), transparent 30%),
+    #101113;
+  color: #f7f5ef;
+}
+
+.discoverHero {
+  max-width: 760px;
+  margin: 0 auto 34px;
+  text-align: center;
+}
+
+.discoverEyebrow {
+  margin: 0 0 8px;
+  color: #8fd4ae;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.discoverHero h1 {
+  margin: 0;
+  font-size: clamp(2.1rem, 5vw, 4.2rem);
+  line-height: 0.98;
+  letter-spacing: -0.04em;
+}
+
+.discoverHero > p:last-child {
+  max-width: 630px;
+  margin: 18px auto 0;
+  color: #b8b9bc;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.discoverControls {
+  max-width: 980px;
+  margin: 0 auto 30px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 10px;
+  background: rgba(27, 29, 32, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 16px;
+  backdrop-filter: blur(14px);
+}
+
+.discoverControls input {
+  min-height: 46px;
+  padding: 0 15px;
+  background: #121315;
+  color: white;
+  border: 1px solid #34373b;
+  border-radius: 11px;
+  font: inherit;
+}
+
+.discoverFilters {
+  display: flex;
+  gap: 6px;
+}
+
+.discoverFilters button {
+  min-width: 74px;
+  padding: 0 14px;
+  background: transparent;
+  color: #aeb0b4;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.discoverFilters button.active {
+  background: #e9e2cb;
+  color: #191a1c;
+}
+
+.discoveryGrid {
+  max-width: 1240px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 24px;
+}
+
+.discoveryCard {
+  position: relative;
+  min-height: 390px;
+  isolation: isolate;
+  overflow: hidden;
+  background: #1b1d20;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 22px 55px rgba(0, 0, 0, 0.34);
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+
+.discoveryCard.pack {
+  border-radius: 22px;
+}
+
+.discoveryCard.cube {
+  margin: 8px 8px 0 0;
+  border-radius: 10px 24px 10px 24px;
+  border-color: rgba(150, 131, 219, 0.42);
+  overflow: visible;
+}
+
+.discoveryCard:hover {
+  transform: translateY(-5px);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.discoveryArtwork {
+  position: absolute;
+  inset: 0;
+  z-index: -3;
+  background-position: center 16%;
+  background-size: cover;
+  opacity: 0.3;
+  filter: saturate(0.78) contrast(1.04);
+}
+
+.discoveryArtwork::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(15, 16, 18, 0.05), #1b1d20 72%);
+}
+
+.cubeLayer {
+  position: absolute;
+  inset: 0;
+  z-index: -5;
+  border: 1px solid rgba(150, 131, 219, 0.28);
+  border-radius: 10px 24px 10px 24px;
+  background: #24212d;
+}
+
+.cubeLayerOne {
+  transform: translate(6px, -6px);
+}
+
+.cubeLayerTwo {
+  transform: translate(12px, -12px);
+  opacity: 0.55;
+}
+
+.discoveryCardContent {
+  min-height: 390px;
+  display: flex;
+  flex-direction: column;
+  padding: 22px;
+  box-sizing: border-box;
+}
+
+.discoveryTypeRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #c2c3c5;
+  font-size: 0.73rem;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.discoveryType {
+  padding: 5px 8px;
+  color: #aee4bf;
+  background: rgba(83, 154, 109, 0.18);
+  border: 1px solid rgba(110, 190, 137, 0.35);
+  border-radius: 999px;
+}
+
+.discoveryCard.cube .discoveryType {
+  color: #c7b8f2;
+  background: rgba(125, 94, 184, 0.2);
+  border-color: rgba(169, 140, 225, 0.4);
+}
+
+.discoveryCard h2 {
+  margin: auto 0 2px;
+  font-size: 1.65rem;
+  line-height: 1.08;
+}
+
+.discoveryOwner {
+  margin: 5px 0 0;
+  color: #9b9da1;
+  font-size: 0.8rem;
+}
+
+.discoveryDescription {
+  min-height: 42px;
+  margin: 13px 0;
+  color: #c5c6c8;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.discoveryTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+
+.discoveryTags span {
+  padding: 3px 7px;
+  color: var(--pack-tag-color, #a7adb4);
+  background: color-mix(in srgb, var(--pack-tag-color, #a7adb4) 17%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pack-tag-color, #a7adb4) 48%, transparent);
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.discoveryCardContent > button {
+  width: 100%;
+  min-height: 42px;
+  margin-top: auto;
+  background: #ece5d0;
+  color: #191a1c;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 850;
+}
+
+.discoveryCard.cube .discoveryCardContent > button {
+  background: #bca8ea;
+}
+
+.discoveryCardContent > button:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.discoverStatus,
+.discoverError {
+  max-width: 720px;
+  margin: 48px auto;
+  text-align: center;
+  color: #aeb0b4;
+}
+
+.discoverError {
+  color: #ffb0b0;
+}
+
+@media (max-width: 680px) {
+  .discoverPage {
+    min-height: calc(100vh - 64px);
+    padding: 34px 14px 60px;
+  }
+
+  .discoverControls {
+    grid-template-columns: 1fr;
+  }
+
+  .discoverFilters button {
+    flex: 1;
+    min-height: 42px;
+  }
+
+  .discoveryGrid {
+    grid-template-columns: 1fr;
+  }
+}

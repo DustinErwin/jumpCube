@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../utils/supabase";
+import { getContentModerationMessage } from "../../utils/contentModeration";
 import "./AuthPage.css";
 
 const PENDING_SIGNUP_USERNAME_KEY = "jumpCubePendingSignupUsername";
@@ -33,6 +34,7 @@ export default function AuthPage() {
   const [authMessage, setAuthMessage] = useState("");
   const [authError, setAuthError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const usernameModerationMessage = getContentModerationMessage(username);
 
   function getValidSignupUsername() {
     const trimmedUsername = username.trim();
@@ -49,6 +51,10 @@ export default function AuthPage() {
         error: "Usernames must be 3-31 letters, numbers, or underscores.",
         username: "",
       };
+    }
+
+    if (usernameModerationMessage) {
+      return { error: usernameModerationMessage, username: "" };
     }
 
     return {
@@ -278,12 +284,18 @@ export default function AuthPage() {
               <input
                 type="text"
                 value={username}
+                aria-invalid={Boolean(usernameModerationMessage)}
                 onChange={(e) => setUsername(e.target.value)}
                 autoComplete="username"
                 minLength={3}
                 maxLength={31}
                 pattern="[A-Za-z0-9_]+"
               />
+              {usernameModerationMessage && (
+                <span className="authError" role="alert">
+                  {usernameModerationMessage}
+                </span>
+              )}
             </label>
           )}
 

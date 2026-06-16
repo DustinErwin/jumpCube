@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../utils/supabase";
+import { normalizePackTags } from "../utils/packTags";
 
 /*
  * useUserPacks() loads the current user's saved pack library.
@@ -36,7 +37,33 @@ export function useUserPacks(user) {
       return;
     }
 
-    setPacks(data || []);
+    const loadedPacks = data || [];
+    const packIds = loadedPacks.map((pack) => pack.id);
+    let tagsByPackId = new Map();
+
+    if (packIds.length > 0) {
+      const { data: packTagRows, error: packTagsError } = await supabase
+        .from("pack_tags")
+        .select("pack_id, tag:tags(id, name, normalized_name, color, usage_count)")
+        .in("pack_id", packIds);
+
+      if (!packTagsError) {
+        tagsByPackId = (packTagRows || []).reduce((tagsByPack, row) => {
+          const currentTags = tagsByPack.get(row.pack_id) || [];
+          tagsByPack.set(row.pack_id, [...currentTags, row.tag]);
+          return tagsByPack;
+        }, new Map());
+      }
+    }
+
+    setPacks(
+      loadedPacks.map((pack) => ({
+        ...pack,
+        packTags: normalizePackTags(
+          tagsByPackId.get(pack.id) || pack.archetype_tags || pack.archetype_tag,
+        ),
+      })),
+    );
     setLoadingPacks(false);
   }, [user]);
 

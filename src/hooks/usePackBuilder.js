@@ -4,6 +4,13 @@ import {
   sanitizeDescription,
   sanitizeTitle,
 } from "../utils/userText";
+import {
+  formatPackTagName,
+  normalizePackTagName,
+  normalizePackTags,
+  PACK_TAG_LIMIT,
+} from "../utils/packTags";
+import { hasBlockedContentInFields } from "../utils/contentModeration";
 
 /*
  * usePackBuilder() owns the active pack editor.
@@ -93,9 +100,43 @@ function normalizePackName(name, fallback = "Unnamed Pack") {
 }
 
 function normalizeArchetypeTags(tags) {
-  const incomingTags = Array.isArray(tags) ? tags : tags ? [tags] : [];
+  return normalizePackTags(tags);
+}
 
-  return PACK_ARCHETYPE_TAGS.filter((tag) => incomingTags.includes(tag));
+function getLegacyArchetypeTagNames(tags) {
+  return normalizeArchetypeTags(tags)
+    .map((tag) => tag.name)
+    .filter((name) => PACK_ARCHETYPE_TAGS.includes(name));
+}
+
+const FALLBACK_PACK_TAGS = normalizePackTags(PACK_ARCHETYPE_TAGS, Infinity);
+
+async function loadPackTagAssignments(packId) {
+  const { data, error } = await supabase
+    .from("pack_tags")
+    .select("tag:tags(id, name, normalized_name, color)")
+    .eq("pack_id", packId);
+
+  if (error) return null;
+
+  return normalizePackTags((data || []).map((row) => row.tag));
+}
+
+async function savePackTagAssignments(packId, tags) {
+  const selectedTags = normalizePackTags(tags).filter((tag) => tag.id);
+  const { error: deleteError } = await supabase
+    .from("pack_tags")
+    .delete()
+    .eq("pack_id", packId);
+
+  if (deleteError) throw deleteError;
+  if (selectedTags.length === 0) return;
+
+  const { error: insertError } = await supabase.from("pack_tags").insert(
+    selectedTags.map((tag) => ({ pack_id: packId, tag_id: tag.id })),
+  );
+
+  if (insertError) throw insertError;
 }
 
 function normalizeVisibility(visibility) {
@@ -108,7 +149,10 @@ function getPackSnapshot(name, description, archetypeTags, visibility, cards) {
   return JSON.stringify({
     name: normalizePackName(name),
     description: sanitizeDescription(description),
-    archetypeTags: normalizeArchetypeTags(archetypeTags),
+    archetypeTags: normalizeArchetypeTags(archetypeTags).map((tag) => ({
+      name: tag.normalizedName,
+      color: tag.color,
+    })),
     visibility: normalizeVisibility(visibility),
     cards: cards.map((card) => ({
       id: card.id,
@@ -122,6 +166,17 @@ function getPackSnapshot(name, description, archetypeTags, visibility, cards) {
 
 function getPackCardCount(cards) {
   return cards.reduce((sum, card) => sum + card.quantity, 0);
+}
+
+function getPackCoverImage(cards) {
+  const topCard = cards[cards.length - 1];
+
+  return (
+    topCard?.image_url ||
+    topCard?.image_uris?.art_crop ||
+    topCard?.image_uris?.normal ||
+    null
+  );
 }
 
 async function hydratePackCardRows(packCards) {
@@ -186,13 +241,93 @@ export function usePackBuilder(user, refreshPacks, {
   const [packName, setPackName] = useState("Current Pack");
   const [packDescription, setPackDescription] = useState("");
   const [packArchetypeTags, setPackArchetypeTags] = useState([]);
+  const [availablePackTags, setAvailablePackTags] = useState(FALLBACK_PACK_TAGS);
   const [packVisibility, setPackVisibility] = useState("private");
   const [savedPackId, setSavedPackId] = useState(null);
   const [savedPackName, setSavedPackName] = useState(null);
   const [saveStatus, setSaveStatus] = useState("");
+  const [saveErrorMessage, setSaveErrorMessage] = useState("");
   const [showRenameChoice, setShowRenameChoice] = useState(false);
   const [pendingSaveAction, setPendingSaveAction] = useState(null);
   const lastSavedSnapshotRef = useRef(null);
+
+  const loadAvailablePackTags = useCallback(async function loadAvailablePackTags() {
+    const { data, error } = await supabase
+      .from("tags")
+      .select("id, name, normalized_name, color, usage_count")
+      .order("usage_count", { ascending: false })
+      .order("name", { ascending: true });
+
+    if (error) {
+      setAvailablePackTags(FALLBACK_PACK_TAGS);
+      return FALLBACK_PACK_TAGS;
+    }
+
+    const normalizedTags = normalizePackTags(
+      [...(data || []), ...FALLBACK_PACK_TAGS],
+      Infinity,
+    );
+    setAvailablePackTags(normalizedTags);
+    return normalizedTags;
+  }, []);
+
+  const createPackTag = useCallback(async function createPackTag(name, color) {
+    if (!user?.id) return null;
+
+    const formattedName = formatPackTagName(name);
+    const normalizedName = normalizePackTagName(formattedName);
+    const existingTag = availablePackTags.find(
+      (tag) => tag.normalizedName === normalizedName,
+    );
+
+    if (existingTag) return existingTag;
+
+    const { data, error } = await supabase
+      .from("tags")
+      .insert({
+        name: formattedName,
+        normalized_name: normalizedName,
+        color,
+        created_by: user.id,
+      })
+      .select("id, name, normalized_name, color, usage_count")
+      .single();
+
+    if (error) {
+      if (error.code === "23505") {
+        const { data: existingData, error: existingError } = await supabase
+          .from("tags")
+          .select("id, name, normalized_name, color, usage_count")
+          .eq("normalized_name", normalizedName)
+          .single();
+
+        if (!existingError && existingData) {
+          const [existingDatabaseTag] = normalizePackTags([existingData]);
+          setAvailablePackTags((currentTags) =>
+            normalizePackTags(
+              [existingDatabaseTag, ...currentTags],
+              Infinity,
+            ),
+          );
+          return existingDatabaseTag;
+        }
+      }
+
+      console.error("Error creating tag:", error);
+      return {
+        error:
+          error.code === "42P01"
+            ? "Tag storage is not configured yet. Apply the tag migration."
+            : "Tag could not be created. Please try again.",
+      };
+    }
+
+    const [createdTag] = normalizePackTags([data]);
+    setAvailablePackTags((currentTags) =>
+      normalizePackTags([createdTag, ...currentTags], Infinity),
+    );
+    return createdTag;
+  }, [availablePackTags, user]);
 
   function addCardToPack(card) {
     // Adds one copy, up to PACK_CARD_LIMIT. Existing copies increment quantity
@@ -258,9 +393,12 @@ export function usePackBuilder(user, refreshPacks, {
 
     setPackName(normalizePackName(pack.name, "Current Pack"));
     setPackDescription(sanitizeDescription(pack.description));
-    setPackArchetypeTags(
-      normalizeArchetypeTags(pack.archetype_tags || pack.archetype_tag),
-    );
+    const relationalTags = await loadPackTagAssignments(pack.id);
+    const loadedTags = relationalTags?.length
+      ? relationalTags
+      : pack.archetype_tags || pack.archetype_tag;
+
+    setPackArchetypeTags(normalizeArchetypeTags(loadedTags));
     setPackVisibility(normalizeVisibility(pack.visibility));
     setSelectedCards(hydratedCards);
     setSavedPackId(pack.id);
@@ -268,7 +406,7 @@ export function usePackBuilder(user, refreshPacks, {
     lastSavedSnapshotRef.current = getPackSnapshot(
       pack.name || "Current Pack",
       sanitizeDescription(pack.description),
-      pack.archetype_tags || pack.archetype_tag,
+      loadedTags,
       pack.visibility,
       hydratedCards,
     );
@@ -318,11 +456,25 @@ export function usePackBuilder(user, refreshPacks, {
      * Returns the saved pack id, or null on validation/save error.
      */
     if (!user?.id) {
+      setSaveErrorMessage("Sign in before saving this pack.");
       setSaveStatus("error");
       return null;
     }
 
+    if (hasBlockedContentInFields(packName, packDescription)) {
+      setSaveErrorMessage("");
+      setSaveStatus("blocked");
+      return null;
+    }
+
     const cardsToSave = cardsOverride || selectedCards;
+    const tagsToSave = normalizeArchetypeTags(packArchetypeTags).map(
+      (tag) =>
+        availablePackTags.find(
+          (availableTag) =>
+            availableTag.normalizedName === tag.normalizedName && availableTag.id,
+        ) || tag,
+    );
 
     const currentSnapshot = getPackSnapshot(
       packName,
@@ -333,10 +485,18 @@ export function usePackBuilder(user, refreshPacks, {
     );
 
     if (packId && currentSnapshot === lastSavedSnapshotRef.current) {
+      try {
+        await savePackTagAssignments(packId, tagsToSave);
+      } catch (tagError) {
+        console.error("Error saving pack tags:", tagError);
+        setSaveErrorMessage("Pack saved, but its tags could not be updated.");
+        setSaveStatus("error");
+      }
       return packId;
     }
 
     setSaveStatus("saving");
+    setSaveErrorMessage("");
 
     let actualPackId = packId;
 
@@ -347,7 +507,8 @@ export function usePackBuilder(user, refreshPacks, {
         .insert({
           name: normalizePackName(packName),
           description: sanitizeDescription(packDescription),
-          archetype_tags: normalizeArchetypeTags(packArchetypeTags),
+          archetype_tags: getLegacyArchetypeTagNames(tagsToSave),
+          cover_image_url: getPackCoverImage(cardsToSave),
           visibility: normalizeVisibility(packVisibility),
           user_id: user.id,
         })
@@ -356,6 +517,7 @@ export function usePackBuilder(user, refreshPacks, {
 
       if (packError) {
         console.error("Error saving pack:", packError);
+        setSaveErrorMessage(packError.message || "Pack could not be saved.");
         setSaveStatus("error");
         return null;
       }
@@ -369,13 +531,15 @@ export function usePackBuilder(user, refreshPacks, {
         .update({
           name: normalizePackName(packName),
           description: sanitizeDescription(packDescription),
-          archetype_tags: normalizeArchetypeTags(packArchetypeTags),
+          archetype_tags: getLegacyArchetypeTagNames(tagsToSave),
+          cover_image_url: getPackCoverImage(cardsToSave),
           visibility: normalizeVisibility(packVisibility),
         })
         .eq("id", actualPackId);
 
       if (updateError) {
         console.error("Error updating pack:", updateError);
+        setSaveErrorMessage(updateError.message || "Pack could not be updated.");
         setSaveStatus("error");
         return null;
       }
@@ -399,6 +563,7 @@ export function usePackBuilder(user, refreshPacks, {
 
     if (deleteCardsError) {
       console.error("Error clearing pack cards:", deleteCardsError);
+      setSaveErrorMessage("Pack cards could not be updated.");
       setSaveStatus("error");
       return null;
     }
@@ -410,9 +575,19 @@ export function usePackBuilder(user, refreshPacks, {
 
       if (cardsError) {
         console.error("Error saving pack cards:", cardsError);
+        setSaveErrorMessage("Pack cards could not be saved.");
         setSaveStatus("error");
         return null;
       }
+    }
+
+    try {
+      await savePackTagAssignments(actualPackId, tagsToSave);
+    } catch (tagError) {
+      console.error("Error saving pack tags:", tagError);
+      setSaveErrorMessage("Pack saved, but its tags could not be updated.");
+      setSaveStatus("error");
+      return null;
     }
 
     setSavedPackName(normalizePackName(packName));
@@ -422,7 +597,8 @@ export function usePackBuilder(user, refreshPacks, {
       id: actualPackId,
       name: normalizePackName(packName),
       description: sanitizeDescription(packDescription),
-      archetypeTags: normalizeArchetypeTags(packArchetypeTags),
+      archetypeTags: tagsToSave,
+      coverImageUrl: getPackCoverImage(cardsToSave),
       visibility: normalizeVisibility(packVisibility),
       cards: cardsToSave,
     });
@@ -433,6 +609,7 @@ export function usePackBuilder(user, refreshPacks, {
     return actualPackId;
   }, [
     packArchetypeTags,
+    availablePackTags,
     packDescription,
     packVisibility,
     packName,
@@ -477,8 +654,11 @@ export function usePackBuilder(user, refreshPacks, {
         description: sanitizeDescription(originalPack.description),
         archetype_tags: normalizeArchetypeTags(
           originalPack.archetype_tags || originalPack.archetype_tag,
-        ),
+        )
+          .map((tag) => tag.name)
+          .filter((name) => PACK_ARCHETYPE_TAGS.includes(name)),
         visibility: normalizeVisibility(originalPack.visibility),
+        cover_image_url: originalPack.cover_image_url || null,
         user_id: user.id,
       })
       .select()
@@ -509,6 +689,13 @@ export function usePackBuilder(user, refreshPacks, {
         console.error("Error copying pack cards:", insertCardsError);
         return;
       }
+    }
+
+    const originalTags = await loadPackTagAssignments(packId);
+    try {
+      await savePackTagAssignments(newPack.id, originalTags || []);
+    } catch (tagError) {
+      console.error("Error copying pack tags:", tagError);
     }
 
     await refreshPacks?.();
@@ -605,6 +792,12 @@ export function usePackBuilder(user, refreshPacks, {
   }
 
   useEffect(() => {
+    const timeoutId = window.setTimeout(loadAvailablePackTags, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [loadAvailablePackTags]);
+
+  useEffect(() => {
     // Debounced autosave after any meaningful pack edit. The snapshot guard in
     // finishSave prevents repeat writes once the database is current.
     if (!user?.id) return undefined;
@@ -650,6 +843,9 @@ export function usePackBuilder(user, refreshPacks, {
     setPackDescription,
     packArchetypeTags,
     setPackArchetypeTags,
+    availablePackTags,
+    createPackTag,
+    packTagLimit: PACK_TAG_LIMIT,
     packVisibility,
     setPackVisibility,
     savedPackId,
@@ -657,6 +853,7 @@ export function usePackBuilder(user, refreshPacks, {
     savedPackName,
     setSavedPackName,
     saveStatus,
+    saveErrorMessage,
     showRenameChoice,
     pendingSaveAction,
     addCardToPack,

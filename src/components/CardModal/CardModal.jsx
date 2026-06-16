@@ -87,6 +87,28 @@ function getBackImage(card) {
   return null;
 }
 
+function getExpandedImage(card, showBack) {
+  const faceIndex = showBack ? 1 : 0;
+  const faceImages = card?.card_faces?.[faceIndex]?.image_uris;
+
+  if (showBack) {
+    return (
+      faceImages?.png ||
+      faceImages?.large ||
+      faceImages?.normal ||
+      getBackImage(card)
+    );
+  }
+
+  return (
+    card?.image_uris?.png ||
+    card?.image_uris?.large ||
+    faceImages?.png ||
+    faceImages?.large ||
+    getImage(card)
+  );
+}
+
 function formatArray(values, fallback = "None") {
   return Array.isArray(values) && values.length > 0
     ? values.join(", ")
@@ -167,11 +189,13 @@ export default function CardModal({
   const [livePricesByScryfallId, setLivePricesByScryfallId] = useState({});
   const [isVersionPickerOpen, setIsVersionPickerOpen] = useState(false);
   const [hoveredVersionId, setHoveredVersionId] = useState("");
+  const [expandedCardId, setExpandedCardId] = useState(null);
   const sourceCardId = String(card?.variant_id || card?.id || "");
   const selectedCardId =
     manualSelectedCard.sourceCardId === sourceCardId
       ? manualSelectedCard.selectedCardId
       : sourceCardId;
+  const isImageExpanded = expandedCardId === selectedCardId;
 
   useEffect(() => {
     // Escape closes the modal while it is open.
@@ -179,7 +203,11 @@ export default function CardModal({
 
     function handleKeyDown(event) {
       if (event.key === "Escape") {
-        onClose();
+        if (isImageExpanded) {
+          setExpandedCardId(null);
+        } else {
+          onClose();
+        }
       }
     }
 
@@ -188,7 +216,7 @@ export default function CardModal({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [card, isOpen, onClose]);
+  }, [card, isImageExpanded, isOpen, onClose]);
 
   useEffect(() => {
     // Load all local printings for the same oracle card so the user can pick a
@@ -342,6 +370,7 @@ export default function CardModal({
   const backImage = getBackImage(displayedCard);
   const canFlip = Boolean(backImage);
   const isFlipped = flippedCardId === selectedCardId;
+  const expandedImage = getExpandedImage(displayedCard, isFlipped);
   const legalFormats = getLegalFormats(displayedCard.legalities);
   const selectedQuantity =
     selectedCards.find((selectedPackCard) => selectedPackCard.id === displayedCard.id)
@@ -367,7 +396,20 @@ export default function CardModal({
 
         <div className="cardModalImagePanel">
           {image ? (
-            <div className={`cardModalFlipFrame${isFlipped ? " flipped" : ""}`}>
+            <div
+              className={`cardModalFlipFrame${isFlipped ? " flipped" : ""}`}
+              role="button"
+              tabIndex={0}
+              aria-label={`Enlarge ${displayedCard.name} image`}
+              title="Click to enlarge"
+              onClick={() => setExpandedCardId(selectedCardId)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setExpandedCardId(selectedCardId);
+                }
+              }}
+            >
               <div className="cardModalFlipInner">
                 <img
                   className="cardModalFace cardModalFaceFront"
@@ -383,19 +425,24 @@ export default function CardModal({
                 )}
               </div>
 
+              <span className="cardModalEnlargeHint" aria-hidden="true">
+                Enlarge
+              </span>
+
               {canFlip && (
                 <button
                   // Flip state is keyed by selectedCardId, so changing versions
                   // naturally returns the newly selected version to front face.
                   type="button"
                   className="cardModalFlipButton"
-                  onClick={() =>
+                  onClick={(event) => {
+                    event.stopPropagation();
                     setFlippedCardId((currentFlippedCardId) =>
                       currentFlippedCardId === selectedCardId
                         ? null
                         : selectedCardId,
-                    )
-                  }
+                    );
+                  }}
                   aria-label={`Flip ${displayedCard.name}`}
                   aria-pressed={isFlipped}
                   title="Flip card"
@@ -582,6 +629,33 @@ export default function CardModal({
           </div>
         </div>
       </section>
+
+      {isImageExpanded && expandedImage && (
+        <div
+          className="cardImageLightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${displayedCard.name} enlarged image`}
+          onClick={(event) => {
+            event.stopPropagation();
+            setExpandedCardId(null);
+          }}
+        >
+          <button
+            type="button"
+            className="cardImageLightboxClose"
+            onClick={() => setExpandedCardId(null)}
+            aria-label="Close enlarged image"
+          >
+            x
+          </button>
+          <img
+            src={expandedImage}
+            alt={`${displayedCard.name}${isFlipped ? " back face" : ""}`}
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

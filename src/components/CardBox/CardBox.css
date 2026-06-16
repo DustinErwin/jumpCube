@@ -95,9 +95,13 @@
   grid-template-columns: 32px minmax(34px, 1fr) 32px;
   align-items: center;
   gap: 4px;
-  width: min(142px, 88%);
+  width: min(178px, 94%);
   height: 32px;
   margin: 4px auto 0;
+}
+
+.cardQuantityControls.hasOwnedCount {
+  grid-template-columns: 32px 32px minmax(34px, 1fr) 32px;
 }
 
 .cardQuantityControls button,
@@ -133,6 +137,12 @@
   font-size: 14px;
 }
 
+.cardQuantityControls .cardOwnedCount {
+  background: rgba(22, 83, 49, 0.94);
+  color: #e9fff1;
+  border-color: rgba(151, 234, 180, 0.72);
+}
+
 @media (max-width: 980px) {
   .cardGrid {
     grid-template-columns: repeat(3, minmax(0, 220px));
@@ -141,9 +151,9 @@
 
 @media (max-width: 760px) {
   .cardGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px 5px;
-    padding: 6px 2px;
+    grid-template-columns: minmax(0, 360px);
+    gap: 10px;
+    padding: 6px;
   }
 
   .cardFace {
@@ -160,14 +170,19 @@
 
 @media (max-width: 540px) {
   .cardGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px 4px;
-    padding: 4px 0;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 4px;
   }
 
   .cardQuantityControls {
     grid-template-columns: 30px minmax(30px, 1fr) 30px;
+    width: min(168px, 98%);
     height: 30px;
+  }
+
+  .cardQuantityControls.hasOwnedCount {
+    grid-template-columns: 30px 30px minmax(30px, 1fr) 30px;
   }
 
   .cardQuantityControls button,

@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Navigate, Routes, Route } from "react-router-dom";
+import { Navigate, Routes, Route, useLocation } from "react-router-dom";
 import { supabase } from "./utils/supabase";
 import { useCards } from "./hooks/useCards";
 import { usePackBuilder } from "./hooks/usePackBuilder";
 import { useAuth } from "./hooks/useAuth";
 import { useUserPacks } from "./hooks/useUserPacks";
 import { useUserCubes } from "./hooks/useUserCubes";
+import { useCollection } from "./hooks/useCollection";
 import { useSets } from "./hooks/useSets";
 import AuthPage from "./pages/AuthPage/AuthPage";
 import ProfilePage from "./pages/ProfilePage/ProfilePage";
 import SecretManagerPage from "./pages/SecretManagerPage/SecretManagerPage";
+import DiscoverPage from "./pages/DiscoverPage/DiscoverPage";
+import CollectionPage from "./pages/CollectionPage/CollectionPage";
 import SearchBox from "./components/SearchBox/SearchBox";
 import FilterBox from "./components/FilterBox/FilterBox";
 import CardBox from "./components/CardBox/CardBox";
@@ -52,7 +55,7 @@ function normalizeTitle(title, fallback) {
   return sanitizeTitle(title, fallback);
 }
 
-function getCubeSnapshot(name, description, packs) {
+function getCubeSnapshot(name, description, visibility, packs) {
   /*
    * Snapshot shape:
    * {
@@ -67,6 +70,7 @@ function getCubeSnapshot(name, description, packs) {
   return JSON.stringify({
     name: normalizeTitle(name, "Unnamed Cube"),
     description: sanitizeDescription(description),
+    visibility: visibility === "public" ? "public" : "private",
     packs: packs.map((pack) => pack.savedPackId || pack.id),
   });
 }
@@ -128,7 +132,12 @@ function getCardArt(card) {
   );
 }
 
+function getSavedCardImage(card) {
+  return card?.image_url || card?.image_uris?.art_crop || card?.image_uris?.normal || null;
+}
+
 function App() {
+  const location = useLocation();
   /*
    * Hook outputs:
    * - useAuth(): { user, session, authLoading }
@@ -149,6 +158,7 @@ function App() {
   const { sets } = useSets();
   const { packs, loadPacks } = useUserPacks(user);
   const userCubes = useUserCubes(user);
+  const collection = useCollection(user);
   const { saveCube: saveUserCube } = userCubes;
 
   const [isPackLibraryOpen, setIsPackLibraryOpen] = useState(false);
@@ -165,6 +175,9 @@ function App() {
   const [rarities, setRarities] = useState([]);
   const [types, setTypes] = useState([]);
   const [formats, setFormats] = useState([]);
+  const [includeOwned, setIncludeOwned] = useState(false);
+  const [includeUnowned, setIncludeUnowned] = useState(true);
+  const [ownershipWarningNonce, setOwnershipWarningNonce] = useState(0);
   const [isPackBoxOpen, setIsPackBoxOpen] = useState(
     () =>
       typeof window === "undefined" ||
@@ -177,6 +190,7 @@ function App() {
   );
   const [cubeName, setCubeName] = useState("Current Jump Cube");
   const [cubeDescription, setCubeDescription] = useState("");
+  const [cubeVisibility, setCubeVisibility] = useState("private");
   const [selectedPacks, setSelectedPacks] = useState([]);
   const [savedCubeId, setSavedCubeId] = useState(null);
   const [cubeSaveStatus, setCubeSaveStatus] = useState("");
@@ -193,6 +207,8 @@ function App() {
     types,
     formats,
     selectedSets,
+    includeOwned,
+    includeUnowned,
   });
   const lastFilterSearchSnapshotRef = useRef(filterSearchSnapshot);
 
@@ -243,13 +259,15 @@ function App() {
     types,
     formats,
     selectedSets,
+    hasCollection: collection.hasCollection,
+    includeOwned,
+    includeUnowned,
     limit: 50,
   });
   const pack = usePackBuilder(user, loadPacks, {
     onPackSaved: syncPackIntoCurrentCube,
     onPackDeleted: removePackFromCurrentCube,
   });
-
   function requireAuth() {
     if (user) return true;
 
@@ -275,6 +293,11 @@ function App() {
   function submitSearch() {
     // Keeps typing separate from committed search so users can edit without
     // firing a new query until submit.
+    if (collection.hasCollection && !includeOwned && !includeUnowned) {
+      setOwnershipWarningNonce((current) => current + 1);
+      return;
+    }
+
     setSearch(searchInput.trim());
   }
 
@@ -339,6 +362,19 @@ function App() {
     removePackFromCurrentCube(packId);
   }
 
+  function movePackInCube(draggedPackId, targetPackId) {
+    if (!draggedPackId || draggedPackId === targetPackId) return;
+    setSelectedPacks((currentPacks) => {
+      const draggedIndex = currentPacks.findIndex((item) => String(item.id) === String(draggedPackId));
+      const targetIndex = currentPacks.findIndex((item) => String(item.id) === String(targetPackId));
+      if (draggedIndex === -1 || targetIndex === -1) return currentPacks;
+      const reordered = [...currentPacks];
+      const [draggedPack] = reordered.splice(draggedIndex, 1);
+      reordered.splice(targetIndex, 0, draggedPack);
+      return reordered;
+    });
+  }
+
   async function openCubePack(packId) {
     // Opening from the cube loads the pack into PackBox; mobile gets a full
     // screen panel swap so the selected pack is immediately visible.
@@ -365,6 +401,7 @@ function App() {
 
     setCubeName("Current Jump Cube");
     setCubeDescription("");
+    setCubeVisibility("private");
     setSelectedPacks([]);
     setSavedCubeId(null);
     setCubeSaveStatus("");
@@ -387,6 +424,7 @@ function App() {
     const currentSnapshot = getCubeSnapshot(
       cubeName,
       cubeDescription,
+      cubeVisibility,
       selectedPacks,
     );
 
@@ -400,6 +438,8 @@ function App() {
       cubeId: savedCubeId,
       name: normalizeTitle(cubeName, "Unnamed Cube"),
       description: sanitizeDescription(cubeDescription),
+      visibility: cubeVisibility,
+      coverImageUrl: getSavedCardImage(selectedPacks[0]?.cards?.at(-1)),
       packs: selectedPacks,
     });
 
@@ -415,6 +455,7 @@ function App() {
     setTimeout(() => setCubeSaveStatus(""), 2000);
   }, [
     cubeDescription,
+    cubeVisibility,
     cubeName,
     savedCubeId,
     saveUserCube,
@@ -432,10 +473,12 @@ function App() {
     setSavedCubeId(cube.id);
     setCubeName(normalizeTitle(cube.name, "Current Jump Cube"));
     setCubeDescription(cube.description || "");
+    setCubeVisibility(cube.visibility === "public" ? "public" : "private");
     setSelectedPacks(cube.packs || []);
     lastSavedCubeSnapshotRef.current = getCubeSnapshot(
       cube.name || "Current Jump Cube",
       cube.description || "",
+      cube.visibility,
       cube.packs || [],
     );
     setIsCubeLibraryOpen(false);
@@ -449,6 +492,7 @@ function App() {
     const currentSnapshot = getCubeSnapshot(
       cubeName,
       cubeDescription,
+      cubeVisibility,
       selectedPacks,
     );
 
@@ -463,7 +507,7 @@ function App() {
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [cubeDescription, cubeName, savedCubeId, saveCurrentCube, selectedPacks]);
+  }, [cubeDescription, cubeName, cubeVisibility, savedCubeId, saveCurrentCube, selectedPacks]);
 
   useEffect(() => {
     // Infinite scroll for the card grid. loadMoreCards is internally guarded
@@ -579,6 +623,7 @@ function App() {
         />
       )}
 
+      {location.pathname === "/" && (
       <nav className="mobilePanelNav" aria-label="Builder panels">
         <button
           type="button"
@@ -606,6 +651,7 @@ function App() {
           Pack
         </button>
       </nav>
+      )}
 
       <Routes>
         <Route
@@ -637,6 +683,12 @@ function App() {
                     sets={sets}
                     selectedSets={selectedSets}
                     setSelectedSets={setSelectedSets}
+                    hasCollection={collection.hasCollection}
+                    includeOwned={includeOwned}
+                    setIncludeOwned={setIncludeOwned}
+                    includeUnowned={includeUnowned}
+                    setIncludeUnowned={setIncludeUnowned}
+                    ownershipWarningNonce={ownershipWarningNonce}
                   />
 
                   {cardsError && (
@@ -658,12 +710,21 @@ function App() {
                         onCardDecrease={pack.decreaseCardQuantity}
                         setIsDraggingCard={setIsDraggingCard}
                         isSelectionDisabled={pack.isPackFull}
+                        ownedQuantities={collection.quantitiesByCardSearchId}
                       />
                       {loadingMoreCards && <p>Loading more cards...</p>}
 
                       {!hasMoreCards && cardList.length > 0 && (
                         <p>No more results.</p>
                       )}
+
+                      {collection.hasCollection &&
+                        !includeOwned &&
+                        !includeUnowned && (
+                          <p className="ownershipFilterMessage" role="status">
+                            Select Owned or Unowned in the Ownership filter.
+                          </p>
+                        )}
                     </>
                   )}
                 </section>
@@ -674,6 +735,9 @@ function App() {
                   setPackDescription={pack.setPackDescription}
                   packArchetypeTags={pack.packArchetypeTags}
                   setPackArchetypeTags={pack.setPackArchetypeTags}
+                  availablePackTags={pack.availablePackTags}
+                  createPackTag={pack.createPackTag}
+                  packTagLimit={pack.packTagLimit}
                   packVisibility={pack.packVisibility}
                   setPackVisibility={pack.setPackVisibility}
                   selectedCards={pack.selectedCards}
@@ -692,6 +756,7 @@ function App() {
                   savedPackId={pack.savedPackId}
                   newPack={startNewPack}
                   saveStatus={pack.saveStatus}
+                  saveErrorMessage={pack.saveErrorMessage}
                   showRenameChoice={pack.showRenameChoice}
                   pendingSaveAction={pack.pendingSaveAction}
                   moveCard={pack.moveCard}
@@ -707,6 +772,8 @@ function App() {
                   setCubeName={setCubeName}
                   cubeDescription={cubeDescription}
                   setCubeDescription={setCubeDescription}
+                  cubeVisibility={cubeVisibility}
+                  setCubeVisibility={setCubeVisibility}
                   selectedPacks={selectedPacks}
                   onOpenCubes={() => {
                     if (!requireAuth()) return;
@@ -714,8 +781,10 @@ function App() {
                   }}
                   onOpenPack={openCubePack}
                   removePackFromCube={removePackFromCube}
+                  movePackInCube={movePackInCube}
                   newCube={newCube}
                   saveStatus={cubeSaveStatus}
+                  saveErrorMessage={userCubes.cubeSaveError}
                   isOpen={isJumpCubeBoxOpen}
                   setIsOpen={setIsJumpCubeBoxOpen}
                   isAuthenticated={Boolean(user)}
@@ -741,6 +810,29 @@ function App() {
                 onDuplicatePack={async (packId) => {
                   if (!requireAuth()) return;
                   await pack.duplicatePack(packId);
+                }}
+                cubePackIds={selectedPacks.map(
+                  (selectedPack) => selectedPack.savedPackId || selectedPack.id,
+                )}
+                onAddPacksToCube={async (packIds) => {
+                  if (!requireAuth()) return;
+
+                  const existingIds = new Set(
+                    selectedPacks.map(
+                      (selectedPack) =>
+                        selectedPack.savedPackId || selectedPack.id,
+                    ),
+                  );
+                  const newPackIds = packIds.filter(
+                    (packId) => !existingIds.has(packId),
+                  );
+                  const packSummaries =
+                    await userCubes.loadPackSummaries(newPackIds);
+
+                  setSelectedPacks((currentPacks) => [
+                    ...currentPacks,
+                    ...packSummaries,
+                  ]);
                 }}
               />
 
@@ -775,6 +867,18 @@ function App() {
 
         <Route path="/auth" element={<AuthPage />} />
         <Route
+          path="/discover"
+          element={
+            <DiscoverPage
+              user={user}
+              onAuthRequired={() => setIsAuthRequiredOpen(true)}
+              onLibraryChanged={async () => {
+                await Promise.all([loadPacks(), userCubes.loadCubes()]);
+              }}
+            />
+          }
+        />
+        <Route
           path="/profile"
           element={
             user ? (
@@ -798,6 +902,21 @@ function App() {
               <SecretManagerPage />
             ) : (
               <Navigate to={user ? "/" : "/auth?mode=signup"} replace />
+            )
+          }
+        />
+        <Route
+          path="/collection"
+          element={
+            user ? (
+              <CollectionPage
+                collectionItems={collection.collectionItems}
+                loadingCollection={collection.loadingCollection}
+                collectionError={collection.collectionError}
+                onCollectionChanged={collection.refreshCollection}
+              />
+            ) : (
+              <Navigate to="/auth?mode=signup" replace />
             )
           }
         />

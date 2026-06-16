@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../utils/supabase";
 import { sanitizeDescription, sanitizeTitle } from "../utils/userText";
+import { hasBlockedContentInFields } from "../utils/contentModeration";
+import { normalizePackTags } from "../utils/packTags";
 
 /*
  * useUserCubes() is the database boundary for cube library operations.
@@ -99,13 +101,37 @@ function buildPackSummary(pack, position = 0, hydratedCards = null) {
     savedPackId: pack.id,
     name: sanitizeTitle(pack.name, "Unnamed Pack"),
     description: sanitizeDescription(pack.description),
-    archetypeTags: pack.archetype_tags || [],
+    archetypeTags: normalizePackTags(
+      pack.packTags || pack.archetype_tags || [],
+    ),
     visibility: pack.visibility || "private",
     cardCount,
     colorIdentity,
     cards,
     position,
   };
+}
+
+async function loadPackTagsByPackId(packIds) {
+  const uniquePackIds = [...new Set((packIds || []).filter(Boolean))];
+
+  if (uniquePackIds.length === 0) return new Map();
+
+  const { data, error } = await supabase
+    .from("pack_tags")
+    .select("pack_id, tag:tags(id, name, normalized_name, color, usage_count)")
+    .in("pack_id", uniquePackIds);
+
+  if (error) {
+    console.error("Error loading cube pack tags:", error);
+    return new Map();
+  }
+
+  return (data || []).reduce((tagsByPackId, row) => {
+    const currentTags = tagsByPackId.get(row.pack_id) || [];
+    tagsByPackId.set(row.pack_id, [...currentTags, row.tag]);
+    return tagsByPackId;
+  }, new Map());
 }
 
 async function hydrateCubePackCards(packCards) {
@@ -159,6 +185,7 @@ async function hydrateCubePackCards(packCards) {
 export function useUserCubes(user) {
   const [cubes, setCubes] = useState([]);
   const [loadingCubes, setLoadingCubes] = useState(false);
+  const [cubeSaveError, setCubeSaveError] = useState("");
 
   const loadCubes = useCallback(async function loadCubes() {
     // Library list only needs cube metadata; individual cube opening hydrates
@@ -190,6 +217,8 @@ export function useUserCubes(user) {
     cubeId,
     name,
     description,
+    visibility = "private",
+    coverImageUrl = null,
     packs,
   }) {
     /*
@@ -198,76 +227,95 @@ export function useUserCubes(user) {
      * packs: Array of selected pack summaries. Each item must have either
      * savedPackId or id pointing at a saved packs row.
      */
-    if (!user?.id || (!cubeId && packs.length === 0)) return null;
-
-    let actualCubeId = cubeId;
-
-    if (!actualCubeId) {
-      const { data: cube, error: cubeError } = await supabase
-        .from("cubes")
-        .insert({
-          name: sanitizeTitle(name, "Unnamed Cube"),
-          description: sanitizeDescription(description),
-          user_id: user.id,
-        })
-        .select()
-        .single();
-
-      if (cubeError) {
-        console.error("Error saving cube:", cubeError);
-        return null;
-      }
-
-      actualCubeId = cube.id;
-    } else {
-      const { error: updateError } = await supabase
-        .from("cubes")
-        .update({
-          name: sanitizeTitle(name, "Unnamed Cube"),
-          description: sanitizeDescription(description),
-        })
-        .eq("id", actualCubeId);
-
-      if (updateError) {
-        console.error("Error updating cube:", updateError);
-        return null;
-      }
-    }
-
-    const { error: deleteError } = await supabase
-      // Replace relationships instead of diffing; position is the array index.
-      .from("cube_packs")
-      .delete()
-      .eq("cube_id", actualCubeId);
-
-    if (deleteError) {
-      console.error("Error clearing cube packs:", deleteError);
+    if (
+      !user?.id ||
+      (!cubeId && packs.length === 0) ||
+      hasBlockedContentInFields(name, description)
+    ) {
       return null;
     }
 
-    const cubePacks = packs
-      .map((pack, index) => ({
-        cube_id: actualCubeId,
-        pack_id: pack.savedPackId || pack.id,
-        position: index,
-      }))
-      .filter((cubePack) => cubePack.pack_id);
+    setCubeSaveError("");
+    const packIds = packs
+      .map((pack) => pack.savedPackId || pack.id)
+      .filter(Boolean);
+    const { data: actualCubeId, error: saveError } = await supabase.rpc(
+      "save_user_cube",
+      {
+        requested_cube_id: cubeId,
+        requested_name: sanitizeTitle(name, "Unnamed Cube"),
+        requested_description: sanitizeDescription(description),
+        requested_visibility: visibility === "public" ? "public" : "private",
+        requested_cover_image_url: coverImageUrl,
+        requested_pack_ids: packIds,
+      },
+    );
 
-    if (cubePacks.length > 0) {
-      const { error: insertError } = await supabase
-        .from("cube_packs")
-        .insert(cubePacks);
-
-      if (insertError) {
-        console.error("Error saving cube packs:", insertError);
-        return null;
-      }
+    if (saveError) {
+      console.error("Error saving cube transaction:", saveError);
+      setCubeSaveError(
+        saveError.code === "42883"
+          ? "Cube saving needs the latest database migration."
+          : saveError.message || "Cube could not be saved.",
+      );
+      return null;
     }
 
     await loadCubes();
 
     return actualCubeId;
   }, [loadCubes, user]);
+
+  async function loadPackSummaries(packIds) {
+    const uniquePackIds = [...new Set((packIds || []).filter(Boolean))];
+
+    if (uniquePackIds.length === 0) return [];
+
+    const { data: packRows, error: packsError } = await supabase
+      .from("packs")
+      .select(
+        `
+          id,
+          name,
+          description,
+          archetype_tags,
+          visibility,
+          cover_image_url,
+          pack_cards (
+            card_search_id,
+            variant_id,
+            quantity,
+            oracle_id,
+            variation_id
+          )
+        `,
+      )
+      .in("id", uniquePackIds);
+
+    if (packsError) {
+      console.error("Error loading packs for cube:", packsError);
+      return [];
+    }
+
+    const packsById = new Map((packRows || []).map((pack) => [pack.id, pack]));
+    const tagsByPackId = await loadPackTagsByPackId(uniquePackIds);
+    const hydratedPacks = await Promise.all(
+      uniquePackIds.map(async (packId, position) => {
+        const pack = packsById.get(packId);
+
+        if (!pack) return null;
+
+        const hydratedCards = await hydrateCubePackCards(pack.pack_cards || []);
+        return buildPackSummary(
+          { ...pack, packTags: tagsByPackId.get(pack.id) },
+          position,
+          hydratedCards,
+        );
+      }),
+    );
+
+    return hydratedPacks.filter(Boolean);
+  }
 
   async function loadCube(cubeId) {
     // Hydrates one cube with its packs and cards for opening in JumpCubeBox.
@@ -311,6 +359,10 @@ export function useUserCubes(user) {
       return null;
     }
 
+    const tagsByPackId = await loadPackTagsByPackId(
+      (cubePacks || []).map((row) => row.packs?.id),
+    );
+
     const hydratedPacks = await Promise.all(
       (cubePacks || [])
         .filter((row) => row.packs)
@@ -319,7 +371,14 @@ export function useUserCubes(user) {
             row.packs.pack_cards || [],
           );
 
-          return buildPackSummary(row.packs, row.position, hydratedCards);
+          return buildPackSummary(
+            {
+              ...row.packs,
+              packTags: tagsByPackId.get(row.packs.id),
+            },
+            row.position,
+            hydratedCards,
+          );
         }),
     );
 
@@ -357,9 +416,11 @@ export function useUserCubes(user) {
   return {
     cubes,
     loadingCubes,
+    cubeSaveError,
     loadCubes,
     saveCube,
     loadCube,
+    loadPackSummaries,
     deleteCube,
   };
 }
