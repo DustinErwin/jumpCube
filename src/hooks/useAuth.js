@@ -151,22 +151,46 @@ export function useAuth() {
       loadAdminStatus(nextUser);
     }
 
-    async function getSession() {
+    async function recoverStoredSession({ clearWhenMissing = true } = {}) {
       // Initial page load: recover an existing session from Supabase storage.
       const { data, error } = await supabase.auth.getSession();
 
       if (error) {
         console.error("Error getting session:", error);
+        if (isCurrent) {
+          setAuthLoading(false);
+        }
+        return;
       }
 
-      applySession(data.session);
+      if (data.session) {
+        const { data: refreshData, error: refreshError } =
+          await supabase.auth.refreshSession();
+
+        if (!isCurrent) return;
+
+        if (refreshError) {
+          console.error("Error refreshing session:", refreshError);
+          applySession(data.session);
+        } else {
+          applySession(refreshData.session || data.session);
+        }
+      } else if (clearWhenMissing) {
+        applySession(null);
+      }
 
       if (isCurrent) {
         setAuthLoading(false);
       }
     }
 
-    getSession();
+    function recoverSessionAfterResume() {
+      if (document.visibilityState === "hidden") return;
+
+      recoverStoredSession({ clearWhenMissing: false });
+    }
+
+    recoverStoredSession();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       // Keeps React state aligned after login, logout, or token refresh.
@@ -175,8 +199,18 @@ export function useAuth() {
       },
     );
 
+    window.addEventListener("focus", recoverSessionAfterResume);
+    window.addEventListener("pageshow", recoverSessionAfterResume);
+    document.addEventListener("visibilitychange", recoverSessionAfterResume);
+
     return () => {
       isCurrent = false;
+      window.removeEventListener("focus", recoverSessionAfterResume);
+      window.removeEventListener("pageshow", recoverSessionAfterResume);
+      document.removeEventListener(
+        "visibilitychange",
+        recoverSessionAfterResume,
+      );
       listener.subscription.unsubscribe();
     };
   }, []);

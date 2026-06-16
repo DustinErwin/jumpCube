@@ -35,6 +35,7 @@ export default function AuthCallbackPage() {
 
   useEffect(() => {
     let isCurrent = true;
+    let isFinishing = false;
 
     async function getRecoveredSession() {
       for (const delay of SESSION_RETRY_DELAYS_MS) {
@@ -78,6 +79,11 @@ export default function AuthCallbackPage() {
     }
 
     async function finishAuth() {
+      if (isFinishing || !isCurrent) return;
+
+      isFinishing = true;
+      setMessage("Finishing sign in...");
+
       const hasCode = new URLSearchParams(window.location.search).has("code");
       const existingSession = await getRecoveredSession();
 
@@ -107,6 +113,7 @@ export default function AuthCallbackPage() {
           setMessage(
             "Sign in is taking too long. Please close this page and try logging in again.",
           );
+          isFinishing = false;
           return;
         }
       }
@@ -117,16 +124,29 @@ export default function AuthCallbackPage() {
         if (isCurrent) {
           setMessage("Could not find your session. Please try logging in again.");
         }
+        isFinishing = false;
         return;
       }
 
       navigate("/", { replace: true });
     }
 
+    function retryAfterResume() {
+      if (document.visibilityState === "hidden") return;
+
+      finishAuth();
+    }
+
     finishAuth();
+    window.addEventListener("focus", retryAfterResume);
+    window.addEventListener("pageshow", retryAfterResume);
+    document.addEventListener("visibilitychange", retryAfterResume);
 
     return () => {
       isCurrent = false;
+      window.removeEventListener("focus", retryAfterResume);
+      window.removeEventListener("pageshow", retryAfterResume);
+      document.removeEventListener("visibilitychange", retryAfterResume);
     };
   }, [navigate]);
 
