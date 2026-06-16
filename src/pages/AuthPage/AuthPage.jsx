@@ -22,8 +22,10 @@ const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,31}$/;
 export default function AuthPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const authRedirectUrl = new URL(import.meta.env.BASE_URL, window.location.origin)
-    .href;
+  const authRedirectUrl = new URL(
+    `${import.meta.env.BASE_URL}auth/callback`,
+    window.location.origin,
+  ).href;
 
   const [mode, setMode] = useState(() =>
     searchParams.get("mode") === "signup" ? "signup" : "login",
@@ -184,18 +186,29 @@ export default function AuthPage() {
     }
 
     const { error } = await supabase.auth.signInWithPassword({
-      email,
+      email: email.trim(),
       password,
     });
 
-    setIsSubmitting(false);
-
     if (error) {
+      setIsSubmitting(false);
       setAuthError(error.message);
       return;
     }
 
-    navigate("/");
+    const { data: sessionData, error: sessionError } =
+      await supabase.auth.getSession();
+
+    setIsSubmitting(false);
+
+    if (sessionError || !sessionData.session) {
+      setAuthError(
+        "Login succeeded, but this browser did not keep the session. Please try again outside private browsing.",
+      );
+      return;
+    }
+
+    navigate("/", { replace: true });
   }
 
   async function signInWithGoogle() {

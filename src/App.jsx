@@ -9,6 +9,7 @@ import { useUserCubes } from "./hooks/useUserCubes";
 import { useCollection } from "./hooks/useCollection";
 import { useSets } from "./hooks/useSets";
 import AuthPage from "./pages/AuthPage/AuthPage";
+import AuthCallbackPage from "./pages/AuthCallbackPage/AuthCallbackPage";
 import ProfilePage from "./pages/ProfilePage/ProfilePage";
 import SecretManagerPage from "./pages/SecretManagerPage/SecretManagerPage";
 import DiscoverPage from "./pages/DiscoverPage/DiscoverPage";
@@ -866,6 +867,7 @@ function App() {
         />
 
         <Route path="/auth" element={<AuthPage />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route
           path="/discover"
           element={

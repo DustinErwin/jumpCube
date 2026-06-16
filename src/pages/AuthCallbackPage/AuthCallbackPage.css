@@ -1,0 +1,17 @@
+.authCallbackPage {
+  min-height: calc(100svh - 64px);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: #f6f2e9;
+  text-align: center;
+}
+
+.authCallbackPage p {
+  margin: 0;
+  padding: 18px 22px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  background: rgba(16, 20, 29, 0.92);
+  font-weight: 800;
+}
