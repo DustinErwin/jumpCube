@@ -42,6 +42,8 @@ const CUBE_CARD_SEARCH_COLUMNS = `
   back_image_url,
   image_uris,
   card_faces,
+  price_usd,
+  price_usd_foil,
   has_back_face
 `;
 const CUBE_CARD_VARIANT_COLUMNS = `

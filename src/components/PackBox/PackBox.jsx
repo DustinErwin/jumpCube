@@ -65,9 +65,16 @@ const MOBILE_REORDER_HOLD_MS = 400;
 const MOBILE_GESTURE_MOVE_TOLERANCE = 8;
 
 function getCardPrice(card) {
-  // Uses normalized price_usd first, with old raw prices fallback.
-  const price = card.price_usd ?? card.prices?.usd ?? 0;
-  const numericPrice = Number(price);
+  // Prefer the normal nonfoil USD price, with legacy/raw JSON fallbacks.
+  const price =
+    card.price_usd ??
+    card.prices?.usd ??
+    card.prices?.price_usd ??
+    card.prices?.nonfoil ??
+    card.price ??
+    0;
+  const numericPrice =
+    typeof price === "string" ? Number(price.replace("$", "")) : Number(price);
 
   return Number.isFinite(numericPrice) ? numericPrice : 0;
 }

@@ -62,6 +62,8 @@ const PACK_CARD_SEARCH_COLUMNS = `
   back_image_url,
   image_uris,
   card_faces,
+  price_usd,
+  price_usd_foil,
   has_back_face
 `;
 const PACK_CARD_VARIANT_COLUMNS = `
