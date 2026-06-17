@@ -315,6 +315,9 @@ export default function JumpCubeBox({
   newCube,
   savedCubeId,
   onShareCube,
+  initialShowStats = false,
+  onStatsClose,
+  onStatsPackOpen,
   saveStatus,
   saveErrorMessage = "",
   isOpen,
@@ -326,7 +329,7 @@ export default function JumpCubeBox({
   const [editingDescription, setEditingDescription] = useState(false);
   const [confirmingDeleteCube, setConfirmingDeleteCube] = useState(false);
   const [pendingRemovePackId, setPendingRemovePackId] = useState(null);
-  const [showCubeStats, setShowCubeStats] = useState(false);
+  const [showCubeStats, setShowCubeStats] = useState(initialShowStats);
   const [visibilityMessage, setVisibilityMessage] = useState("");
   const [shareMessage, setShareMessage] = useState("");
   const visibilityMessageTimeoutRef = useRef(null);
@@ -937,7 +940,14 @@ export default function JumpCubeBox({
             <button
               className="cubeStatsCloseButton"
               type="button"
-              onClick={() => setShowCubeStats(false)}
+              onClick={() => {
+                if (onStatsClose) {
+                  onStatsClose();
+                  return;
+                }
+
+                setShowCubeStats(false);
+              }}
               aria-label="Close cube statistics"
               title="Close cube statistics"
             >
@@ -1094,6 +1104,11 @@ export default function JumpCubeBox({
                         type="button"
                         key={pack.id}
                         onClick={() => {
+                          if (onStatsPackOpen) {
+                            onStatsPackOpen(pack);
+                            return;
+                          }
+
                           setShowCubeStats(false);
                           handlePackClick(pack);
                         }}

@@ -123,6 +123,8 @@ export default function PackBox({
   pendingSaveAction,
   moveCard,
   moveCardToMechanicBucket,
+  initialShowStats = false,
+  onStatsClose,
   isDraggingCard,
   isOpen,
   setIsOpen,
@@ -175,7 +177,7 @@ export default function PackBox({
   const [newTagColor, setNewTagColor] = useState("gray");
   const [tagMessage, setTagMessage] = useState("");
   const [isCreatingTag, setIsCreatingTag] = useState(false);
-  const [showPackStats, setShowPackStats] = useState(false);
+  const [showPackStats, setShowPackStats] = useState(initialShowStats);
   const [visibilityMessage, setVisibilityMessage] = useState("");
   const [shareMessage, setShareMessage] = useState("");
   const visibilityMessageTimeoutRef = useRef(null);
@@ -1354,7 +1356,14 @@ export default function PackBox({
             <button
               className="packStatsCloseButton"
               type="button"
-              onClick={() => setShowPackStats(false)}
+              onClick={() => {
+                if (onStatsClose) {
+                  onStatsClose();
+                  return;
+                }
+
+                setShowPackStats(false);
+              }}
               aria-label="Close pack statistics"
               title="Close pack statistics"
             >
