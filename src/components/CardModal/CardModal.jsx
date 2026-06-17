@@ -175,6 +175,7 @@ export default function CardModal({
   onDecreaseFromPack,
   selectedCards = [],
   isPackFull,
+  readOnly = false,
 }) {
   const versionPickerRef = useRef(null);
   const touchPreviewVersionIdRef = useRef("");
@@ -221,7 +222,7 @@ export default function CardModal({
   useEffect(() => {
     // Load all local printings for the same oracle card so the user can pick a
     // specific version before adding it to the pack.
-    if (!isOpen || !card) return undefined;
+    if (!isOpen || !card || readOnly) return undefined;
 
     let isCurrent = true;
 
@@ -274,7 +275,7 @@ export default function CardModal({
     return () => {
       isCurrent = false;
     };
-  }, [card, isOpen]);
+  }, [card, isOpen, readOnly]);
 
   const selectedCard = useMemo(
     // selectedCardId comes from a select value, so compare ids as strings.
@@ -462,86 +463,88 @@ export default function CardModal({
             <p>{displayedCard.type_line || "Unknown type"}</p>
           </div>
 
-          <div className="cardVersionPicker" ref={versionPickerRef}>
-            <span>Version</span>
-            <button
-              type="button"
-              className="cardVersionPickerButton"
-              onClick={() => {
-                touchPreviewVersionIdRef.current = "";
-                setHoveredVersionId("");
-                setIsVersionPickerOpen((currentIsOpen) => !currentIsOpen);
-              }}
-              disabled={isLoadingVersions}
-              aria-expanded={isVersionPickerOpen}
-              aria-haspopup="listbox"
-            >
-              {getVersionLabel(displayedCard)}
-            </button>
+          {!readOnly && (
+            <div className="cardVersionPicker" ref={versionPickerRef}>
+              <span>Version</span>
+              <button
+                type="button"
+                className="cardVersionPickerButton"
+                onClick={() => {
+                  touchPreviewVersionIdRef.current = "";
+                  setHoveredVersionId("");
+                  setIsVersionPickerOpen((currentIsOpen) => !currentIsOpen);
+                }}
+                disabled={isLoadingVersions}
+                aria-expanded={isVersionPickerOpen}
+                aria-haspopup="listbox"
+              >
+                {getVersionLabel(displayedCard)}
+              </button>
 
-            {isVersionPickerOpen && (
-              <div className="cardVersionMenu">
-                <div className="cardVersionList" role="listbox">
-                  {versions.map((version) => {
-                    const versionId = String(version.id);
-                    const isSelected = versionId === selectedCardId;
-                    const isPreviewed =
-                      !isSelected && versionId === hoveredVersionId;
+              {isVersionPickerOpen && (
+                <div className="cardVersionMenu">
+                  <div className="cardVersionList" role="listbox">
+                    {versions.map((version) => {
+                      const versionId = String(version.id);
+                      const isSelected = versionId === selectedCardId;
+                      const isPreviewed =
+                        !isSelected && versionId === hoveredVersionId;
 
-                    return (
-                      <button
-                        type="button"
-                        key={version.id}
-                        className={`cardVersionOption${
-                          isSelected ? " selected" : ""
-                        }${isPreviewed ? " previewed" : ""}`}
-                        role="option"
-                        aria-selected={isSelected}
-                        onMouseEnter={() => setHoveredVersionId(versionId)}
-                        onFocus={() => setHoveredVersionId(versionId)}
-                        onClick={() => {
-                          const isTouchVersionPicker =
-                            window.matchMedia?.(
-                              "(hover: none), (pointer: coarse)",
-                            )?.matches || false;
+                      return (
+                        <button
+                          type="button"
+                          key={version.id}
+                          className={`cardVersionOption${
+                            isSelected ? " selected" : ""
+                          }${isPreviewed ? " previewed" : ""}`}
+                          role="option"
+                          aria-selected={isSelected}
+                          onMouseEnter={() => setHoveredVersionId(versionId)}
+                          onFocus={() => setHoveredVersionId(versionId)}
+                          onClick={() => {
+                            const isTouchVersionPicker =
+                              window.matchMedia?.(
+                                "(hover: none), (pointer: coarse)",
+                              )?.matches || false;
 
-                          if (
-                            isTouchVersionPicker &&
-                            touchPreviewVersionIdRef.current !== versionId
-                          ) {
-                            touchPreviewVersionIdRef.current = versionId;
-                            setHoveredVersionId(versionId);
-                            return;
-                          }
+                            if (
+                              isTouchVersionPicker &&
+                              touchPreviewVersionIdRef.current !== versionId
+                            ) {
+                              touchPreviewVersionIdRef.current = versionId;
+                              setHoveredVersionId(versionId);
+                              return;
+                            }
 
-                          touchPreviewVersionIdRef.current = "";
-                          setManualSelectedCard({
-                            sourceCardId,
-                            selectedCardId: versionId,
-                          });
-                          setIsVersionPickerOpen(false);
-                          setHoveredVersionId("");
-                        }}
-                      >
-                        <span>{getVersionLabel(version)}</span>
-                      </button>
-                    );
-                  })}
+                            touchPreviewVersionIdRef.current = "";
+                            setManualSelectedCard({
+                              sourceCardId,
+                              selectedCardId: versionId,
+                            });
+                            setIsVersionPickerOpen(false);
+                            setHoveredVersionId("");
+                          }}
+                        >
+                          <span>{getVersionLabel(version)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="cardVersionPreview" aria-hidden="true">
+                    {versionPreviewImage ? (
+                      <img
+                        src={versionPreviewImage}
+                        alt=""
+                      />
+                    ) : (
+                      <span>No image</span>
+                    )}
+                  </div>
                 </div>
-
-                <div className="cardVersionPreview" aria-hidden="true">
-                  {versionPreviewImage ? (
-                    <img
-                      src={versionPreviewImage}
-                      alt=""
-                    />
-                  ) : (
-                    <span>No image</span>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           {versionsError && <p className="cardModalError">{versionsError}</p>}
 
@@ -599,34 +602,36 @@ export default function CardModal({
             <p>{formatArray(legalFormats, "None listed")}</p>
           </div>
 
-          <div className="cardModalActions">
-            <div
-              className="cardModalQuantityControls"
-              aria-label={`${displayedCard.name} pack quantity controls`}
-            >
-              <button
-                type="button"
-                onClick={() => onDecreaseFromPack?.(displayedCard.id)}
-                disabled={selectedQuantity === 0}
-                aria-label={`Remove one ${displayedCard.name} from pack`}
+          {!readOnly && (
+            <div className="cardModalActions">
+              <div
+                className="cardModalQuantityControls"
+                aria-label={`${displayedCard.name} pack quantity controls`}
               >
-                -
-              </button>
+                <button
+                  type="button"
+                  onClick={() => onDecreaseFromPack?.(displayedCard.id)}
+                  disabled={selectedQuantity === 0}
+                  aria-label={`Remove one ${displayedCard.name} from pack`}
+                >
+                  -
+                </button>
 
-              <span aria-label={`${selectedQuantity} in pack`}>
-                {selectedQuantity}
-              </span>
+                <span aria-label={`${selectedQuantity} in pack`}>
+                  {selectedQuantity}
+                </span>
 
-              <button
-                type="button"
-                onClick={() => onAddToPack?.(displayedCard)}
-                disabled={isPackFull}
-                aria-label={`Add one ${displayedCard.name} to pack`}
-              >
-                +
-              </button>
+                <button
+                  type="button"
+                  onClick={() => onAddToPack?.(displayedCard)}
+                  disabled={isPackFull}
+                  aria-label={`Add one ${displayedCard.name} to pack`}
+                >
+                  +
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </section>
 

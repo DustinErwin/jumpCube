@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import PackBox from "../../components/PackBox/PackBox";
 import JumpCubeBox from "../../components/JumpCubeBox/JumpCubeBox";
+import CardModal from "../../components/CardModal/CardModal";
 import {
   loadPublicCube,
   loadPublicPack,
@@ -43,6 +44,7 @@ export default function PublicItemPage({ type }) {
   const navigate = useNavigate();
   const [item, setItem] = useState(null);
   const [activePack, setActivePack] = useState(null);
+  const [modalCard, setModalCard] = useState(null);
   const [loadState, setLoadState] = useState({
     id: null,
     loading: true,
@@ -126,7 +128,7 @@ export default function PublicItemPage({ type }) {
           selectedCards={selectedPack.cards}
           addCard={noop}
           decreaseCardQuantity={noop}
-          onCardOpen={noop}
+          onCardOpen={setModalCard}
           addCurrentPackToCube={noopAsync}
           onOpenPacks={noop}
           deletePack={noopAsync}
@@ -157,6 +159,14 @@ export default function PublicItemPage({ type }) {
           setIsOpen={noop}
           isAuthenticated={false}
           onAuthRequired={noop}
+        />
+        <CardModal
+          key={modalCard?.id || "shared-card-modal"}
+          isOpen={Boolean(modalCard)}
+          card={modalCard}
+          onClose={() => setModalCard(null)}
+          selectedCards={[]}
+          readOnly
         />
       </main>
     );

@@ -5,6 +5,66 @@ function getCardImage(card) {
   return card?.image_url || card?.image_uris?.art_crop || card?.image_uris?.normal || null;
 }
 
+const PUBLIC_CARD_SEARCH_COLUMNS = `
+  id,
+  oracle_id,
+  default_variant_id,
+  default_variant_scryfall_id,
+  name,
+  mana_value,
+  mana_cost,
+  colors,
+  color_identity,
+  type_line,
+  oracle_text,
+  legalities,
+  games,
+  nonfoil,
+  is_token,
+  is_funny,
+  is_variant_printing,
+  is_planechase,
+  image_url,
+  back_image_url,
+  image_uris,
+  card_faces,
+  price_usd,
+  price_usd_foil,
+  has_back_face
+`;
+
+const PUBLIC_CARD_VARIANT_COLUMNS = `
+  id,
+  scryfall_id,
+  oracle_id,
+  name,
+  mana_value,
+  mana_cost,
+  colors,
+  color_identity,
+  type_line,
+  oracle_text,
+  rarity,
+  image_url,
+  back_image_url,
+  image_uris,
+  card_faces,
+  legalities,
+  prices,
+  price_usd,
+  price_usd_foil,
+  games,
+  nonfoil,
+  is_token,
+  is_funny,
+  is_variant_printing,
+  is_planechase,
+  set_name,
+  set_code,
+  collector_number,
+  has_back_face
+`;
+
 async function hydratePublicPacks(packs) {
   const packIds = packs.map((pack) => pack.id);
   const userIds = [...new Set(packs.map((pack) => pack.user_id).filter(Boolean))];
@@ -13,7 +73,7 @@ async function hydratePublicPacks(packs) {
     packIds.length
       ? supabase
           .from("pack_cards")
-          .select("pack_id, card_search_id, variant_id, quantity")
+          .select("pack_id, card_search_id, variant_id, oracle_id, variation_id, quantity, manual_mechanic_bucket")
           .in("pack_id", packIds)
       : Promise.resolve({ data: [], error: null }),
     packIds.length
@@ -34,10 +94,10 @@ async function hydratePublicPacks(packs) {
   const variantIds = [...new Set(cardRows.map((row) => row.variant_id).filter(Boolean))];
   const [searchCardsResult, variantsResult] = await Promise.all([
     cardSearchIds.length
-      ? supabase.from("card_search").select("id, name, image_url, image_uris").in("id", cardSearchIds)
+      ? supabase.from("card_search").select(PUBLIC_CARD_SEARCH_COLUMNS).in("id", cardSearchIds)
       : Promise.resolve({ data: [], error: null }),
     variantIds.length
-      ? supabase.from("card_variants").select("id, name, image_url, image_uris").in("id", variantIds)
+      ? supabase.from("card_variants").select(PUBLIC_CARD_VARIANT_COLUMNS).in("id", variantIds)
       : Promise.resolve({ data: [], error: null }),
   ]);
 
@@ -74,7 +134,10 @@ async function hydratePublicPacks(packs) {
           ...card,
           card_search_id: row.card_search_id,
           variant_id: row.variant_id,
+          oracle_id: row.oracle_id || card.oracle_id || null,
+          variation_id: row.variation_id || card.scryfall_id || null,
           quantity: row.quantity || 1,
+          manualMechanicBucket: row.manual_mechanic_bucket || null,
         };
       }),
     };
