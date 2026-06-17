@@ -119,6 +119,24 @@
   cursor: pointer;
 }
 
+.cubeShareButton {
+  flex-shrink: 0;
+  padding: 0 12px;
+  background: #1f2f2a;
+  color: #b8e7c7;
+  border: 0;
+  cursor: pointer;
+}
+
+.cubeShareButton:hover:not(:disabled) {
+  background: #284336;
+}
+
+.cubeShareButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .cubeDeleteButton:hover {
   background: #4a2020;
 }
@@ -175,6 +193,7 @@
   }
 
   .cubeModalOpen,
+  .cubeShareButton,
   .cubeDeleteButton {
     min-height: 44px;
   }

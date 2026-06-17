@@ -330,6 +330,19 @@
   color: #8ee98e;
 }
 
+.shareMessage {
+  position: absolute;
+  top: 35px;
+  left: 10px;
+  z-index: 4;
+  margin: 0;
+  color: #bce6ff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  pointer-events: none;
+  animation: savePop 0.16s ease;
+}
+
 .packVisibilityToggle + .packActionToolbar {
   display: none;
 }
@@ -395,6 +408,10 @@
 
 .packStatsButton {
   color: #b7f0d0;
+}
+
+.sharePackButton {
+  color: #bce6ff;
 }
 
 .deletePackButton {

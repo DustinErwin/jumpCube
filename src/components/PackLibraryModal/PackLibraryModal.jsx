@@ -27,6 +27,7 @@ export default function PackLibraryModal({
   onOpenPack,
   onDeletePack,
   onDuplicatePack,
+  onSharePack,
   onAddPacksToCube,
   cubePackIds = [],
 }) {
@@ -34,6 +35,7 @@ export default function PackLibraryModal({
   const [packSearch, setPackSearch] = useState("");
   const [selectedPackIds, setSelectedPackIds] = useState([]);
   const [isAddingPacks, setIsAddingPacks] = useState(false);
+  const [copiedPackId, setCopiedPackId] = useState(null);
   const cubePackIdSet = new Set(cubePackIds);
 
   function togglePackSelection(packId) {
@@ -53,6 +55,18 @@ export default function PackLibraryModal({
     await onAddPacksToCube?.(selectedPackIds);
     setIsAddingPacks(false);
     setSelectedPackIds([]);
+  }
+
+  async function sharePack(pack) {
+    if (pack.visibility !== "public") return;
+
+    const copied = await onSharePack?.(pack.id);
+    if (!copied) return;
+
+    setCopiedPackId(pack.id);
+    window.setTimeout(() => {
+      setCopiedPackId((currentId) => (currentId === pack.id ? null : currentId));
+    }, 1800);
   }
 
   const filteredPacks = packs.filter((pack) => {
@@ -162,6 +176,18 @@ export default function PackLibraryModal({
                   onClick={() => onDuplicatePack(pack.id)}
                 >
                   Duplicate
+                </button>
+                <button
+                  className="packShareButton"
+                  onClick={() => sharePack(pack)}
+                  disabled={pack.visibility !== "public"}
+                  title={
+                    pack.visibility === "public"
+                      ? "Copy public pack link"
+                      : "Make this pack public to share it"
+                  }
+                >
+                  {copiedPackId === pack.id ? "Copied" : "Share"}
                 </button>
                 <button
                   className={`packDeleteButton ${

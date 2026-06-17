@@ -16,10 +16,24 @@ export default function CubeLibraryModal({
   cubes,
   onClose,
   onOpenCube,
+  onShareCube,
   onDeleteCube,
 }) {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [cubeSearch, setCubeSearch] = useState("");
+  const [copiedCubeId, setCopiedCubeId] = useState(null);
+
+  async function shareCube(cube) {
+    if (cube.visibility !== "public") return;
+
+    const copied = await onShareCube?.(cube.id);
+    if (!copied) return;
+
+    setCopiedCubeId(cube.id);
+    window.setTimeout(() => {
+      setCopiedCubeId((currentId) => (currentId === cube.id ? null : currentId));
+    }, 1800);
+  }
 
   const filteredCubes = cubes.filter((cube) => {
     // Metadata-only search; loadCube() hydrates packs/cards after selection.
@@ -62,6 +76,19 @@ export default function CubeLibraryModal({
                 >
                   <span>{cube.name}</span>
                   <small>{cube.description || "No description"}</small>
+                </button>
+
+                <button
+                  className="cubeShareButton"
+                  onClick={() => shareCube(cube)}
+                  disabled={cube.visibility !== "public"}
+                  title={
+                    cube.visibility === "public"
+                      ? "Copy public cube link"
+                      : "Make this cube public to share it"
+                  }
+                >
+                  {copiedCubeId === cube.id ? "Copied" : "Share"}
                 </button>
 
                 <button

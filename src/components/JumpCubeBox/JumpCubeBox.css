@@ -223,6 +223,10 @@
   color: #b7f0d0;
 }
 
+.shareCubeButton {
+  color: #bce6ff;
+}
+
 .cubeVisibilitySwitch {
   position: absolute;
   right: 10px;
@@ -269,6 +273,19 @@
 
 .cubeVisibilityToggle {
   display: none;
+}
+
+.shareMessage {
+  position: absolute;
+  top: 35px;
+  left: 10px;
+  z-index: 4;
+  margin: 0;
+  color: #bce6ff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  pointer-events: none;
+  animation: savePop 0.16s ease;
 }
 
 .confirmDeleteCubeButton {

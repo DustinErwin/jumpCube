@@ -106,6 +106,7 @@ export default function PackBox({
   onOpenPacks,
   deletePack,
   savedPackId,
+  onSharePack,
   packDescription,
   setPackDescription,
   packArchetypeTags = [],
@@ -176,7 +177,9 @@ export default function PackBox({
   const [isCreatingTag, setIsCreatingTag] = useState(false);
   const [showPackStats, setShowPackStats] = useState(false);
   const [visibilityMessage, setVisibilityMessage] = useState("");
+  const [shareMessage, setShareMessage] = useState("");
   const visibilityMessageTimeoutRef = useRef(null);
+  const shareMessageTimeoutRef = useRef(null);
   // const [showManaCurve, setShowManaCurve] = useState(false);
 
   function clearSwipeRemoveTimer() {
@@ -698,8 +701,28 @@ export default function PackBox({
       if (visibilityMessageTimeoutRef.current) {
         window.clearTimeout(visibilityMessageTimeoutRef.current);
       }
+
+      if (shareMessageTimeoutRef.current) {
+        window.clearTimeout(shareMessageTimeoutRef.current);
+      }
     };
   }, []);
+
+  async function shareCurrentPack() {
+    if (!savedPackId || packVisibility !== "public") return;
+
+    const copied = await onSharePack?.(savedPackId);
+    setShareMessage(copied ? "Link copied" : "Copy link opened");
+
+    if (shareMessageTimeoutRef.current) {
+      window.clearTimeout(shareMessageTimeoutRef.current);
+    }
+
+    shareMessageTimeoutRef.current = window.setTimeout(() => {
+      setShareMessage("");
+      shareMessageTimeoutRef.current = null;
+    }, 1800);
+  }
 
   useEffect(() => {
     if (!confirmingDeletePack) return undefined;
@@ -925,6 +948,36 @@ export default function PackBox({
         >
           <span aria-hidden="true">%</span>
         </button>
+
+        <button
+          className="packActionButton sharePackButton"
+          type="button"
+          onClick={() => {
+            setConfirmingDeletePack(false);
+            shareCurrentPack();
+          }}
+          disabled={!savedPackId || packVisibility !== "public"}
+          title={
+            savedPackId && packVisibility === "public"
+              ? "Copy public pack link"
+              : "Save this pack as public before sharing"
+          }
+          aria-label={
+            savedPackId && packVisibility === "public"
+              ? "Copy public pack link"
+              : "Save this pack as public before sharing"
+          }
+        >
+          <svg
+            aria-hidden="true"
+            className="actionIcon"
+            viewBox="0 0 24 24"
+            focusable="false"
+          >
+            <path d="M6 5h7v2H8v9h9v-5h2v7H6z" />
+            <path d="M14 4h6v6h-2V7.4l-6.3 6.3-1.4-1.4L16.6 6H14z" />
+          </svg>
+        </button>
       </div>
 
       {visibilityMessage && (
@@ -936,6 +989,8 @@ export default function PackBox({
           {visibilityMessage}
         </p>
       )}
+
+      {shareMessage && <p className="shareMessage">{shareMessage}</p>}
 
       {confirmingDeletePack && (
         <button

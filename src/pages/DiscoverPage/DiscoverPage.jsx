@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { getPackTagStyle } from "../../utils/packTags";
 import {
   copyPublicCube,
@@ -38,13 +39,18 @@ function DiscoveryCard({ item, onCopy, copyState }) {
           </div>
         )}
 
-        <button type="button" onClick={() => onCopy(item)} disabled={copyState === "copying"}>
-          {copyState === "copying"
-            ? "Adding..."
-            : copyState === "copied"
-              ? "Added to Library"
-              : `Add ${isCube ? "Cube" : "Pack"} Copy`}
-        </button>
+        <div className="discoveryActions">
+          <Link to={`/${isCube ? "cubes" : "packs"}/${item.id}`}>
+            View Stats
+          </Link>
+          <button type="button" onClick={() => onCopy(item)} disabled={copyState === "copying"}>
+            {copyState === "copying"
+              ? "Adding..."
+              : copyState === "copied"
+                ? "Added"
+                : "Copy"}
+          </button>
+        </div>
       </div>
     </article>
   );
@@ -103,6 +109,12 @@ export default function DiscoverPage({ user, onAuthRequired, onLibraryChanged })
       onAuthRequired();
       return;
     }
+
+    const shouldCopy = window.confirm(
+      `Add a private copy of this ${item.type} to your saved library? You can edit your copy without changing the public original.`,
+    );
+
+    if (!shouldCopy) return;
 
     setCopyStates((current) => ({ ...current, [item.id]: "copying" }));
     setError("");

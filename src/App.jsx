@@ -13,6 +13,7 @@ import AuthCallbackPage from "./pages/AuthCallbackPage/AuthCallbackPage";
 import ProfilePage from "./pages/ProfilePage/ProfilePage";
 import SecretManagerPage from "./pages/SecretManagerPage/SecretManagerPage";
 import DiscoverPage from "./pages/DiscoverPage/DiscoverPage";
+import PublicItemPage from "./pages/PublicItemPage/PublicItemPage";
 import CollectionPage from "./pages/CollectionPage/CollectionPage";
 import SearchBox from "./components/SearchBox/SearchBox";
 import FilterBox from "./components/FilterBox/FilterBox";
@@ -289,6 +290,21 @@ function App() {
     setIsPackLibraryOpen(false);
     setIsCubeLibraryOpen(false);
     pack.newPack();
+  }
+
+  async function copyShareLink(kind, id) {
+    if (!id || typeof window === "undefined") return false;
+
+    const url = new URL(`/${kind}s/${id}`, window.location.origin);
+
+    try {
+      await window.navigator.clipboard.writeText(url.toString());
+      return true;
+    } catch (error) {
+      console.error("Error copying share link:", error);
+      window.prompt("Copy this share link", url.toString());
+      return false;
+    }
   }
 
   function submitSearch() {
@@ -755,6 +771,7 @@ function App() {
                     await pack.deletePack(packId);
                   }}
                   savedPackId={pack.savedPackId}
+                  onSharePack={(packId) => copyShareLink("pack", packId)}
                   newPack={startNewPack}
                   saveStatus={pack.saveStatus}
                   saveErrorMessage={pack.saveErrorMessage}
@@ -784,6 +801,8 @@ function App() {
                   removePackFromCube={removePackFromCube}
                   movePackInCube={movePackInCube}
                   newCube={newCube}
+                  savedCubeId={savedCubeId}
+                  onShareCube={(cubeId) => copyShareLink("cube", cubeId)}
                   saveStatus={cubeSaveStatus}
                   saveErrorMessage={userCubes.cubeSaveError}
                   isOpen={isJumpCubeBoxOpen}
@@ -812,6 +831,7 @@ function App() {
                   if (!requireAuth()) return;
                   await pack.duplicatePack(packId);
                 }}
+                onSharePack={(packId) => copyShareLink("pack", packId)}
                 cubePackIds={selectedPacks.map(
                   (selectedPack) => selectedPack.savedPackId || selectedPack.id,
                 )}
@@ -842,6 +862,7 @@ function App() {
                 cubes={userCubes.cubes}
                 onClose={() => setIsCubeLibraryOpen(false)}
                 onOpenCube={openCube}
+                onShareCube={(cubeId) => copyShareLink("cube", cubeId)}
                 onDeleteCube={async (cubeId) => {
                   if (!requireAuth()) return;
                   await userCubes.deleteCube(cubeId);
@@ -872,6 +893,32 @@ function App() {
           path="/discover"
           element={
             <DiscoverPage
+              user={user}
+              onAuthRequired={() => setIsAuthRequiredOpen(true)}
+              onLibraryChanged={async () => {
+                await Promise.all([loadPacks(), userCubes.loadCubes()]);
+              }}
+            />
+          }
+        />
+        <Route
+          path="/packs/:id"
+          element={
+            <PublicItemPage
+              type="pack"
+              user={user}
+              onAuthRequired={() => setIsAuthRequiredOpen(true)}
+              onLibraryChanged={async () => {
+                await Promise.all([loadPacks(), userCubes.loadCubes()]);
+              }}
+            />
+          }
+        />
+        <Route
+          path="/cubes/:id"
+          element={
+            <PublicItemPage
+              type="cube"
               user={user}
               onAuthRequired={() => setIsAuthRequiredOpen(true)}
               onLibraryChanged={async () => {

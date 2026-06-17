@@ -228,23 +228,40 @@
   font-weight: 750;
 }
 
-.discoveryCardContent > button {
-  width: 100%;
-  min-height: 42px;
+.discoveryActions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
   margin-top: auto;
+}
+
+.discoveryActions a,
+.discoveryActions button {
+  min-height: 42px;
+  padding: 0 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: #ece5d0;
   color: #191a1c;
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   cursor: pointer;
+  font: inherit;
   font-weight: 850;
+  text-decoration: none;
 }
 
-.discoveryCard.cube .discoveryCardContent > button {
+.discoveryActions button {
+  min-width: 72px;
+}
+
+.discoveryCard.cube .discoveryActions a,
+.discoveryCard.cube .discoveryActions button {
   background: #bca8ea;
 }
 
-.discoveryCardContent > button:disabled {
+.discoveryActions button:disabled {
   opacity: 0.7;
   cursor: default;
 }

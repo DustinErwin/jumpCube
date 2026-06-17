@@ -44,6 +44,8 @@ export const PACK_ARCHETYPE_TAGS = [
 const PACK_CARD_SEARCH_COLUMNS = `
   id,
   oracle_id,
+  default_variant_id,
+  default_variant_scryfall_id,
   name,
   mana_value,
   mana_cost,
@@ -83,6 +85,7 @@ const PACK_CARD_VARIANT_COLUMNS = `
   image_uris,
   card_faces,
   legalities,
+  prices,
   price_usd,
   price_usd_foil,
   games,
@@ -182,14 +185,23 @@ function getPackCoverImage(cards) {
 }
 
 async function hydratePackCardRows(packCards) {
+  const getCardSearchId = (row) => row.card_search_id || row.card_id || null;
   const cardSearchIds = [
-    ...new Set(packCards.map((row) => row.card_search_id).filter(Boolean)),
+    ...new Set(packCards.map(getCardSearchId).filter(Boolean)),
   ];
   const variantIds = [
     ...new Set(packCards.map((row) => row.variant_id).filter(Boolean)),
   ];
+  const variantScryfallIds = [
+    ...new Set(
+      packCards
+        .filter((row) => !row.variant_id)
+        .map((row) => row.variation_id)
+        .filter(Boolean),
+    ),
+  ];
 
-  const [searchResult, variantResult] = await Promise.all([
+  const [searchResult, variantResult, variantByScryfallResult] = await Promise.all([
     cardSearchIds.length > 0
       ? supabase
           .from("card_search")
@@ -202,6 +214,12 @@ async function hydratePackCardRows(packCards) {
           .select(PACK_CARD_VARIANT_COLUMNS)
           .in("id", variantIds)
       : Promise.resolve({ data: [], error: null }),
+    variantScryfallIds.length > 0
+      ? supabase
+          .from("card_variants")
+          .select(PACK_CARD_VARIANT_COLUMNS)
+          .in("scryfall_id", variantScryfallIds)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   if (searchResult.error) {
@@ -212,23 +230,65 @@ async function hydratePackCardRows(packCards) {
     throw variantResult.error;
   }
 
+  if (variantByScryfallResult.error) {
+    throw variantByScryfallResult.error;
+  }
+
   const searchById = new Map((searchResult.data || []).map((card) => [card.id, card]));
   const variantById = new Map(
     (variantResult.data || []).map((variant) => [variant.id, variant]),
   );
+  const variantByScryfallId = new Map(
+    (variantByScryfallResult.data || []).map((variant) => [
+      variant.scryfall_id,
+      variant,
+    ]),
+  );
+  (variantByScryfallResult.data || []).forEach((variant) => {
+    variantById.set(variant.id, variant);
+  });
+  const fallbackVariantIds = [
+    ...new Set(
+      (packCards || [])
+        .filter((row) => !row.variant_id)
+        .map((row) => searchById.get(getCardSearchId(row))?.default_variant_id)
+        .filter(Boolean),
+    ),
+  ];
+
+  if (fallbackVariantIds.length > 0) {
+    const { data, error } = await supabase
+      .from("card_variants")
+      .select(PACK_CARD_VARIANT_COLUMNS)
+      .in("id", fallbackVariantIds);
+
+    if (error) throw error;
+
+    (data || []).forEach((variant) => {
+      variantById.set(variant.id, variant);
+    });
+  }
 
   return (packCards || []).map((row) => {
-    const searchCard = searchById.get(row.card_search_id);
-    const variantCard = variantById.get(row.variant_id);
+    const cardSearchId = getCardSearchId(row);
+    const searchCard = searchById.get(cardSearchId);
+    const fallbackVariantId = searchCard?.default_variant_id || null;
+    const variantCard =
+      variantById.get(row.variant_id) ||
+      variantByScryfallId.get(row.variation_id) ||
+      variantById.get(fallbackVariantId);
     return {
       ...(searchCard || {}),
       ...(variantCard || {}),
       id: row.variant_id || variantCard?.id || searchCard?.id,
-      card_search_id: row.card_search_id || searchCard?.id || null,
-      variant_id: row.variant_id || variantCard?.id || null,
-      oracle_id: row.oracle_id || searchCard?.oracle_id || null,
+      card_search_id: cardSearchId || searchCard?.id || null,
+      variant_id: row.variant_id || variantCard?.id || fallbackVariantId,
+      oracle_id: row.oracle_id || searchCard?.oracle_id || variantCard?.oracle_id || null,
       variation_id: row.variation_id || variantCard?.scryfall_id || null,
-      scryfall_id: variantCard?.scryfall_id || null,
+      scryfall_id:
+        variantCard?.scryfall_id ||
+        searchCard?.default_variant_scryfall_id ||
+        null,
       quantity: row.quantity,
       manualMechanicBucket: row.manual_mechanic_bucket || null,
     };
@@ -369,6 +429,7 @@ export function usePackBuilder(user, refreshPacks, {
       .from("pack_cards")
       .select(
       `
+      card_id,
       card_search_id,
       variant_id,
       quantity,

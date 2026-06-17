@@ -67,6 +67,16 @@ async function hydratePublicPacks(packs) {
       cardCount: packCards.reduce((sum, row) => sum + (row.quantity || 1), 0),
       imageUrl: pack.cover_image_url || getCardImage(topCard),
       tags: normalizePackTags(tagsByPack.get(pack.id) || pack.archetype_tags || []),
+      cards: packCards.map((row) => {
+        const card = variants.get(row.variant_id) || searchCards.get(row.card_search_id) || {};
+
+        return {
+          ...card,
+          card_search_id: row.card_search_id,
+          variant_id: row.variant_id,
+          quantity: row.quantity || 1,
+        };
+      }),
     };
   });
 }
@@ -144,6 +154,62 @@ export async function loadPublicLibrary() {
   });
 
   return { packs, cubes };
+}
+
+export async function loadPublicPack(packId) {
+  const { data: pack, error } = await supabase
+    .from("packs")
+    .select("id, user_id, name, description, visibility, archetype_tags, cover_image_url, created_at")
+    .eq("id", packId)
+    .single();
+
+  if (error) throw error;
+
+  const [hydratedPack] = await hydratePublicPacks([pack]);
+  return hydratedPack || null;
+}
+
+export async function loadPublicCube(cubeId) {
+  const { data: cube, error } = await supabase
+    .from("cubes")
+    .select("id, user_id, name, description, visibility, cover_image_url, created_at")
+    .eq("id", cubeId)
+    .single();
+
+  if (error) throw error;
+
+  const { data: cubePackRows, error: cubePackError } = await supabase
+    .from("cube_packs")
+    .select("pack_id, position")
+    .eq("cube_id", cubeId)
+    .order("position", { ascending: true });
+
+  if (cubePackError) throw cubePackError;
+
+  const packIds = (cubePackRows || []).map((row) => row.pack_id);
+  const { data: packRows, error: packsError } = packIds.length
+    ? await supabase
+        .from("packs")
+        .select("id, user_id, name, description, visibility, archetype_tags, cover_image_url, created_at")
+        .in("id", packIds)
+    : { data: [], error: null };
+
+  if (packsError) throw packsError;
+
+  const hydratedPacks = await hydratePublicPacks(packRows || []);
+  const packsById = new Map(hydratedPacks.map((pack) => [pack.id, pack]));
+  const { data: owners } = cube.user_id
+    ? await supabase.rpc("get_public_usernames", { requested_user_ids: [cube.user_id] })
+    : { data: [] };
+
+  return {
+    ...cube,
+    type: "cube",
+    ownerName: owners?.[0]?.username || "Jump Cube user",
+    packCount: packIds.length,
+    packs: packIds.map((packId) => packsById.get(packId)).filter(Boolean),
+    imageUrl: cube.cover_image_url || hydratedPacks[0]?.imageUrl || null,
+  };
 }
 
 export async function copyPublicPack(packId, userId) {
