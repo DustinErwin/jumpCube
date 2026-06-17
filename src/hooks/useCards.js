@@ -616,7 +616,9 @@ export function useCards({
         formats.forEach((format) => {
           const normalizedFormat = format.toLowerCase();
 
-          query = query.eq(`legalities->>${normalizedFormat}`, "legal");
+          query = query.contains("legalities", {
+            [normalizedFormat]: "legal",
+          });
         });
       }
 
