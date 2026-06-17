@@ -867,8 +867,8 @@
 .packStatsCard {
   position: relative;
   width: 100%;
-  height: 52px;
-  margin-bottom: -22px;
+  height: 82px;
+  margin-bottom: -34px;
 
   border-radius: 6px;
   background: #202020;
@@ -1619,8 +1619,8 @@
   }
 
   .packStatsCard {
-    height: 50px;
-    margin-bottom: -20px;
+    height: 78px;
+    margin-bottom: -30px;
   }
 
   .packStatsVisualArea {
