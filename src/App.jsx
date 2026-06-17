@@ -295,7 +295,8 @@ function App() {
   async function copyShareLink(kind, id) {
     if (!id || typeof window === "undefined") return false;
 
-    const url = new URL(`/${kind}s/${id}`, window.location.origin);
+    const basePath = import.meta.env.BASE_URL || "/";
+    const url = new URL(`${basePath}${kind}s/${id}`, window.location.origin);
 
     try {
       await window.navigator.clipboard.writeText(url.toString());
