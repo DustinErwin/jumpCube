@@ -4,9 +4,14 @@ import PackBox from "../../components/PackBox/PackBox";
 import JumpCubeBox from "../../components/JumpCubeBox/JumpCubeBox";
 import CardModal from "../../components/CardModal/CardModal";
 import {
+  copyPublicPack,
   loadPublicCube,
   loadPublicPack,
 } from "../../services/discoveryService";
+import {
+  savePendingOpenPack,
+  savePendingSharedPackCopy,
+} from "../../utils/sharedPackCopy";
 import "./PublicItemPage.css";
 
 const noop = () => {};
@@ -39,12 +44,13 @@ function normalizePackForStats(pack) {
   };
 }
 
-export default function PublicItemPage({ type }) {
+export default function PublicItemPage({ type, user, onLibraryChanged }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [item, setItem] = useState(null);
   const [activePack, setActivePack] = useState(null);
   const [modalCard, setModalCard] = useState(null);
+  const [copyStatus, setCopyStatus] = useState("");
   const [loadState, setLoadState] = useState({
     id: null,
     loading: true,
@@ -95,6 +101,34 @@ export default function PublicItemPage({ type }) {
   const isPageLoading = loadState.loading || loadState.id !== id;
   const currentError = loadState.id === id ? loadState.error : "";
 
+  async function copySelectedPackToAccount(packId) {
+    if (!packId || copyStatus === "copying") return;
+
+    if (!user?.id) {
+      savePendingSharedPackCopy(packId);
+      navigate("/auth?mode=signup");
+      return;
+    }
+
+    setCopyStatus("copying");
+
+    try {
+      const copiedPackId = await copyPublicPack(packId, user.id);
+
+      if (!copiedPackId) return;
+
+      savePendingOpenPack(copiedPackId);
+      await onLibraryChanged?.();
+      navigate("/");
+    } catch (error) {
+      console.error("Error copying shared pack:", error);
+      setCopyStatus("error");
+      return;
+    }
+
+    setCopyStatus("");
+  }
+
   if (isPageLoading) {
     return (
       <main className="publicStatsRoute">
@@ -121,6 +155,24 @@ export default function PublicItemPage({ type }) {
   if (selectedPack) {
     return (
       <main className="publicStatsRoute">
+        {!modalCard && (
+          <div className="publicStatsActionBar">
+            <button
+              type="button"
+              onClick={() => copySelectedPackToAccount(selectedPack.id)}
+              disabled={copyStatus === "copying"}
+            >
+              {copyStatus === "copying"
+                ? "Copying..."
+                : user
+                  ? "Copy Pack to My Account"
+                  : "Sign Up to Copy Pack"}
+            </button>
+            {copyStatus === "error" && (
+              <span role="alert">Pack could not be copied.</span>
+            )}
+          </div>
+        )}
         <PackBox
           key={selectedPack.id}
           packName={selectedPack.name}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Navigate, Routes, Route, useLocation } from "react-router-dom";
+import { Navigate, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "./utils/supabase";
 import { useCards } from "./hooks/useCards";
 import { usePackBuilder } from "./hooks/usePackBuilder";
@@ -30,6 +30,11 @@ import {
   sanitizeDescription,
   sanitizeTitle,
 } from "./utils/userText";
+import { copyPublicPack } from "./services/discoveryService";
+import {
+  takePendingOpenPack,
+  takePendingSharedPackCopy,
+} from "./utils/sharedPackCopy";
 
 import "./App.css";
 
@@ -140,6 +145,7 @@ function getSavedCardImage(card) {
 
 function App() {
   const location = useLocation();
+  const navigate = useNavigate();
   /*
    * Hook outputs:
    * - useAuth(): { user, session, authLoading }
@@ -201,6 +207,7 @@ function App() {
     FALLBACK_FROG_BACKGROUND,
   );
   const lastSavedCubeSnapshotRef = useRef(null);
+  const pendingSharedPackCopyRef = useRef(false);
   const filterSearchSnapshot = JSON.stringify({
     manaValues,
     colors,
@@ -270,6 +277,46 @@ function App() {
     onPackSaved: syncPackIntoCurrentCube,
     onPackDeleted: removePackFromCurrentCube,
   });
+
+  useEffect(() => {
+    if (!user?.id || pendingSharedPackCopyRef.current) return;
+
+    async function finishPendingSharedPackCopy() {
+      pendingSharedPackCopyRef.current = true;
+
+      try {
+        const pendingOpenPackId = takePendingOpenPack();
+
+        if (pendingOpenPackId) {
+          await pack.loadPack(pendingOpenPackId);
+          await loadPacks();
+          setIsPackBoxOpen(true);
+          setIsJumpCubeBoxOpen(false);
+          navigate("/", { replace: true });
+          return;
+        }
+
+        const sourcePackId = takePendingSharedPackCopy();
+
+        if (!sourcePackId) return;
+
+        const copiedPackId = await copyPublicPack(sourcePackId, user.id);
+
+        if (!copiedPackId) return;
+
+        await Promise.all([pack.loadPack(copiedPackId), loadPacks()]);
+        setIsPackBoxOpen(true);
+        setIsJumpCubeBoxOpen(false);
+        navigate("/", { replace: true });
+      } catch (error) {
+        console.error("Error finishing pending shared pack copy:", error);
+      } finally {
+        pendingSharedPackCopyRef.current = false;
+      }
+    }
+
+    finishPendingSharedPackCopy();
+  }, [loadPacks, navigate, pack, user]);
   function requireAuth() {
     if (user) return true;
 
