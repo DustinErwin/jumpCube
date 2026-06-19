@@ -35,6 +35,7 @@ import {
   takePendingOpenPack,
   takePendingSharedPackCopy,
 } from "./utils/sharedPackCopy";
+import { getStoredBasicLandSetCode } from "./utils/basicLandPreferences";
 
 import "./App.css";
 
@@ -172,6 +173,8 @@ function App() {
   const [isPackLibraryOpen, setIsPackLibraryOpen] = useState(false);
   const [isCubeLibraryOpen, setIsCubeLibraryOpen] = useState(false);
   const [isAuthRequiredOpen, setIsAuthRequiredOpen] = useState(false);
+  const basicLandSetCode =
+    profile?.basic_land_set_code || getStoredBasicLandSetCode();
 
   const [isDraggingCard, setIsDraggingCard] = useState(false);
   const [modalCard, setModalCard] = useState(null);
@@ -271,6 +274,7 @@ function App() {
     hasCollection: collection.hasCollection,
     includeOwned,
     includeUnowned,
+    basicLandSetCode,
     limit: 50,
   });
   const pack = usePackBuilder(user, loadPacks, {
@@ -984,6 +988,7 @@ function App() {
                 user={user}
                 profile={profile}
                 profileLoading={profileLoading}
+                sets={sets}
                 onProfileSaved={setProfile}
                 onLogout={handleLogout}
               />

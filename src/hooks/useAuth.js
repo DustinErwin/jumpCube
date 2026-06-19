@@ -1,8 +1,39 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../utils/supabase";
+import {
+  getStoredBasicLandSetCode,
+  setStoredBasicLandSetCode,
+} from "../utils/basicLandPreferences";
 
 const PENDING_SIGNUP_USERNAME_KEY = "jumpCubePendingSignupUsername";
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,31}$/;
+const PROFILE_COLUMNS = "id, username, basic_land_set_code";
+const FALLBACK_PROFILE_COLUMNS = "id, username";
+
+function isMissingBasicLandSetColumnError(error) {
+  return (
+    error?.code === "42703" ||
+    String(error?.message || "").includes("basic_land_set_code")
+  );
+}
+
+function applyStoredProfileSettings(profile) {
+  if (!profile) return profile;
+
+  if (profile.basic_land_set_code) {
+    setStoredBasicLandSetCode(profile.basic_land_set_code);
+    return profile;
+  }
+
+  const storedBasicLandSetCode = getStoredBasicLandSetCode();
+
+  if (!storedBasicLandSetCode) return profile;
+
+  return {
+    ...profile,
+    basic_land_set_code: storedBasicLandSetCode,
+  };
+}
 
 /*
  * useAuth() centralizes Supabase auth state.
@@ -74,16 +105,29 @@ export function useAuth() {
             onConflict: "id",
           },
         )
-        .select("id, username")
+        .select(PROFILE_COLUMNS)
         .single();
 
       if (error) {
+        if (isMissingBasicLandSetColumnError(error)) {
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from("profiles")
+            .select(FALLBACK_PROFILE_COLUMNS)
+            .eq("id", authUser.id)
+            .maybeSingle();
+
+          if (!fallbackError) {
+            window.localStorage.removeItem(PENDING_SIGNUP_USERNAME_KEY);
+            return applyStoredProfileSettings(fallbackData);
+          }
+        }
+
         console.error("Error saving pending username:", error);
         return currentProfile;
       }
 
       window.localStorage.removeItem(PENDING_SIGNUP_USERNAME_KEY);
-      return data;
+      return applyStoredProfileSettings(data);
     }
 
     async function loadProfile(authUser) {
@@ -95,11 +139,22 @@ export function useAuth() {
         return;
       }
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from("profiles")
-        .select("id, username")
+        .select(PROFILE_COLUMNS)
         .eq("id", authUser.id)
         .maybeSingle();
+
+      if (error && isMissingBasicLandSetColumnError(error)) {
+        const fallbackResult = await supabase
+          .from("profiles")
+          .select(FALLBACK_PROFILE_COLUMNS)
+          .eq("id", authUser.id)
+          .maybeSingle();
+
+        data = fallbackResult.data;
+        error = fallbackResult.error;
+      }
 
       if (!isCurrent) return;
 
@@ -110,11 +165,14 @@ export function useAuth() {
         return;
       }
 
-      const nextProfile = await claimPendingSignupUsername(authUser, data);
+      const nextProfile = await claimPendingSignupUsername(
+        authUser,
+        applyStoredProfileSettings(data),
+      );
 
       if (!isCurrent) return;
 
-      setProfile(nextProfile);
+      setProfile(applyStoredProfileSettings(nextProfile));
       setProfileLoading(false);
     }
 

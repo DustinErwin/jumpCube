@@ -51,14 +51,40 @@
   border-radius: 8px;
 }
 
-.profileForm input:disabled {
+.profileForm select {
+  min-height: 43px;
+  padding: 10px 12px;
+  background: #1d2127;
+  color: white;
+  border: 1px solid #414851;
+  border-radius: 8px;
+}
+
+.profileForm input:disabled,
+.profileForm select:disabled {
   color: #aeb6c1;
   opacity: 0.75;
 }
 
-.profileForm input:focus {
+.profileForm input:focus,
+.profileForm select:focus {
   outline: 2px solid #8bb8ff;
   outline-offset: 2px;
+}
+
+.profileSettingsSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px solid #343941;
+}
+
+.profileSettingsSection h2 {
+  margin: 0;
+  color: #f4f6f8;
+  font-size: 1rem;
 }
 
 .profileForm button {
