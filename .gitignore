@@ -16,6 +16,7 @@ dist-ssr
 # Editor directories and files
 scripts/
 *.sql
+!supabase/migrations/202606230001_add_card_search_is_legal.sql
 .vscode/*
 !.vscode/extensions.json
 .idea
