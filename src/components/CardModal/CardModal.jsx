@@ -374,8 +374,9 @@ export default function CardModal({
   const expandedImage = getExpandedImage(displayedCard, isFlipped);
   const legalFormats = getLegalFormats(displayedCard.legalities);
   const selectedQuantity =
-    selectedCards.find((selectedPackCard) => selectedPackCard.id === displayedCard.id)
-      ?.quantity || 0;
+    selectedCards.find(
+      (selectedPackCard) => selectedPackCard.id === displayedCard.id,
+    )?.quantity || 0;
 
   return (
     <div className="cardModalOverlay" onClick={onClose}>

@@ -46,6 +46,7 @@ const CUBE_CARD_SEARCH_COLUMNS = `
   card_faces,
   price_usd,
   price_usd_foil,
+  price_usd_etched,
   has_back_face
 `;
 const CUBE_CARD_VARIANT_COLUMNS = `
@@ -68,6 +69,7 @@ const CUBE_CARD_VARIANT_COLUMNS = `
   prices,
   price_usd,
   price_usd_foil,
+  price_usd_etched,
   games,
   nonfoil,
   is_token,
@@ -114,6 +116,18 @@ function buildPackSummary(pack, position = 0, hydratedCards = null) {
     colorIdentity,
     cards,
     position,
+  };
+}
+
+function mergeHydratedCard(searchCard, variantCard) {
+  return {
+    ...(searchCard || {}),
+    ...(variantCard || {}),
+    price_usd: variantCard?.price_usd ?? searchCard?.price_usd ?? null,
+    price_usd_foil:
+      variantCard?.price_usd_foil ?? searchCard?.price_usd_foil ?? null,
+    price_usd_etched:
+      variantCard?.price_usd_etched ?? searchCard?.price_usd_etched ?? null,
   };
 }
 
@@ -225,8 +239,7 @@ async function hydrateCubePackCards(packCards) {
       variantByScryfallId.get(row.variation_id) ||
       variantById.get(fallbackVariantId);
     return {
-      ...(searchCard || {}),
-      ...(variantCard || {}),
+      ...mergeHydratedCard(searchCard, variantCard),
       id: row.variant_id || variantCard?.id || searchCard?.id,
       card_search_id: cardSearchId || searchCard?.id || null,
       variant_id: row.variant_id || variantCard?.id || fallbackVariantId,

@@ -8,7 +8,7 @@ import "./FilterBox.css";
  * - each filter value is an array (manaValues, colors, rarities, types,
  *   formats, selectedSets)
  * - each setX prop is the matching React state setter
- * - colorMode is "or" | "and"
+ * - colorMode is "or" | "and" | "only"
  * - sets is the list from useSets(), with set_code/name/icon_svg_uri
  * To add a new filter option, update the *_OPTIONS list here and the matching
  * query behavior in useCards().
@@ -20,7 +20,6 @@ const RARITY_OPTIONS = ["Common", "Uncommon", "Rare", "Mythic"];
 const TYPE_OPTIONS = [
   "Artifact",
   "Battle",
-  "Basic Land",
   "Creature",
   "Enchantment",
   "Instant",
@@ -155,6 +154,15 @@ export default function FilterBox({
                     onChange={() => setColorMode("and")}
                   />
                   And
+                </label>
+
+                <label>
+                  <input
+                    type="radio"
+                    checked={colorMode === "only"}
+                    onChange={() => setColorMode("only")}
+                  />
+                  Only
                 </label>
               </div>
             </div>

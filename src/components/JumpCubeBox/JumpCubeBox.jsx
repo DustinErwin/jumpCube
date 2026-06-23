@@ -54,6 +54,7 @@ const MOBILE_PACK_REMOVE_THRESHOLD = 88;
 const MOBILE_PACK_REMOVE_CANCEL_THRESHOLD = 56;
 const MOBILE_PACK_REMOVE_MAX_DISTANCE = 124;
 const MOBILE_PACK_GESTURE_TOLERANCE = 8;
+const DEFAULT_CUBE_ACTION_HINT = "";
 const CUBE_COLOR_COLUMNS = [
   // Stats view groups packs by overall color identity, not mana-cost pips.
   { id: "W", label: "White" },
@@ -332,8 +333,11 @@ export default function JumpCubeBox({
   const [showCubeStats, setShowCubeStats] = useState(initialShowStats);
   const [visibilityMessage, setVisibilityMessage] = useState("");
   const [shareMessage, setShareMessage] = useState("");
+  const [cubeActionHint, setCubeActionHint] = useState(DEFAULT_CUBE_ACTION_HINT);
   const visibilityMessageTimeoutRef = useRef(null);
   const shareMessageTimeoutRef = useRef(null);
+  const pendingTouchActionRef = useRef(null);
+  const blockedTouchClickRef = useRef(null);
   const mobilePackGestureRef = useRef(null);
   const mobilePackReorderTimerRef = useRef(null);
   const mobilePackRemoveTimerRef = useRef(null);
@@ -347,6 +351,44 @@ export default function JumpCubeBox({
   const cubeNameModerationMessage = getContentModerationMessage(cubeName);
   const cubeDescriptionModerationMessage =
     getContentModerationMessage(cubeDescription);
+
+  function getCubeActionHintProps(hint, actionId = hint) {
+    return {
+      onMouseEnter: () => setCubeActionHint(hint),
+      onFocus: () => setCubeActionHint(hint),
+      onTouchStart: (event) => {
+        setCubeActionHint(hint);
+
+        if (pendingTouchActionRef.current !== actionId) {
+          pendingTouchActionRef.current = actionId;
+          blockedTouchClickRef.current = actionId;
+          event.preventDefault();
+        }
+      },
+      onClickCapture: (event) => {
+        if (blockedTouchClickRef.current === actionId) {
+          blockedTouchClickRef.current = null;
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+
+        if (pendingTouchActionRef.current === actionId) {
+          pendingTouchActionRef.current = null;
+        }
+      },
+      onMouseLeave: () => {
+        pendingTouchActionRef.current = null;
+        blockedTouchClickRef.current = null;
+        setCubeActionHint(DEFAULT_CUBE_ACTION_HINT);
+      },
+      onBlur: () => {
+        pendingTouchActionRef.current = null;
+        blockedTouchClickRef.current = null;
+        setCubeActionHint(DEFAULT_CUBE_ACTION_HINT);
+      },
+    };
+  }
 
   function toggleCubeVisibility() {
     if (!requireAuth()) return;
@@ -761,20 +803,20 @@ export default function JumpCubeBox({
         </button>
       </div>
 
+      <p className="cubeActionHint" aria-live="polite" aria-label="Cube action hint">
+        {cubeActionHint}
+      </p>
+
       <div className="cubeActionToolbar" aria-label="Cube actions">
         <button
           className={`cubeVisibilitySwitch ${cubeVisibility}`}
           type="button"
           onClick={toggleCubeVisibility}
+          {...getCubeActionHintProps("Set Cube Visibility (required to share)")}
           aria-label={`Cube visibility: ${
             cubeVisibility === "public" ? "Public" : "Private"
           }`}
           aria-pressed={cubeVisibility === "public"}
-          title={
-            cubeVisibility === "public"
-              ? "Cube is public"
-              : "Cube is private"
-          }
         >
           <span aria-hidden="true" />
         </button>
@@ -788,7 +830,7 @@ export default function JumpCubeBox({
             setConfirmingDeleteCube(false);
             onOpenCubes();
           }}
-          title="Open my cubes"
+          {...getCubeActionHintProps("Open your saved cubes.")}
           aria-label="Open my cubes"
         >
           <svg
@@ -811,7 +853,7 @@ export default function JumpCubeBox({
             setConfirmingDeleteCube(false);
             newCube();
           }}
-          title="New cube"
+          {...getCubeActionHintProps("Start a new empty cube.")}
           aria-label="New cube"
         >
           <span aria-hidden="true">+</span>
@@ -827,7 +869,7 @@ export default function JumpCubeBox({
             setConfirmingDeleteCube((current) => !current);
           }}
           disabled={selectedPacks.length === 0 && !cubeDescription.trim()}
-          title="Clear cube"
+          {...getCubeActionHintProps("Clear the current cube.")}
           aria-label="Clear cube"
         >
           <svg
@@ -854,7 +896,7 @@ export default function JumpCubeBox({
             setShowCubeStats(true);
           }}
           disabled={selectedPacks.length === 0}
-          title="Show cube statistics"
+          {...getCubeActionHintProps("Show stats panel.")}
           aria-label="Show cube statistics"
         >
           <span aria-hidden="true">%</span>
@@ -868,11 +910,11 @@ export default function JumpCubeBox({
             shareCurrentCube();
           }}
           disabled={!savedCubeId || cubeVisibility !== "public"}
-          title={
+          {...getCubeActionHintProps(
             savedCubeId && cubeVisibility === "public"
-              ? "Copy public cube link"
-              : "Save this cube as public before sharing"
-          }
+              ? "Copy a share link for this public cube."
+              : "Save this cube as public before sharing.",
+          )}
           aria-label={
             savedCubeId && cubeVisibility === "public"
               ? "Copy public cube link"
@@ -903,6 +945,18 @@ export default function JumpCubeBox({
 
       {shareMessage && <p className="shareMessage">{shareMessage}</p>}
 
+      {saveStatus === "saving" && <p className="saveMessage">Saving...</p>}
+
+      {saveStatus === "saved" && (
+        <p className="saveMessage success">Cube saved ✓</p>
+      )}
+
+      {saveStatus === "error" && (
+        <p className="saveMessage error">
+          {saveErrorMessage || "Save failed"}
+        </p>
+      )}
+
       {confirmingDeleteCube && (
         <button
           className="confirmDeleteCubeButton"
@@ -915,18 +969,6 @@ export default function JumpCubeBox({
         >
           Clear {cubeName}
         </button>
-      )}
-
-      {saveStatus === "saving" && <p className="saveMessage">Saving...</p>}
-
-      {saveStatus === "saved" && (
-        <p className="saveMessage success">Cube saved ✓</p>
-      )}
-
-      {saveStatus === "error" && (
-        <p className="saveMessage error">
-          {saveErrorMessage || "Save failed"}
-        </p>
       )}
 
       {showCubeStats && (

@@ -23,7 +23,7 @@ export function filterCards({
    *   cards: Array<card row>,
    *   search: string,
    *   manaValues/colors/rarities/types/formats: string arrays,
-   *   colorMode: "or" | "and"
+   *   colorMode: "or" | "and" | "only"
    * }
    */
   const query = search.toLowerCase().trim();
@@ -109,21 +109,36 @@ function matchesColor(card, colors, colorMode) {
   if (colors.length === 0) return true;
 
   const cardColors = card.colors || [];
+  const selectedColors = colors.filter((color) => color !== "C");
 
   if (colors.includes("C")) {
+    if (colorMode === "only" && selectedColors.length > 0) {
+      return false;
+    }
+
     if (colorMode === "and") {
-      return colors.length === 1 && cardColors.length === 0;
+      return cardColors.every((color) => selectedColors.includes(color));
     }
 
     return (
       cardColors.length === 0 ||
-      colors.some((color) => cardColors.includes(color))
+      selectedColors.some((color) => cardColors.includes(color))
+    );
+  }
+
+  if (colorMode === "only") {
+    return (
+      cardColors.length === selectedColors.length &&
+      selectedColors.every((color) => cardColors.includes(color))
     );
   }
 
   if (colorMode === "and") {
-    return colors.every((color) => cardColors.includes(color));
+    return (
+      cardColors.length > 0 &&
+      cardColors.every((color) => selectedColors.includes(color))
+    );
   }
 
-  return colors.some((color) => cardColors.includes(color));
+  return selectedColors.some((color) => cardColors.includes(color));
 }

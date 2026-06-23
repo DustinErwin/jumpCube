@@ -63,20 +63,54 @@ const SWIPE_REMOVE_MAX_DISTANCE = 124;
 const SWIPE_REMOVE_HOLD_MS = 1500;
 const MOBILE_REORDER_HOLD_MS = 400;
 const MOBILE_GESTURE_MOVE_TOLERANCE = 8;
+const DEFAULT_PACK_ACTION_HINT = "";
 
-function getCardPrice(card) {
+function parsePrice(price) {
+  if (price === null || price === undefined || price === "") return null;
+
+  const normalizedPrice =
+    typeof price === "string"
+      ? Number(price.replace(/[$,]/g, ""))
+      : Number(price);
+
+  return Number.isFinite(normalizedPrice) ? normalizedPrice : null;
+}
+
+function getCardScryfallId(card) {
+  return (
+    card.scryfall_id ||
+    card.variation_id ||
+    card.default_variant_scryfall_id ||
+    null
+  );
+}
+
+function getCardPrice(card, livePrices = null) {
   // Prefer the normal nonfoil USD price, with legacy/raw JSON fallbacks.
-  const price =
-    card.price_usd ??
-    card.prices?.usd ??
-    card.prices?.price_usd ??
-    card.prices?.nonfoil ??
-    card.price ??
-    0;
-  const numericPrice =
-    typeof price === "string" ? Number(price.replace("$", "")) : Number(price);
+  // Some imported rows represent missing prices as 0, so keep looking for a
+  // positive fallback before settling on zero.
+  const priceCandidates = [
+    livePrices?.usd,
+    card.price_usd,
+    card.prices?.usd,
+    card.prices?.price_usd,
+    card.prices?.nonfoil,
+    card.price,
+    livePrices?.usd_foil,
+    card.price_usd_foil,
+    card.prices?.usd_foil,
+    card.prices?.price_usd_foil,
+    livePrices?.usd_etched,
+    card.price_usd_etched,
+    card.prices?.usd_etched,
+    card.prices?.price_usd_etched,
+  ];
+  const numericPrices = priceCandidates
+    .map(parsePrice)
+    .filter((price) => price !== null);
+  const positivePrice = numericPrices.find((price) => price > 0);
 
-  return Number.isFinite(numericPrice) ? numericPrice : 0;
+  return positivePrice ?? numericPrices[0] ?? 0;
 }
 
 function formatUsd(value) {
@@ -131,6 +165,7 @@ export default function PackBox({
   isAuthenticated = false,
   onAuthRequired,
 }) {
+  const [livePricesByScryfallId, setLivePricesByScryfallId] = useState({});
   // Drag state controls normal pack-stack reordering and stats-column moves.
   const [draggedCardId, setDraggedCardId] = useState(null);
   const [dragOverCardId, setDragOverCardId] = useState(null);
@@ -180,9 +215,52 @@ export default function PackBox({
   const [showPackStats, setShowPackStats] = useState(initialShowStats);
   const [visibilityMessage, setVisibilityMessage] = useState("");
   const [shareMessage, setShareMessage] = useState("");
+  const [packActionHint, setPackActionHint] = useState(
+    DEFAULT_PACK_ACTION_HINT,
+  );
   const visibilityMessageTimeoutRef = useRef(null);
   const shareMessageTimeoutRef = useRef(null);
+  const pendingTouchActionRef = useRef(null);
+  const blockedTouchClickRef = useRef(null);
   // const [showManaCurve, setShowManaCurve] = useState(false);
+
+  function getPackActionHintProps(hint, actionId = hint) {
+    return {
+      onMouseEnter: () => setPackActionHint(hint),
+      onFocus: () => setPackActionHint(hint),
+      onTouchStart: (event) => {
+        setPackActionHint(hint);
+
+        if (pendingTouchActionRef.current !== actionId) {
+          pendingTouchActionRef.current = actionId;
+          blockedTouchClickRef.current = actionId;
+          event.preventDefault();
+        }
+      },
+      onClickCapture: (event) => {
+        if (blockedTouchClickRef.current === actionId) {
+          blockedTouchClickRef.current = null;
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+
+        if (pendingTouchActionRef.current === actionId) {
+          pendingTouchActionRef.current = null;
+        }
+      },
+      onMouseLeave: () => {
+        pendingTouchActionRef.current = null;
+        blockedTouchClickRef.current = null;
+        setPackActionHint(DEFAULT_PACK_ACTION_HINT);
+      },
+      onBlur: () => {
+        pendingTouchActionRef.current = null;
+        blockedTouchClickRef.current = null;
+        setPackActionHint(DEFAULT_PACK_ACTION_HINT);
+      },
+    };
+  }
 
   function clearSwipeRemoveTimer() {
     if (swipeRemoveTimeoutRef.current) {
@@ -348,10 +426,7 @@ export default function PackBox({
           });
         }
       }, SWIPE_REMOVE_HOLD_MS);
-    } else if (
-      offset < SWIPE_REMOVE_CANCEL_THRESHOLD &&
-      gesture.holding
-    ) {
+    } else if (offset < SWIPE_REMOVE_CANCEL_THRESHOLD && gesture.holding) {
       gesture.holding = false;
       gesture.armed = false;
       clearSwipeRemoveTimer();
@@ -433,12 +508,70 @@ export default function PackBox({
     [],
   );
 
+  const selectedScryfallIdKey = [
+    ...new Set(selectedCards.map(getCardScryfallId).filter(Boolean)),
+  ].join(",");
+
+  useEffect(() => {
+    const scryfallIds = selectedScryfallIdKey
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
+
+    if (scryfallIds.length === 0) {
+      return undefined;
+    }
+
+    let isCurrent = true;
+
+    async function loadLivePrices() {
+      try {
+        const response = await fetch(
+          "https://api.scryfall.com/cards/collection",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              identifiers: scryfallIds.map((id) => ({ id })),
+            }),
+          },
+        );
+
+        if (!response.ok) return;
+
+        const payload = await response.json();
+        const nextPricesByScryfallId = {};
+
+        (payload.data || []).forEach((card) => {
+          if (card.id && card.prices) {
+            nextPricesByScryfallId[card.id] = card.prices;
+          }
+        });
+
+        if (isCurrent) {
+          setLivePricesByScryfallId(nextPricesByScryfallId);
+        }
+      } catch {
+        // Local database prices remain the fallback if the live lookup fails.
+      }
+    }
+
+    loadLivePrices();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [selectedScryfallIdKey]);
+
   const totalCards = selectedCards.reduce(
     (sum, card) => sum + card.quantity,
     0,
   );
   const totalPrice = selectedCards.reduce(
-    (sum, card) => sum + getCardPrice(card) * card.quantity,
+    (sum, card) =>
+      sum +
+      getCardPrice(card, livePricesByScryfallId[getCardScryfallId(card)]) *
+        card.quantity,
     0,
   );
   const packNameModerationMessage = getContentModerationMessage(packName);
@@ -547,8 +680,7 @@ export default function PackBox({
   const mechanicChartWidth = 520;
   const mechanicChartHeight = 150;
   const mechanicChartPadding = 18;
-  const mechanicChartInnerWidth =
-    mechanicChartWidth - mechanicChartPadding * 2;
+  const mechanicChartInnerWidth = mechanicChartWidth - mechanicChartPadding * 2;
   const mechanicChartInnerHeight =
     mechanicChartHeight - mechanicChartPadding * 2;
   const mechanicChartPoints = mechanicBucketCounts.map((mechanic, index) => {
@@ -556,8 +688,7 @@ export default function PackBox({
       mechanicBucketCounts.length === 1
         ? mechanicChartWidth / 2
         : mechanicChartPadding +
-          (index / (mechanicBucketCounts.length - 1)) *
-            mechanicChartInnerWidth;
+          (index / (mechanicBucketCounts.length - 1)) * mechanicChartInnerWidth;
     const y =
       mechanicChartPadding +
       mechanicChartInnerHeight -
@@ -670,9 +801,7 @@ export default function PackBox({
   const exactTagMatch = availablePackTags.some(
     (tag) => tag.normalizedName === normalizedTagSearch,
   );
-  const tagValidationMessage = tagSearch
-    ? validatePackTagName(tagSearch)
-    : "";
+  const tagValidationMessage = tagSearch ? validatePackTagName(tagSearch) : "";
   const canOfferTagCreation =
     normalizedTagSearch &&
     !exactTagMatch &&
@@ -807,65 +936,84 @@ export default function PackBox({
         {isOpen ? ">" : "<"}
       </button>
 
+      <p
+        className="packActionHint"
+        aria-live="polite"
+        aria-label="Pack action hint"
+      >
+        {packActionHint}
+      </p>
+
       <div className="packActionToolbar" aria-label="Pack actions">
         <button
           className={`packVisibilitySwitch ${packVisibility}`}
           type="button"
           onClick={togglePackVisibility}
+          {...getPackActionHintProps(
+            "Set pack visibility. (required to share)",
+          )}
           aria-label={`Pack visibility: ${
             packVisibility === "public" ? "Public" : "Private"
           }`}
           aria-pressed={packVisibility === "public"}
-          title={
-            packVisibility === "public"
-              ? "Pack is public"
-              : "Pack is private"
-          }
         >
           <span aria-hidden="true" />
         </button>
 
-        <button
-          className="packActionButton openPacksButton"
-          type="button"
-          onClick={() => {
-            if (!requireAuth()) return;
-
-            setConfirmingDeletePack(false);
-            onOpenPacks();
-          }}
-          title="Open my packs"
-          aria-label="Open my packs"
+        <span
+          className="packActionHintTarget"
+          {...getPackActionHintProps("Open your saved packs.")}
         >
-          <svg
-            aria-hidden="true"
-            className="actionIcon"
-            viewBox="0 0 24 24"
-            focusable="false"
+          <button
+            className="packActionButton openPacksButton"
+            type="button"
+            onClick={() => {
+              if (!requireAuth()) return;
+
+              setConfirmingDeletePack(false);
+              onOpenPacks();
+            }}
+            aria-label="Open my packs"
           >
-            <path d="M3.5 6.5h6l2 2h10v2h-18z" />
-            <path d="M2.5 9.5h21l-2 11h-19z" />
-          </svg>
-        </button>
+            <svg
+              aria-hidden="true"
+              className="actionIcon"
+              viewBox="0 0 24 24"
+              focusable="false"
+            >
+              <path d="M3.5 6.5h6l2 2h10v2h-18z" />
+              <path d="M2.5 9.5h21l-2 11h-19z" />
+            </svg>
+          </button>
+        </span>
 
-        <button
-          className="packActionButton newPackButton"
-          type="button"
-          onClick={() => {
-            if (!requireAuth()) return;
-
-            setConfirmingDeletePack(false);
-            newPack();
-          }}
-          title="New pack"
-          aria-label="New pack"
+        <span
+          className="packActionHintTarget"
+          {...getPackActionHintProps("Start a new empty pack.")}
         >
-          <span aria-hidden="true">+</span>
-        </button>
+          <button
+            className="packActionButton newPackButton"
+            type="button"
+            onClick={() => {
+              if (!requireAuth()) return;
+
+              setConfirmingDeletePack(false);
+              newPack();
+            }}
+            aria-label="New pack"
+          >
+            <span aria-hidden="true">+</span>
+          </button>
+        </span>
 
         <button
           className="packActionButton deletePackButton"
           type="button"
+          {...getPackActionHintProps(
+            savedPackId
+              ? "Delete this saved pack."
+              : "Save this pack before deleting it.",
+          )}
           onClick={(event) => {
             event.stopPropagation();
             if (!requireAuth()) return;
@@ -873,7 +1021,6 @@ export default function PackBox({
             setConfirmingDeletePack((current) => !current);
           }}
           disabled={!savedPackId}
-          title={savedPackId ? "Delete pack" : "Save this pack before deleting"}
           aria-label={
             savedPackId ? "Delete pack" : "Save this pack before deleting"
           }
@@ -895,6 +1042,11 @@ export default function PackBox({
         <button
           className="packActionButton addPackToCubeButton"
           type="button"
+          {...getPackActionHintProps(
+            selectedCards.length === 0
+              ? "Add cards before saving this pack to your cube."
+              : "Save this pack and add it to the current cube.",
+          )}
           onClick={() => {
             if (!requireAuth()) return;
 
@@ -902,7 +1054,6 @@ export default function PackBox({
             addCurrentPackToCube();
           }}
           disabled={selectedCards.length === 0 || saveStatus === "saving"}
-          title="Save and add pack to cube"
           aria-label="Save and add pack to cube"
         >
           <svg
@@ -922,13 +1073,15 @@ export default function PackBox({
         <button
           className="packActionButton archetypeMenuButton"
           type="button"
+          {...getPackActionHintProps(
+            "Add or create an archetype tag for this pack.",
+          )}
           onClick={() => {
             if (!requireAuth()) return;
 
             setConfirmingDeletePack(false);
             setIsArchetypeMenuOpen((current) => !current);
           }}
-          title="Add archetype tag"
           aria-label="Add archetype tag"
           aria-expanded={isArchetypeMenuOpen}
         >
@@ -938,6 +1091,7 @@ export default function PackBox({
         <button
           className="packActionButton packStatsButton"
           type="button"
+          {...getPackActionHintProps("Show stats panel.")}
           onClick={() => {
             if (!requireAuth()) return;
 
@@ -945,7 +1099,6 @@ export default function PackBox({
             setShowPackStats(true);
           }}
           disabled={selectedCards.length === 0}
-          title="Show pack statistics"
           aria-label="Show pack statistics"
         >
           <span aria-hidden="true">%</span>
@@ -954,16 +1107,16 @@ export default function PackBox({
         <button
           className="packActionButton sharePackButton"
           type="button"
+          {...getPackActionHintProps(
+            savedPackId && packVisibility === "public"
+              ? "Copy a share link for this public pack."
+              : "Save this pack as public before sharing.",
+          )}
           onClick={() => {
             setConfirmingDeletePack(false);
             shareCurrentPack();
           }}
           disabled={!savedPackId || packVisibility !== "public"}
-          title={
-            savedPackId && packVisibility === "public"
-              ? "Copy public pack link"
-              : "Save this pack as public before sharing"
-          }
           aria-label={
             savedPackId && packVisibility === "public"
               ? "Copy public pack link"
@@ -994,6 +1147,20 @@ export default function PackBox({
 
       {shareMessage && <p className="shareMessage">{shareMessage}</p>}
 
+      {saveStatus === "saving" && <p className="saveMessage">Saving...</p>}
+
+      {saveStatus === "saved" && (
+        <p className="saveMessage success">Pack saved ✓</p>
+      )}
+
+      {saveStatus === "error" && (
+        <p className="saveMessage error">{saveErrorMessage || "Save failed"}</p>
+      )}
+
+      {saveStatus === "blocked" && (
+        <p className="saveMessage error">Text needs review</p>
+      )}
+
       {confirmingDeletePack && (
         <button
           className="confirmDeletePackButton"
@@ -1015,9 +1182,7 @@ export default function PackBox({
           aria-invalid={Boolean(packNameModerationMessage)}
           maxLength={TITLE_MAX_LENGTH}
           autoFocus
-          onChange={(e) =>
-            setPackName(sanitizeTitleInput(e.target.value))
-          }
+          onChange={(e) => setPackName(sanitizeTitleInput(e.target.value))}
           onBlur={() => {
             if (!packNameModerationMessage) setEditingName(false);
           }}
@@ -1233,7 +1398,8 @@ export default function PackBox({
               onClick={() => toggleArchetypeTag(tag)}
               title={`Remove ${tag.name}`}
             >
-              {tag.name}<span aria-hidden="true">&times;</span>
+              {tag.name}
+              <span aria-hidden="true">&times;</span>
             </button>
           ))}
         </div>
@@ -1242,7 +1408,9 @@ export default function PackBox({
       {isArchetypeMenuOpen && (
         <div className="archetypeMenu" aria-label="Archetype tags">
           <div className="archetypeMenuHeader">
-            <span>Tags ({packArchetypeTags.length}/{packTagLimit})</span>
+            <span>
+              Tags ({packArchetypeTags.length}/{packTagLimit})
+            </span>
             <button
               type="button"
               onClick={() => {
@@ -1291,7 +1459,9 @@ export default function PackBox({
 
           {canOfferTagCreation && (
             <div className="tagCreationPanel">
-              <p>Create <strong>{formatPackTagName(tagSearch)}</strong></p>
+              <p>
+                Create <strong>{formatPackTagName(tagSearch)}</strong>
+              </p>
               <div className="tagColorOptions" aria-label="Tag color">
                 {PACK_TAG_COLORS.map((color) => (
                   <button
@@ -1321,27 +1491,14 @@ export default function PackBox({
               {tagMessage || tagValidationMessage}
             </p>
           )}
-          <p className="tagGuidance">Letters only. Up to three words; one idea per tag.</p>
+          <p className="tagGuidance">
+            Letters only. Up to three words; one idea per tag.
+          </p>
         </div>
       )}
 
       <p className="packTotalPrice">Total: {formatUsd(totalPrice)}</p>
 
-      {saveStatus === "saving" && <p className="saveMessage">Saving...</p>}
-
-      {saveStatus === "saved" && (
-        <p className="saveMessage success">Pack saved ✓</p>
-      )}
-
-      {saveStatus === "error" && (
-        <p className="saveMessage error">
-          {saveErrorMessage || "Save failed"}
-        </p>
-      )}
-
-      {saveStatus === "blocked" && (
-        <p className="saveMessage error">Text needs review</p>
-      )}
 
       {showPackStats && (
         <div className="packStatsOverlay" role="dialog" aria-modal="true">
@@ -1372,10 +1529,7 @@ export default function PackBox({
           </div>
 
           <div className="packStatsBody">
-            <div
-              className="packStatsColumns"
-              aria-label="Cards by mechanic"
-            >
+            <div className="packStatsColumns" aria-label="Cards by mechanic">
               {mechanicColumns.map((column) => (
                 <section
                   className={`packStatsColumn ${
@@ -1462,7 +1616,10 @@ export default function PackBox({
               ))}
             </div>
 
-            <section className="packStatsVisualArea" aria-label="Pack statistics">
+            <section
+              className="packStatsVisualArea"
+              aria-label="Pack statistics"
+            >
               <div className="packManaCurveChart">
                 <h3 className="packManaCurveTitle">Mana Curve</h3>
 
@@ -1816,9 +1973,7 @@ export default function PackBox({
                   type="button"
                   className="mobileCardGestureLayer"
                   aria-label={`${card.name}: hold and drag to reorder, or swipe right to remove`}
-                  onPointerDown={(event) =>
-                    handleSwipeRemoveStart(event, card)
-                  }
+                  onPointerDown={(event) => handleSwipeRemoveStart(event, card)}
                   onPointerMove={handleSwipeRemoveMove}
                   onPointerUp={handleSwipeRemoveEnd}
                   onPointerCancel={handleSwipeRemoveCancel}

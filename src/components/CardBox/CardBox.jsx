@@ -25,9 +25,27 @@ export default function CardBox({
 }) {
   const [flippedCards, setFlippedCards] = useState({});
 
+  function getCardIdentity(card) {
+    return String(
+      card?.oracle_id ||
+        card?.card_search_id ||
+        card?.name ||
+        card?.variant_id ||
+        card?.id ||
+        "",
+    );
+  }
+
   function getCardQuantity(card) {
-    return selectedCards.find((selectedCard) => selectedCard.id === card.id)
-      ?.quantity || 0;
+    const cardIdentity = getCardIdentity(card);
+
+    return selectedCards.reduce(
+      (totalQuantity, selectedCard) =>
+        getCardIdentity(selectedCard) === cardIdentity
+          ? totalQuantity + selectedCard.quantity
+          : totalQuantity,
+      0,
+    );
   }
 
   function getFrontImage(card) {
@@ -176,7 +194,7 @@ export default function CardBox({
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-                    onCardDecrease?.(card.id);
+                    onCardDecrease?.(getCardIdentity(card));
                   }}
                   disabled={quantity === 0}
                   aria-label={`Remove one ${card.name} from pack`}

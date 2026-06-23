@@ -8,7 +8,7 @@ import { supabase } from "../utils/supabase";
  * {
  *   search: committed search string from SearchBox,
  *   manaValues/colors/rarities/types/formats/selectedSets: filter arrays,
- *   colorMode: "or" | "and",
+ *   colorMode: "or" | "and" | "only",
  *   showAllPrintings: boolean,
  *   limit: page size for local Supabase pagination
  * }
@@ -42,6 +42,7 @@ const CARD_COLUMNS = `
   legalities,
   price_usd,
   price_usd_foil,
+  price_usd_etched,
   games,
   nonfoil,
   is_token,
@@ -71,8 +72,10 @@ const CARD_VARIANT_COLUMNS = `
   image_url,
   back_image_url,
   legalities,
+  prices,
   price_usd,
   price_usd_foil,
+  price_usd_etched,
   games,
   nonfoil,
   is_token,
@@ -121,6 +124,7 @@ const BASIC_LAND_NAMES = [
   "Forest",
   "Wastes",
 ];
+const COLOR_IDENTITY_ORDER = ["W", "U", "B", "R", "G"];
 const BASIC_LAND_SET_CODES = {
   Plains: "bfz",
   Island: "bfz",
@@ -155,6 +159,10 @@ function getPreferredBasicLandScore(card) {
 
 function uniqueValues(values) {
   return [...new Set(values.filter(Boolean))];
+}
+
+function sortColorIdentity(colors) {
+  return COLOR_IDENTITY_ORDER.filter((color) => colors.includes(color));
 }
 
 function getPlainSearchTerms(search) {
@@ -236,6 +244,12 @@ function normalizeSearchText(value) {
 
 function usesScryfallSyntax(search) {
   return SCRYFALL_SYNTAX_PATTERN.test(search);
+}
+
+function isBasicLandTextSearch(search) {
+  const normalizedSearch = normalizeSearchText(search);
+
+  return normalizedSearch === "basic land" || normalizedSearch === "basic lands";
 }
 
 async function getScryfallSearchCards(query) {
@@ -390,7 +404,7 @@ async function getCardSearchIdsByOracleId(oracleIds) {
   ) {
     const { data, error } = await supabase
       .from("card_search")
-      .select("id, oracle_id")
+      .select("id, oracle_id, price_usd, price_usd_foil, price_usd_etched")
       .in("oracle_id", oracleIds.slice(index, index + CARD_SEARCH_ID_BATCH_SIZE));
 
     if (error) throw error;
@@ -398,7 +412,28 @@ async function getCardSearchIdsByOracleId(oracleIds) {
     rows.push(...(data || []));
   }
 
-  return new Map(rows.map((row) => [row.oracle_id, row.id]));
+  return new Map(rows.map((row) => [row.oracle_id, row]));
+}
+
+async function getVariantPricesById(variantIds) {
+  const rows = [];
+
+  for (
+    let index = 0;
+    index < variantIds.length;
+    index += CARD_SEARCH_ID_BATCH_SIZE
+  ) {
+    const { data, error } = await supabase
+      .from("card_variants")
+      .select("id, prices, price_usd, price_usd_foil, price_usd_etched")
+      .in("id", variantIds.slice(index, index + CARD_SEARCH_ID_BATCH_SIZE));
+
+    if (error) throw error;
+
+    rows.push(...(data || []));
+  }
+
+  return new Map(rows.map((row) => [row.id, row]));
 }
 
 async function normalizeCardRows(
@@ -408,11 +443,12 @@ async function normalizeCardRows(
 ) {
   if (usesVariantRows) {
     const oracleIds = uniqueValues(cards.map((card) => card.oracle_id));
-    const searchIdByOracleId = await getCardSearchIdsByOracleId(oracleIds);
+    const searchCardByOracleId = await getCardSearchIdsByOracleId(oracleIds);
 
     return (cards || [])
       .map((card) => {
-        const cardSearchId = searchIdByOracleId.get(card.oracle_id);
+        const searchCard = searchCardByOracleId.get(card.oracle_id);
+        const cardSearchId = searchCard?.id;
 
         if (!cardSearchId) return null;
 
@@ -420,16 +456,27 @@ async function normalizeCardRows(
           ...card,
           card_search_id: cardSearchId,
           variant_id: card.id,
+          price_usd: card.price_usd ?? searchCard.price_usd ?? null,
+          price_usd_foil:
+            card.price_usd_foil ?? searchCard.price_usd_foil ?? null,
+          price_usd_etched:
+            card.price_usd_etched ?? searchCard.price_usd_etched ?? null,
         };
       })
       .filter(Boolean);
   }
+
+  const variantPricesById = await getVariantPricesById(
+    uniqueValues(cards.map((card) => card.default_variant_id)),
+  );
 
   return (cards || [])
     .map((card) => {
       if (!card.default_variant_id) {
         return null;
       }
+
+      const variantPrices = variantPricesById.get(card.default_variant_id);
 
       return {
         ...card,
@@ -439,6 +486,12 @@ async function normalizeCardRows(
         scryfall_id:
           card.default_variant_scryfall_id || card.representative_scryfall_id,
         is_default_printing: true,
+        prices: variantPrices?.prices ?? card.prices ?? null,
+        price_usd: card.price_usd ?? variantPrices?.price_usd ?? null,
+        price_usd_foil:
+          card.price_usd_foil ?? variantPrices?.price_usd_foil ?? null,
+        price_usd_etched:
+          card.price_usd_etched ?? variantPrices?.price_usd_etched ?? null,
       };
     })
     .filter(Boolean);
@@ -629,25 +682,37 @@ export function useCards({
       if (colors.length > 0) {
         // Color filters read color identity, not casting cost. "C" means no
         // colored identity; in OR mode it can combine with colored selections.
-        const selectedColors = colors.filter((color) => color !== "C");
+        const selectedColors = sortColorIdentity(
+          colors.filter((color) => color !== "C"),
+        );
         const includesColorless = colors.includes("C");
 
         if (includesColorless && selectedColors.length === 0) {
           // Colorless only
           query = query.filter("color_identity", "eq", "{}");
         } else if (includesColorless && selectedColors.length > 0) {
-          if (colorMode === "and") {
-            // A card cannot be both colorless and have colors
-            query = query.filter("color_identity", "eq", "{}");
+          if (colorMode === "only") {
+            // Exact identity cannot be both colorless and colored.
+            query = query.eq("name", "__NO_COLOR_IDENTITY_MATCH__");
+          } else if (colorMode === "and") {
+            // Colorless plus every color identity subset within the selected colors.
+            query = query.containedBy("color_identity", selectedColors);
           } else {
             // Colorless OR any selected color
             query = query.or(
               `color_identity.eq.{},color_identity.ov.{${selectedColors.join(",")}}`,
             );
           }
+        } else if (colorMode === "only") {
+          // Exact color identity match without depending on stored array order.
+          query = query
+            .contains("color_identity", selectedColors)
+            .containedBy("color_identity", selectedColors);
         } else if (colorMode === "and") {
-          // Must contain all selected colors
-          query = query.contains("color_identity", selectedColors);
+          // Any non-colorless identity subset within the selected colors.
+          query = query
+            .containedBy("color_identity", selectedColors)
+            .overlaps("color_identity", selectedColors);
         } else {
           // Must contain any selected color
           query = query.overlaps("color_identity", selectedColors);
@@ -696,6 +761,7 @@ export function useCards({
       const trimmedSearch = search.trim();
       const hasScryfallSyntax = usesScryfallSyntax(trimmedSearch);
       const hasBasicLandTypeFilter = types.includes(BASIC_LAND_TYPE_FILTER);
+      const hasBasicLandTextSearch = isBasicLandTextSearch(trimmedSearch);
       const preferredBasicLandSetCode = basicLandSetCode
         .trim()
         .toLowerCase();
@@ -704,10 +770,15 @@ export function useCards({
       let error;
       let usedVariantHydration = false;
 
-      if (hasBasicLandTypeFilter && !trimmedSearch && colors.length === 0) {
-        // Special-case basics so the filter returns the six land names instead
-        // of every basic land printing in the database. Query variants by
-        // oracle_id because card_search defaults can point at unreleased sets.
+      if (
+        (hasBasicLandTypeFilter || hasBasicLandTextSearch) &&
+        (!trimmedSearch || hasBasicLandTextSearch) &&
+        colors.length === 0
+      ) {
+        // Special-case basics so typed "basic land" and the legacy filter
+        // return one preferred printing per basic land name instead of every
+        // basic land printing in the database. Query variants by oracle_id
+        // because card_search defaults can point at unreleased sets.
         const basicLandIdentityResult = await supabase
           .from("card_search")
           .select("name, oracle_id")

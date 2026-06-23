@@ -66,6 +66,7 @@ const PACK_CARD_SEARCH_COLUMNS = `
   card_faces,
   price_usd,
   price_usd_foil,
+  price_usd_etched,
   has_back_face
 `;
 const PACK_CARD_VARIANT_COLUMNS = `
@@ -88,6 +89,7 @@ const PACK_CARD_VARIANT_COLUMNS = `
   prices,
   price_usd,
   price_usd_foil,
+  price_usd_etched,
   games,
   nonfoil,
   is_token,
@@ -173,6 +175,17 @@ function getPackCardCount(cards) {
   return cards.reduce((sum, card) => sum + card.quantity, 0);
 }
 
+function getPackCardIdentity(card) {
+  return String(
+    card?.oracle_id ||
+      card?.card_search_id ||
+      card?.name ||
+      card?.variant_id ||
+      card?.id ||
+      "",
+  );
+}
+
 function getPackCoverImage(cards) {
   const topCard = cards[cards.length - 1];
 
@@ -182,6 +195,18 @@ function getPackCoverImage(cards) {
     topCard?.image_uris?.normal ||
     null
   );
+}
+
+function mergeHydratedCard(searchCard, variantCard) {
+  return {
+    ...(searchCard || {}),
+    ...(variantCard || {}),
+    price_usd: variantCard?.price_usd ?? searchCard?.price_usd ?? null,
+    price_usd_foil:
+      variantCard?.price_usd_foil ?? searchCard?.price_usd_foil ?? null,
+    price_usd_etched:
+      variantCard?.price_usd_etched ?? searchCard?.price_usd_etched ?? null,
+  };
 }
 
 async function hydratePackCardRows(packCards) {
@@ -278,8 +303,7 @@ async function hydratePackCardRows(packCards) {
       variantByScryfallId.get(row.variation_id) ||
       variantById.get(fallbackVariantId);
     return {
-      ...(searchCard || {}),
-      ...(variantCard || {}),
+      ...mergeHydratedCard(searchCard, variantCard),
       id: row.variant_id || variantCard?.id || searchCard?.id,
       card_search_id: cardSearchId || searchCard?.id || null,
       variant_id: row.variant_id || variantCard?.id || fallbackVariantId,
@@ -477,13 +501,21 @@ export function usePackBuilder(user, refreshPacks, {
 
   function decreaseCardQuantity(cardId) {
     // Removes one copy and drops the card entirely when quantity reaches zero.
-    setSelectedCards((prev) =>
-      prev
+    setSelectedCards((prev) => {
+      const targetCard =
+        prev.find((card) => card.id === cardId) ||
+        prev.find((card) => getPackCardIdentity(card) === String(cardId));
+
+      if (!targetCard) return prev;
+
+      return prev
         .map((card) =>
-          card.id === cardId ? { ...card, quantity: card.quantity - 1 } : card,
+          card.id === targetCard.id
+            ? { ...card, quantity: card.quantity - 1 }
+            : card,
         )
-        .filter((card) => card.quantity > 0),
-    );
+        .filter((card) => card.quantity > 0);
+    });
   }
 
   function removeCardFromPack(cardId) {
