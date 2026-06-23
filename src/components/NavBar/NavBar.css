@@ -52,6 +52,7 @@
 
 .navUser,
 .navAdminLink,
+.navCreateLink,
 .navDiscoverLink,
 .navCollectionLink {
   color: #aaa;
@@ -61,6 +62,7 @@
 
 .navUser:hover,
 .navAdminLink:hover,
+.navCreateLink:hover,
 .navDiscoverLink:hover,
 .navCollectionLink:hover {
   color: white;
@@ -189,6 +191,10 @@
   }
 
   .navAdminLink {
+    font-size: 0.72rem;
+  }
+
+  .navCreateLink {
     font-size: 0.72rem;
   }
 

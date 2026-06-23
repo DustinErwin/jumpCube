@@ -101,8 +101,7 @@ const CARD_SEARCH_ID_BATCH_SIZE = 50;
 // syntax introduces a new operator shape not covered by key:value/key>=value.
 const SCRYFALL_SYNTAX_PATTERN =
   /(?:^|[\s(])-?[a-z][a-z0-9_]*(?::|[<>=])/i;
-const BASIC_LAND_TYPE_FILTER = "Basic Land";
-const PLAYABLE_CARD_TYPE_FILTER = [
+const PLAYABLE_CARD_TYPES = [
   "Artifact",
   "Battle",
   "Creature",
@@ -113,8 +112,40 @@ const PLAYABLE_CARD_TYPE_FILTER = [
   "Planeswalker",
   "Sorcery",
   "Tribal",
-]
+];
+const PLAYABLE_CARD_TYPE_FILTER = PLAYABLE_CARD_TYPES
   .map((type) => `type_line.ilike.%${type}%`)
+  .join(",");
+const NORMALIZED_PLAYABLE_CARD_TYPE_FILTER = PLAYABLE_CARD_TYPES
+  .map((type) => `normalized_type_line.like.%${type.toLowerCase()}%`)
+  .join(",");
+const LEGAL_FORMATS = [
+  "standard",
+  "future",
+  "historic",
+  "timeless",
+  "gladiator",
+  "pioneer",
+  "explorer",
+  "modern",
+  "legacy",
+  "pauper",
+  "vintage",
+  "penny",
+  "commander",
+  "oathbreaker",
+  "standardbrawl",
+  "brawl",
+  "alchemy",
+  "paupercommander",
+  "duel",
+  "oldschool",
+  "premodern",
+  "predh",
+  "tlr",
+];
+const LEGAL_FORMAT_FILTER = LEGAL_FORMATS
+  .map((format) => `legalities->>${format}.eq.legal`)
   .join(",");
 const BASIC_LAND_NAMES = [
   "Plains",
@@ -125,6 +156,26 @@ const BASIC_LAND_NAMES = [
   "Wastes",
 ];
 const COLOR_IDENTITY_ORDER = ["W", "U", "B", "R", "G"];
+const SEARCH_SCOPE_COLUMNS = {
+  title: {
+    defaultColumn: "name",
+    variantColumn: "name",
+  },
+  type: {
+    defaultColumn: "normalized_type_line",
+    variantColumn: "type_line",
+    normalizeSearch: true,
+  },
+  text: {
+    defaultColumn: "oracle_text",
+    variantColumn: "oracle_text",
+  },
+};
+const DEFAULT_SEARCH_SCOPES = {
+  title: true,
+  type: true,
+  text: true,
+};
 const BASIC_LAND_SET_CODES = {
   Plains: "bfz",
   Island: "bfz",
@@ -134,27 +185,30 @@ const BASIC_LAND_SET_CODES = {
   Wastes: "ogw",
 };
 
-function getTodayDateString() {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
+function isBasicLandName(name) {
+  return BASIC_LAND_NAMES.includes(name);
 }
 
-function getPreferredBasicLandScore(card) {
-  // Basic lands prefer a coherent Zendikar-block look, but the imported
-  // Scryfall "default cards" bulk file may not include every preferred print.
-  if (card.set_code === BASIC_LAND_SET_CODES[card.name]) {
+function getPreferredBasicLandScore(card, preferredSetCode = "") {
+  const normalizedPreferredSetCode = preferredSetCode.toLowerCase();
+
+  if (
+    normalizedPreferredSetCode &&
+    card.set_code === normalizedPreferredSetCode
+  ) {
     return 0;
   }
 
-  if (card.is_default_printing) {
+  // Fall back to a coherent Zendikar-block look when the profile has no pick.
+  if (card.set_code === BASIC_LAND_SET_CODES[card.name]) {
     return 1;
   }
 
-  return 2;
+  if (!card.is_variant_printing) {
+    return 2;
+  }
+
+  return 3;
 }
 
 function uniqueValues(values) {
@@ -163,6 +217,50 @@ function uniqueValues(values) {
 
 function sortColorIdentity(colors) {
   return COLOR_IDENTITY_ORDER.filter((color) => colors.includes(color));
+}
+
+function getActiveSearchScopes(
+  searchScopes = DEFAULT_SEARCH_SCOPES,
+  usesVariantColumns = false,
+) {
+  return Object.entries(SEARCH_SCOPE_COLUMNS)
+    .filter(([scope]) => searchScopes[scope])
+    .map(([scope, columns]) => ({
+      scope,
+      column: usesVariantColumns
+        ? columns.variantColumn
+        : columns.defaultColumn,
+      normalizeSearch: columns.normalizeSearch && !usesVariantColumns,
+    }));
+}
+
+function usesAllSearchScopes(searchScopes = DEFAULT_SEARCH_SCOPES) {
+  return getActiveSearchScopes(searchScopes).length ===
+    Object.keys(SEARCH_SCOPE_COLUMNS).length;
+}
+
+function getScopedSearchFilter(alias, searchScopes, usesVariantColumns = false) {
+  const activeScopes = getActiveSearchScopes(searchScopes, usesVariantColumns);
+
+  if (activeScopes.length === 0) {
+    return "name.eq.__NO_SEARCH_SCOPE_SELECTED__";
+  }
+
+  return activeScopes
+    .map(({ column, normalizeSearch }) => {
+      const pattern = normalizeSearch ? normalizeSearchText(alias) : alias;
+      const operator = normalizeSearch ? "like" : "ilike";
+
+      return `${column}.${operator}.%${pattern}%`;
+    })
+    .join(",");
+}
+
+function getBroadSearchFilter(alias) {
+  const normalizedAlias = normalizeSearchText(alias);
+  const scopedFilters = getScopedSearchFilter(alias, DEFAULT_SEARCH_SCOPES);
+
+  return `search_text.ilike.%${normalizedAlias}%,${scopedFilters}`;
 }
 
 function getPlainSearchTerms(search) {
@@ -244,12 +342,6 @@ function normalizeSearchText(value) {
 
 function usesScryfallSyntax(search) {
   return SCRYFALL_SYNTAX_PATTERN.test(search);
-}
-
-function isBasicLandTextSearch(search) {
-  const normalizedSearch = normalizeSearchText(search);
-
-  return normalizedSearch === "basic land" || normalizedSearch === "basic lands";
 }
 
 async function getScryfallSearchCards(query) {
@@ -436,10 +528,59 @@ async function getVariantPricesById(variantIds) {
   return new Map(rows.map((row) => [row.id, row]));
 }
 
+async function getPreferredBasicLandVariantsByOracleId(cards, basicLandSetCode) {
+  const basicLandOracleIds = uniqueValues(
+    cards
+      .filter((card) => isBasicLandName(card.name) && card.oracle_id)
+      .map((card) => card.oracle_id),
+  );
+
+  if (basicLandOracleIds.length === 0) {
+    return new Map();
+  }
+
+  const { data, error } = await supabase
+    .from("card_variants")
+    .select(CARD_VARIANT_COLUMNS)
+    .in("oracle_id", basicLandOracleIds)
+    .contains("games", ["paper"])
+    .eq("lang", "en")
+    .eq("nonfoil", true)
+    .eq("is_token", false)
+    .eq("is_funny", false)
+    .eq("is_planechase", false)
+    .neq("layout", "art_series")
+    .neq("layout", "scheme");
+
+  if (error) throw error;
+
+  const variantsByOracleId = new Map();
+
+  (data || []).forEach((variant) => {
+    const currentVariant = variantsByOracleId.get(variant.oracle_id);
+
+    if (
+      !currentVariant ||
+      getPreferredBasicLandScore(variant, basicLandSetCode) <
+        getPreferredBasicLandScore(currentVariant, basicLandSetCode) ||
+      (
+        getPreferredBasicLandScore(variant, basicLandSetCode) ===
+          getPreferredBasicLandScore(currentVariant, basicLandSetCode) &&
+        compareCollectorNumbers(variant, currentVariant) < 0
+      )
+    ) {
+      variantsByOracleId.set(variant.oracle_id, variant);
+    }
+  });
+
+  return variantsByOracleId;
+}
+
 async function normalizeCardRows(
   cards,
   showAllPrintings,
   usesVariantRows = showAllPrintings,
+  basicLandSetCode = "",
 ) {
   if (usesVariantRows) {
     const oracleIds = uniqueValues(cards.map((card) => card.oracle_id));
@@ -469,6 +610,8 @@ async function normalizeCardRows(
   const variantPricesById = await getVariantPricesById(
     uniqueValues(cards.map((card) => card.default_variant_id)),
   );
+  const preferredBasicLandVariantsByOracleId =
+    await getPreferredBasicLandVariantsByOracleId(cards, basicLandSetCode);
 
   return (cards || [])
     .map((card) => {
@@ -477,21 +620,29 @@ async function normalizeCardRows(
       }
 
       const variantPrices = variantPricesById.get(card.default_variant_id);
+      const preferredBasicLandVariant = preferredBasicLandVariantsByOracleId.get(
+        card.oracle_id,
+      );
+      const displayVariant = preferredBasicLandVariant || variantPrices;
+      const displayVariantId = displayVariant?.id || card.default_variant_id;
 
       return {
         ...card,
+        ...(preferredBasicLandVariant || {}),
         card_search_id: card.id,
-        id: card.default_variant_id,
-        variant_id: card.default_variant_id,
+        id: displayVariantId,
+        variant_id: displayVariantId,
         scryfall_id:
-          card.default_variant_scryfall_id || card.representative_scryfall_id,
-        is_default_printing: true,
-        prices: variantPrices?.prices ?? card.prices ?? null,
-        price_usd: card.price_usd ?? variantPrices?.price_usd ?? null,
+          displayVariant?.scryfall_id ||
+          card.default_variant_scryfall_id ||
+          card.representative_scryfall_id,
+        is_default_printing: !preferredBasicLandVariant,
+        prices: displayVariant?.prices ?? card.prices ?? null,
+        price_usd: displayVariant?.price_usd ?? card.price_usd ?? null,
         price_usd_foil:
-          card.price_usd_foil ?? variantPrices?.price_usd_foil ?? null,
+          displayVariant?.price_usd_foil ?? card.price_usd_foil ?? null,
         price_usd_etched:
-          card.price_usd_etched ?? variantPrices?.price_usd_etched ?? null,
+          displayVariant?.price_usd_etched ?? card.price_usd_etched ?? null,
       };
     })
     .filter(Boolean);
@@ -499,6 +650,7 @@ async function normalizeCardRows(
 
 export function useCards({
   search = "",
+  searchScopes = DEFAULT_SEARCH_SCOPES,
   manaValues = [],
   colors = [],
   colorMode = "or",
@@ -561,8 +713,11 @@ export function useCards({
        *   card_search representative may point at an unreleased printing.
        */
       const hasSplitSearchField = Boolean(searchField);
+      const trimmedSearch = search.trim();
       const searchesVariants =
-        forceVariantSearch || showAllPrintings || selectedSets.length > 0;
+        forceVariantSearch ||
+        showAllPrintings ||
+        selectedSets.length > 0;
       const usesOwnershipView = ownershipMode === "owned" || ownershipMode === "unowned";
       const searchTable = usesOwnershipView
         ? searchesVariants
@@ -576,20 +731,27 @@ export function useCards({
         .from(searchTable)
         .select(searchColumns)
         .contains("games", ["paper"])
-        .lte("released_at", getTodayDateString())
+        .or(LEGAL_FORMAT_FILTER)
         .eq("is_token", false)
-        .eq("is_funny", false)
         .eq("is_planechase", false)
         .neq("layout", "art_series")
         .neq("layout", "scheme")
-        .or(PLAYABLE_CARD_TYPE_FILTER);
+        .or(
+          searchesVariants
+            ? PLAYABLE_CARD_TYPE_FILTER
+            : NORMALIZED_PLAYABLE_CARD_TYPE_FILTER,
+        );
 
       query = query.order("name", { ascending: true });
 
       query = query.range(start, end);
 
       if (searchesVariants) {
-        query = query.eq("lang", "en").neq("set_type", "funny").eq("nonfoil", true);
+        query = query
+          .eq("is_funny", false)
+          .eq("lang", "en")
+          .neq("set_type", "funny")
+          .eq("nonfoil", true);
       }
 
       if (usesOwnershipView) {
@@ -604,8 +766,6 @@ export function useCards({
         query = query.eq("is_variant_printing", false);
       }
 
-      const trimmedSearch = search.trim();
-
       if (trimmedSearch && includeTextSearch) {
         const searchTerms = getPlainSearchTerms(trimmedSearch);
 
@@ -617,15 +777,12 @@ export function useCards({
         } else {
           searchTerms.forEach((term) => {
             getSearchTermAliases(term).forEach((alias) => {
-              if (searchesVariants) {
+              if (searchesVariants || !usesAllSearchScopes(searchScopes)) {
                 query = query.or(
-                  `name.ilike.%${alias}%,type_line.ilike.%${alias}%,oracle_text.ilike.%${alias}%`,
+                  getScopedSearchFilter(alias, searchScopes, searchesVariants),
                 );
               } else {
-                query = query.ilike(
-                  "search_text",
-                  `%${normalizeSearchText(alias)}%`,
-                );
+                query = query.or(getBroadSearchFilter(alias));
               }
             });
           });
@@ -660,12 +817,15 @@ export function useCards({
       }
 
       if (types.length > 0 && includeTypeFilters) {
-        if (types.includes(BASIC_LAND_TYPE_FILTER)) {
-          query = query.in("name", BASIC_LAND_NAMES);
-        }
-
-        types.filter((type) => type !== BASIC_LAND_TYPE_FILTER).forEach((type) => {
-          query = query.ilike("type_line", `%${type}%`);
+        types.forEach((type) => {
+          if (searchesVariants) {
+            query = query.ilike("type_line", `%${type}%`);
+          } else {
+            query = query.like(
+              "normalized_type_line",
+              `%${normalizeSearchText(type)}%`,
+            );
+          }
         });
       }
 
@@ -723,6 +883,7 @@ export function useCards({
     },
     [
       search,
+      searchScopes,
       manaValues,
       colors,
       colorMode,
@@ -760,170 +921,12 @@ export function useCards({
 
       const trimmedSearch = search.trim();
       const hasScryfallSyntax = usesScryfallSyntax(trimmedSearch);
-      const hasBasicLandTypeFilter = types.includes(BASIC_LAND_TYPE_FILTER);
-      const hasBasicLandTextSearch = isBasicLandTextSearch(trimmedSearch);
-      const preferredBasicLandSetCode = basicLandSetCode
-        .trim()
-        .toLowerCase();
-      let usesVariantRowsForResults = showAllPrintings || selectedSets.length > 0;
-      let data;
-      let error;
+      const usesVariantRowsForResults = showAllPrintings || selectedSets.length > 0;
+      let data = [];
+      let error = null;
       let usedVariantHydration = false;
 
-      if (
-        (hasBasicLandTypeFilter || hasBasicLandTextSearch) &&
-        (!trimmedSearch || hasBasicLandTextSearch) &&
-        colors.length === 0
-      ) {
-        // Special-case basics so typed "basic land" and the legacy filter
-        // return one preferred printing per basic land name instead of every
-        // basic land printing in the database. Query variants by oracle_id
-        // because card_search defaults can point at unreleased sets.
-        const basicLandIdentityResult = await supabase
-          .from("card_search")
-          .select("name, oracle_id")
-          .in("name", BASIC_LAND_NAMES);
-        const basicLandOracleIdByName = new Map(
-          (basicLandIdentityResult.data || []).map((card) => [
-            card.name,
-            card.oracle_id,
-          ]),
-        );
-        const usesOwnershipView =
-          ownershipMode === "owned" || ownershipMode === "unowned";
-        const basicLandSearchTable = usesOwnershipView
-          ? "card_variants_with_ownership"
-          : "card_variants";
-        const buildBasicLandVariantQuery = (
-          basicLandName,
-          { preferredSetOnly = false } = {},
-        ) => {
-          let query = supabase
-            .from(basicLandSearchTable)
-            .select(CARD_VARIANT_COLUMNS)
-            .eq("oracle_id", basicLandOracleIdByName.get(basicLandName))
-            .contains("games", ["paper"])
-            .lte("released_at", getTodayDateString())
-            .eq("lang", "en")
-            .eq("nonfoil", true)
-            .eq("is_token", false)
-            .eq("is_funny", false)
-            .eq("is_planechase", false)
-            .neq("layout", "art_series")
-            .neq("layout", "scheme")
-            .neq("set_type", "funny");
-
-          if (usesOwnershipView) {
-            query = query.eq("is_owned", ownershipMode === "owned");
-          }
-
-          if (selectedSets.length > 0) {
-            query = query.in("set_code", selectedSets);
-          }
-
-          if (preferredSetOnly) {
-            query = query.eq(
-              "set_code",
-              preferredBasicLandSetCode ||
-                BASIC_LAND_SET_CODES[basicLandName],
-            );
-          }
-
-          if (rarities.length > 0) {
-            query = query.in(
-              "rarity",
-              rarities.map((rarity) => rarity.toLowerCase()),
-            );
-          }
-
-          if (manaValues.length > 0) {
-            const exactManaValues = manaValues
-              .filter((mv) => mv !== "7")
-              .map(Number);
-            const manaFilters = [];
-
-            if (exactManaValues.length > 0) {
-              manaFilters.push(`mana_value.in.(${exactManaValues.join(",")})`);
-            }
-
-            if (manaValues.includes("7")) {
-              manaFilters.push("mana_value.gte.7");
-            }
-
-            if (manaFilters.length > 0) {
-              query = query.or(manaFilters.join(","));
-            }
-          }
-
-          types
-            .filter((type) => type !== BASIC_LAND_TYPE_FILTER)
-            .forEach((type) => {
-              query = query.ilike("type_line", `%${type}%`);
-            });
-
-          formats.forEach((format) => {
-            query = query.contains("legalities", {
-              [format.toLowerCase()]: "legal",
-            });
-          });
-
-          return query.limit(300);
-        };
-        const basicLandResults = basicLandIdentityResult.error
-          ? [basicLandIdentityResult]
-          : await Promise.all(
-              BASIC_LAND_NAMES.map(async (basicLandName) => {
-                if (!basicLandOracleIdByName.get(basicLandName)) {
-                  return Promise.resolve({ data: [], error: null });
-                }
-
-                if (selectedSets.length === 0) {
-                  const preferredResult = await buildBasicLandVariantQuery(
-                    basicLandName,
-                    { preferredSetOnly: true },
-                  );
-
-                  if (
-                    preferredResult.error ||
-                    (preferredResult.data || []).length > 0
-                  ) {
-                    return preferredResult;
-                  }
-                }
-
-                return buildBasicLandVariantQuery(basicLandName);
-              }),
-            );
-        const successfulResults = basicLandResults.filter(
-          (result) => !result.error,
-        );
-
-        if (successfulResults.length === 0) {
-          error = basicLandResults.find((result) => result.error)?.error;
-        } else {
-          data = BASIC_LAND_NAMES.map((basicLandName) => {
-            const candidates = successfulResults
-              .flatMap((result) => result.data || [])
-              .filter((card) => card.name === basicLandName)
-              .sort((cardA, cardB) => {
-                const preferredComparison =
-                  getPreferredBasicLandScore(cardA) -
-                  getPreferredBasicLandScore(cardB);
-
-                if (preferredComparison !== 0) {
-                  return preferredComparison;
-                }
-
-                return compareCollectorNumbers(cardA, cardB);
-              });
-
-            return candidates[0];
-          }).filter(Boolean);
-        }
-
-        nextRowStartRef.current = BASIC_LAND_NAMES.length;
-        usesVariantRowsForResults = true;
-      } else if (hasScryfallSyntax) {
+      if (hasScryfallSyntax) {
         // Explicit Scryfall syntax goes raw, then hydrates local card rows by
         // oracle_id so pack actions still use our database ids.
         const exactOracleIds = getScryfallOracleIds(
@@ -1030,6 +1033,7 @@ export function useCards({
         data || [],
         showAllPrintings,
         usesVariantRowsForResults || usedVariantHydration,
+        basicLandSetCode,
       );
 
       if (requestId !== requestIdRef.current) {
@@ -1094,6 +1098,7 @@ export function useCards({
       data || [],
       showAllPrintings,
       showAllPrintings || selectedSets.length > 0,
+      basicLandSetCode,
     );
 
     if (requestId !== requestIdRef.current) {
@@ -1109,6 +1114,7 @@ export function useCards({
     setHasMoreCards(rowCount === limit);
     setLoadingMoreCards(false);
   }, [
+    basicLandSetCode,
     buildCardsQuery,
     hasMoreCards,
     limit,
@@ -1127,3 +1133,4 @@ export function useCards({
     loadMoreCards,
   };
 }
+

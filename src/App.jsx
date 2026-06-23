@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "./utils/supabase";
 import { useCards } from "./hooks/useCards";
-import { usePackBuilder } from "./hooks/usePackBuilder";
+import { DRAFT_PACK_NAME, usePackBuilder } from "./hooks/usePackBuilder";
 import { useAuth } from "./hooks/useAuth";
 import { useUserPacks } from "./hooks/useUserPacks";
 import { useUserCubes } from "./hooks/useUserCubes";
@@ -140,6 +140,10 @@ function getCardArt(card) {
   );
 }
 
+function isDraftPackName(name) {
+  return normalizeTitle(name, DRAFT_PACK_NAME) === DRAFT_PACK_NAME;
+}
+
 function getSavedCardImage(card) {
   return card?.image_url || card?.image_uris?.art_crop || card?.image_uris?.normal || null;
 }
@@ -180,6 +184,11 @@ function App() {
   const [modalCard, setModalCard] = useState(null);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [searchScopes, setSearchScopes] = useState({
+    title: true,
+    type: true,
+    text: true,
+  });
   const [manaValues, setManaValues] = useState([]);
   const [colors, setColors] = useState([]);
   const [colorMode, setColorMode] = useState("or");
@@ -215,6 +224,7 @@ function App() {
     manaValues,
     colors,
     colorMode,
+    searchScopes,
     rarities,
     types,
     formats,
@@ -264,6 +274,7 @@ function App() {
     loadMoreCards,
   } = useCards({
     search,
+    searchScopes,
     manaValues,
     colors,
     colorMode,
@@ -386,10 +397,28 @@ function App() {
 
   async function saveCurrentPackBeforeLeaving() {
     // Protects edits when opening another pack or starting a new one.
-    if (pack.selectedCards.length === 0) return;
-    if (!requireAuth()) return;
+    if (pack.selectedCards.length === 0) return true;
+    if (!requireAuth()) return false;
 
-    await pack.savePack({ promptOnRename: false });
+    if (isDraftPackName(pack.packName)) {
+      const nextName = window.prompt(
+        "Name this draft pack before opening another pack.",
+        "",
+      );
+
+      if (!nextName?.trim()) return false;
+
+      const savedPackId = await pack.savePack({
+        promptOnRename: false,
+        nameOverride: nextName.trim(),
+      });
+
+      return Boolean(savedPackId);
+    }
+
+    const savedPackId = await pack.savePack({ promptOnRename: false });
+
+    return Boolean(savedPackId);
   }
 
   async function addCurrentPackToCube() {
@@ -449,7 +478,7 @@ function App() {
     // screen panel swap so the selected pack is immediately visible.
     if (!requireAuth()) return;
 
-    await saveCurrentPackBeforeLeaving();
+    if (!(await saveCurrentPackBeforeLeaving())) return;
     await pack.loadPack(packId);
     setIsPackBoxOpen(true);
 
@@ -461,7 +490,7 @@ function App() {
   async function startNewPack() {
     if (!requireAuth()) return;
 
-    await saveCurrentPackBeforeLeaving();
+    if (!(await saveCurrentPackBeforeLeaving())) return;
     pack.newPack();
   }
 
@@ -692,7 +721,7 @@ function App() {
         />
       )}
 
-      {location.pathname === "/" && (
+      {location.pathname === "/create" && (
       <nav className="mobilePanelNav" aria-label="Builder panels">
         <button
           type="button"
@@ -724,7 +753,7 @@ function App() {
 
       <Routes>
         <Route
-          path="/"
+          path="/create"
           element={
             <>
               <div className="appLayout">
@@ -733,6 +762,8 @@ function App() {
                   <SearchBox
                     searchInput={searchInput}
                     setSearchInput={setSearchInput}
+                    searchScopes={searchScopes}
+                    setSearchScopes={setSearchScopes}
                     onSearch={submitSearch}
                   />
 
@@ -870,7 +901,7 @@ function App() {
                 onClose={() => setIsPackLibraryOpen(false)}
                 onOpenPack={async (packId) => {
                   if (!requireAuth()) return;
-                  await saveCurrentPackBeforeLeaving();
+                  if (!(await saveCurrentPackBeforeLeaving())) return;
                   await pack.loadPack(packId);
                   setIsPackLibraryOpen(false);
                 }}
@@ -939,8 +970,18 @@ function App() {
           }
         />
 
-        <Route path="/auth" element={<AuthPage />} />
-        <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route
+          path="/"
+          element={
+            <DiscoverPage
+              user={user}
+              onAuthRequired={() => setIsAuthRequiredOpen(true)}
+              onLibraryChanged={async () => {
+                await Promise.all([loadPacks(), userCubes.loadCubes()]);
+              }}
+            />
+          }
+        />
         <Route
           path="/discover"
           element={
@@ -953,6 +994,8 @@ function App() {
             />
           }
         />
+        <Route path="/auth" element={<AuthPage />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route
           path="/packs/:id"
           element={

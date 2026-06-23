@@ -32,6 +32,7 @@ import { hasBlockedContentInFields } from "../utils/contentModeration";
  */
 
 export const PACK_CARD_LIMIT = 20;
+export const DRAFT_PACK_NAME = "Draft Pack";
 // Update this list when adding/removing archetype options in PackBox.
 export const PACK_ARCHETYPE_TAGS = [
   "Aggro",
@@ -324,7 +325,7 @@ export function usePackBuilder(user, refreshPacks, {
   onPackDeleted,
 } = {}) {
   const [selectedCards, setSelectedCards] = useState([]);
-  const [packName, setPackName] = useState("Current Pack");
+  const [packName, setPackName] = useState(DRAFT_PACK_NAME);
   const [packDescription, setPackDescription] = useState("");
   const [packArchetypeTags, setPackArchetypeTags] = useState([]);
   const [availablePackTags, setAvailablePackTags] = useState(FALLBACK_PACK_TAGS);
@@ -478,7 +479,7 @@ export function usePackBuilder(user, refreshPacks, {
       return;
     }
 
-    setPackName(normalizePackName(pack.name, "Current Pack"));
+    setPackName(normalizePackName(pack.name, DRAFT_PACK_NAME));
     setPackDescription(sanitizeDescription(pack.description));
     const relationalTags = await loadPackTagAssignments(pack.id);
     const loadedTags = relationalTags?.length
@@ -491,7 +492,7 @@ export function usePackBuilder(user, refreshPacks, {
     setSavedPackId(pack.id);
     setSavedPackName(pack.name || null);
     lastSavedSnapshotRef.current = getPackSnapshot(
-      pack.name || "Current Pack",
+      pack.name || DRAFT_PACK_NAME,
       sanitizeDescription(pack.description),
       loadedTags,
       pack.visibility,
@@ -524,7 +525,7 @@ export function usePackBuilder(user, refreshPacks, {
 
   function newPack() {
     // Resets local editor state only. It does not delete anything in Supabase.
-    setPackName("Unnamed Pack");
+    setPackName(DRAFT_PACK_NAME);
     setPackDescription("");
     setPackArchetypeTags([]);
     setPackVisibility("private");
@@ -540,6 +541,7 @@ export function usePackBuilder(user, refreshPacks, {
   const finishSave = useCallback(async function finishSave(
     packId,
     cardsOverride = selectedCards,
+    { nameOverride = null } = {},
   ) {
     /*
      * Persists pack metadata and card rows.
@@ -556,7 +558,9 @@ export function usePackBuilder(user, refreshPacks, {
       return null;
     }
 
-    if (hasBlockedContentInFields(packName, packDescription)) {
+    const effectivePackName = nameOverride || packName;
+
+    if (hasBlockedContentInFields(effectivePackName, packDescription)) {
       setSaveErrorMessage("");
       setSaveStatus("blocked");
       return null;
@@ -572,7 +576,7 @@ export function usePackBuilder(user, refreshPacks, {
     );
 
     const currentSnapshot = getPackSnapshot(
-      packName,
+      effectivePackName,
       packDescription,
       packArchetypeTags,
       packVisibility,
@@ -600,7 +604,7 @@ export function usePackBuilder(user, refreshPacks, {
       const { data: pack, error: packError } = await supabase
         .from("packs")
         .insert({
-          name: normalizePackName(packName),
+          name: normalizePackName(effectivePackName),
           description: sanitizeDescription(packDescription),
           archetype_tags: getLegacyArchetypeTagNames(tagsToSave),
           cover_image_url: getPackCoverImage(cardsToSave),
@@ -624,7 +628,7 @@ export function usePackBuilder(user, refreshPacks, {
       const { error: updateError } = await supabase
         .from("packs")
         .update({
-          name: normalizePackName(packName),
+          name: normalizePackName(effectivePackName),
           description: sanitizeDescription(packDescription),
           archetype_tags: getLegacyArchetypeTagNames(tagsToSave),
           cover_image_url: getPackCoverImage(cardsToSave),
@@ -685,12 +689,13 @@ export function usePackBuilder(user, refreshPacks, {
       return null;
     }
 
-    setSavedPackName(normalizePackName(packName));
+    setPackName(normalizePackName(effectivePackName));
+    setSavedPackName(normalizePackName(effectivePackName));
     lastSavedSnapshotRef.current = currentSnapshot;
     await refreshPacks?.();
     onPackSaved?.({
       id: actualPackId,
-      name: normalizePackName(packName),
+      name: normalizePackName(effectivePackName),
       description: sanitizeDescription(packDescription),
       archetypeTags: tagsToSave,
       coverImageUrl: getPackCoverImage(cardsToSave),
@@ -835,6 +840,7 @@ export function usePackBuilder(user, refreshPacks, {
   async function savePack({
     promptOnRename = true,
     cardsOverride = selectedCards,
+    nameOverride = null,
   } = {}) {
     /*
      * Public save entry point.
@@ -858,19 +864,19 @@ export function usePackBuilder(user, refreshPacks, {
       setPendingSaveAction(() => ({
         renameExisting: async () => {
           setShowRenameChoice(false);
-          return finishSave(savedPackId, cardsToSave);
+          return finishSave(savedPackId, cardsToSave, { nameOverride });
         },
 
         saveAsNew: async () => {
           setShowRenameChoice(false);
-          return finishSave(null, cardsToSave);
+          return finishSave(null, cardsToSave, { nameOverride });
         },
       }));
 
       return null;
     }
 
-    return finishSave(savedPackId, cardsToSave);
+    return finishSave(savedPackId, cardsToSave, { nameOverride });
   }
 
   function moveCardToMechanicBucket(cardId, bucketId) {

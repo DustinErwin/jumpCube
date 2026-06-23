@@ -70,6 +70,9 @@ export default function NavBar({ user, displayName, isAdmin }) {
           id="primary-navigation"
           className={`navActions${isMenuOpen ? " open" : ""}`}
         >
+          <Link className="navCreateLink" to="/create" onClick={closeMenu}>
+            Create
+          </Link>
           <Link className="navDiscoverLink" to="/discover" onClick={closeMenu}>
             Discover
           </Link>

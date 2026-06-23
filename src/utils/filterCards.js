@@ -7,9 +7,28 @@
  * behavior here only if a caller imports filterCards().
  */
 
+const DEFAULT_SEARCH_SCOPES = {
+  title: true,
+  type: true,
+  text: true,
+};
+
+const SEARCH_SCOPE_FIELDS = {
+  title: "name",
+  type: "type_line",
+  text: "oracle_text",
+};
+
+function hasAnyLegalFormat(card) {
+  return Object.values(card.legalities || {}).some(
+    (legality) => legality === "legal",
+  );
+}
+
 export function filterCards({
   cards,
   search,
+  searchScopes = DEFAULT_SEARCH_SCOPES,
   manaValues,
   colors,
   colorMode,
@@ -22,6 +41,7 @@ export function filterCards({
    * {
    *   cards: Array<card row>,
    *   search: string,
+   *   searchScopes: { title: boolean, type: boolean, text: boolean },
    *   manaValues/colors/rarities/types/formats: string arrays,
    *   colorMode: "or" | "and" | "only"
    * }
@@ -42,7 +62,8 @@ export function filterCards({
   return cards
     .filter((card) => {
       return (
-        matchesSearch(card, query) &&
+        hasAnyLegalFormat(card) &&
+        matchesSearch(card, query, searchScopes) &&
         matchesManaValue(card, manaValues) &&
         matchesColor(card, colors, colorMode) &&
         matchesRarity(card, rarities) &&
@@ -69,18 +90,18 @@ function matchesRarity(card, rarities) {
   return rarities.includes(card.rarity);
 }
 
-function matchesSearch(card, query) {
+function matchesSearch(card, query, searchScopes) {
   // Case-insensitive substring match across the same fields as the card grid.
   if (query === "") return true;
 
-  const name = card.name?.toLowerCase() || "";
-  const typeLine = card.type_line?.toLowerCase() || "";
-  const oracleText = card.oracle_text?.toLowerCase() || "";
+  const activeFields = Object.entries(SEARCH_SCOPE_FIELDS)
+    .filter(([scope]) => searchScopes[scope])
+    .map(([, field]) => field);
 
-  return (
-    name.includes(query) ||
-    typeLine.includes(query) ||
-    oracleText.includes(query)
+  if (activeFields.length === 0) return false;
+
+  return activeFields.some((field) =>
+    String(card[field] || "").toLowerCase().includes(query),
   );
 }
 

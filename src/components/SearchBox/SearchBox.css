@@ -9,7 +9,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  width: min(100%, 520px);
+  width: min(100%, 760px);
   margin: 0 auto;
 }
 
@@ -22,10 +22,34 @@
   flex: 0 0 auto;
 }
 
+.searchScopeToggles {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+
+.searchScopeToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  color: #ddd;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.searchScopeToggle input {
+  margin: 0;
+}
+
 @media (max-width: 540px) {
   .searchBox {
     width: 100%;
     gap: 6px;
+    flex-wrap: wrap;
   }
 
   .searchInput,
@@ -36,5 +60,14 @@
 
   .searchButton {
     padding: 0 12px;
+  }
+
+  .searchScopeToggles {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .searchScopeToggle {
+    min-height: 32px;
   }
 }
