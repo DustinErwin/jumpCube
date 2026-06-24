@@ -53,6 +53,7 @@ const CARD_VERSION_COLUMNS = `
   image_uris,
   card_faces
 `;
+const VERSION_PAGE_SIZE = 50;
 
 function getImage(card) {
   return (
@@ -179,12 +180,16 @@ export default function CardModal({
 }) {
   const versionPickerRef = useRef(null);
   const touchPreviewVersionIdRef = useRef("");
-  const [versions, setVersions] = useState([]);
+  const versionRequestIdRef = useRef(0);
+  const [versions, setVersions] = useState(() => (card ? [card] : []));
   const [manualSelectedCard, setManualSelectedCard] = useState({
     sourceCardId: "",
     selectedCardId: "",
   });
   const [isLoadingVersions, setIsLoadingVersions] = useState(false);
+  const [hasLoadedVersions, setHasLoadedVersions] = useState(false);
+  const [hasMoreVersions, setHasMoreVersions] = useState(false);
+  const [loadedVersionCount, setLoadedVersionCount] = useState(0);
   const [versionsError, setVersionsError] = useState("");
   const [flippedCardId, setFlippedCardId] = useState(null);
   const [livePricesByScryfallId, setLivePricesByScryfallId] = useState({});
@@ -219,63 +224,75 @@ export default function CardModal({
     };
   }, [card, isImageExpanded, isOpen, onClose]);
 
-  useEffect(() => {
-    // Load all local printings for the same oracle card so the user can pick a
-    // specific version before adding it to the pack.
-    if (!isOpen || !card || readOnly) return undefined;
+  useEffect(
+    () => () => {
+      versionRequestIdRef.current += 1;
+    },
+    [],
+  );
 
-    let isCurrent = true;
+  async function loadVersions({ append = false } = {}) {
+    if (!card || readOnly || isLoadingVersions) return;
 
-    async function loadVersions() {
-      setIsLoadingVersions(true);
-      setVersionsError("");
+    const requestId = versionRequestIdRef.current + 1;
+    versionRequestIdRef.current = requestId;
+    const start = append ? loadedVersionCount : 0;
+    setIsLoadingVersions(true);
+    setVersionsError("");
 
-      let query = supabase
-        .from("card_variants")
-        .select(CARD_VERSION_COLUMNS)
-        .contains("games", ["paper"])
-        .eq("lang", "en")
-        .lte("released_at", getTodayDateString())
-        .eq("is_token", false)
-        .eq("is_funny", false)
-        .eq("is_planechase", false)
-        .neq("set_type", "funny")
-        .neq("layout", "art_series")
-        .order("set_code", { ascending: true })
-        .order("collector_number", { ascending: true });
+    let query = supabase
+      .from("card_variants")
+      .select(CARD_VERSION_COLUMNS)
+      .contains("games", ["paper"])
+      .eq("lang", "en")
+      .lte("released_at", getTodayDateString())
+      .eq("is_token", false)
+      .eq("is_funny", false)
+      .eq("is_planechase", false)
+      .neq("set_type", "funny")
+      .neq("layout", "art_series")
+      .order("set_code", { ascending: true })
+      .order("collector_number", { ascending: true })
+      .range(start, start + VERSION_PAGE_SIZE - 1);
 
-      if (card.oracle_id) {
-        query = query.eq("oracle_id", card.oracle_id);
-      } else {
-        query = query.eq("name", card.name);
-      }
-
-      const { data, error } = await query;
-
-      if (!isCurrent) return;
-
-      if (error) {
-        console.error("Error loading card versions:", error);
-        setVersionsError("Could not load versions.");
-        setVersions([card]);
-        setIsLoadingVersions(false);
-        return;
-      }
-
-      const hydratedVersions = normalizeCardVersions(data || [], card);
-
-      if (!isCurrent) return;
-
-      setVersions(hydratedVersions.length ? hydratedVersions : [card]);
-      setIsLoadingVersions(false);
+    if (card.oracle_id) {
+      query = query.eq("oracle_id", card.oracle_id);
+    } else {
+      query = query.eq("name", card.name);
     }
 
-    loadVersions();
+    const { data, error } = await query;
 
-    return () => {
-      isCurrent = false;
-    };
-  }, [card, isOpen, readOnly]);
+    if (requestId !== versionRequestIdRef.current) return;
+
+    if (error) {
+      console.error("Error loading card versions:", error);
+      setVersionsError("Could not load versions.");
+      setIsLoadingVersions(false);
+      return;
+    }
+
+    const hydratedVersions = normalizeCardVersions(data || [], card);
+
+    setVersions((currentVersions) => {
+      const nextVersions = append
+        ? [...currentVersions, ...hydratedVersions]
+        : hydratedVersions;
+      const versionsById = new Map(
+        nextVersions.map((version) => [String(version.id), version]),
+      );
+
+      if (!versionsById.has(sourceCardId)) {
+        versionsById.set(sourceCardId, card);
+      }
+
+      return [...versionsById.values()];
+    });
+    setHasLoadedVersions(true);
+    setHasMoreVersions(hydratedVersions.length === VERSION_PAGE_SIZE);
+    setLoadedVersionCount(start + hydratedVersions.length);
+    setIsLoadingVersions(false);
+  }
 
   const selectedCard = useMemo(
     // selectedCardId comes from a select value, so compare ids as strings.
@@ -474,8 +491,10 @@ export default function CardModal({
                   touchPreviewVersionIdRef.current = "";
                   setHoveredVersionId("");
                   setIsVersionPickerOpen((currentIsOpen) => !currentIsOpen);
+                  if (!hasLoadedVersions) {
+                    loadVersions();
+                  }
                 }}
-                disabled={isLoadingVersions}
                 aria-expanded={isVersionPickerOpen}
                 aria-haspopup="listbox"
               >
@@ -485,6 +504,9 @@ export default function CardModal({
               {isVersionPickerOpen && (
                 <div className="cardVersionMenu">
                   <div className="cardVersionList" role="listbox">
+                    {isLoadingVersions && !hasLoadedVersions && (
+                      <p className="cardVersionStatus">Loading versions...</p>
+                    )}
                     {versions.map((version) => {
                       const versionId = String(version.id);
                       const isSelected = versionId === selectedCardId;
@@ -530,6 +552,16 @@ export default function CardModal({
                         </button>
                       );
                     })}
+                    {hasMoreVersions && (
+                      <button
+                        type="button"
+                        className="cardVersionLoadMore"
+                        onClick={() => loadVersions({ append: true })}
+                        disabled={isLoadingVersions}
+                      >
+                        {isLoadingVersions ? "Loading..." : "Load more"}
+                      </button>
+                    )}
                   </div>
 
                   <div className="cardVersionPreview" aria-hidden="true">

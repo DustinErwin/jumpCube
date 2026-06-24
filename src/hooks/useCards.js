@@ -60,7 +60,6 @@ const CARD_COLUMNS = `
 const TEXT_SEARCH_CANDIDATE_LIMIT = 700;
 const SCRYFALL_SEARCH_PAGE_LIMIT = 5;
 const EXACT_NAME_BATCH_SIZE = 50;
-const CARD_SEARCH_ID_BATCH_SIZE = 50;
 // Detects Scryfall syntax operators. Add aliases here only if the official
 // syntax introduces a new operator shape not covered by key:value/key>=value.
 const SCRYFALL_SYNTAX_PATTERN =
@@ -362,56 +361,22 @@ function getScryfallOracleIds(cards) {
   return uniqueValues(cards.map((card) => card.oracle_id));
 }
 
-async function getVariantPricesById(variantIds) {
-  const rows = [];
-
-  for (
-    let index = 0;
-    index < variantIds.length;
-    index += CARD_SEARCH_ID_BATCH_SIZE
-  ) {
-    const { data, error } = await supabase
-      .from("card_variants")
-      .select("id, prices, price_usd, price_usd_foil, price_usd_etched")
-      .in("id", variantIds.slice(index, index + CARD_SEARCH_ID_BATCH_SIZE));
-
-    if (error) throw error;
-
-    rows.push(...(data || []));
-  }
-
-  return new Map(rows.map((row) => [row.id, row]));
-}
-
-async function normalizeCardRows(cards) {
-  const variantPricesById = await getVariantPricesById(
-    uniqueValues(cards.map((card) => card.default_variant_id)),
-  );
-
+function normalizeCardRows(cards) {
   return (cards || [])
     .map((card) => {
       if (!card.default_variant_id) {
         return null;
       }
 
-      const variantPrices = variantPricesById.get(card.default_variant_id);
-      const displayVariantId = variantPrices?.id || card.default_variant_id;
-
       return {
         ...card,
         card_search_id: card.id,
-        id: displayVariantId,
-        variant_id: displayVariantId,
+        id: card.default_variant_id,
+        variant_id: card.default_variant_id,
         scryfall_id:
           card.default_variant_scryfall_id ||
           card.representative_scryfall_id,
         is_default_printing: true,
-        prices: variantPrices?.prices ?? card.prices ?? null,
-        price_usd: variantPrices?.price_usd ?? card.price_usd ?? null,
-        price_usd_foil:
-          variantPrices?.price_usd_foil ?? card.price_usd_foil ?? null,
-        price_usd_etched:
-          variantPrices?.price_usd_etched ?? card.price_usd_etched ?? null,
       };
     })
     .filter(Boolean);
@@ -756,7 +721,7 @@ export function useCards({
         return;
       }
 
-      const normalizedData = await normalizeCardRows(data || []);
+      const normalizedData = normalizeCardRows(data || []);
 
       if (requestId !== requestIdRef.current) {
         return;
@@ -812,7 +777,7 @@ export function useCards({
       return;
     }
 
-    const normalizedData = await normalizeCardRows(data || []);
+    const normalizedData = normalizeCardRows(data || []);
 
     if (requestId !== requestIdRef.current) {
       return;

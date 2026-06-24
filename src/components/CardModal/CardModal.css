@@ -268,6 +268,33 @@
   background: rgba(255, 255, 255, 0.1);
 }
 
+.cardVersionStatus {
+  margin: 8px 10px;
+  color: #aeb5c3;
+}
+
+.cardVersionLoadMore {
+  min-height: 38px;
+  margin-top: 6px;
+  border: 1px solid rgba(216, 180, 95, 0.5);
+  border-radius: 4px;
+  background: rgba(216, 180, 95, 0.12);
+  color: #fff8dd;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.cardVersionLoadMore:hover:not(:disabled),
+.cardVersionLoadMore:focus-visible {
+  background: rgba(216, 180, 95, 0.22);
+}
+
+.cardVersionLoadMore:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .cardVersionPreview {
   align-self: start;
   width: 132px;
