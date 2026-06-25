@@ -294,6 +294,11 @@
   outline-offset: 2px;
 }
 
+.cubeVisibilitySwitch:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
 .cubeVisibilityToggle {
   display: none;
 }
@@ -387,6 +392,28 @@
   text-align: center;
   color: #aaa;
   font-size: 0.9rem;
+}
+
+.cubeEmptyState {
+  display: grid;
+  gap: 6px;
+  margin: 18px 0 12px;
+  text-align: center;
+}
+
+.cubeEmptyState h2,
+.cubeEmptyState p {
+  margin: 0;
+}
+
+.cubeEmptyState h2 {
+  font-size: 1.1rem;
+}
+
+.cubeEmptyState p {
+  color: #a6a6a6;
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 
 .cubePackList {
@@ -1410,9 +1437,11 @@ body:has(.jumpCubeBox.statsOpen) {
   }
 
   .cubeActionButton {
-    width: 36px;
+    width: 100%;
+    min-width: 0;
+    max-width: 36px;
     height: 36px;
-    flex-basis: 36px;
+    flex: 1 1 36px;
   }
 
   .cubeStatsOverlay {

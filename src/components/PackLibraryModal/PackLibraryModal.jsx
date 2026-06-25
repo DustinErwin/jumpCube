@@ -29,6 +29,7 @@ export default function PackLibraryModal({
   onDuplicatePack,
   onSharePack,
   onAddPacksToCube,
+  canAddPacksToCube = false,
   cubePackIds = [],
 }) {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
@@ -39,6 +40,7 @@ export default function PackLibraryModal({
   const cubePackIdSet = new Set(cubePackIds);
 
   function togglePackSelection(packId) {
+    if (!canAddPacksToCube) return;
     if (cubePackIdSet.has(packId)) return;
 
     setSelectedPackIds((currentIds) =>
@@ -109,14 +111,20 @@ export default function PackLibraryModal({
 
         <div className="packModalSelectionBar">
           <span>
-            {selectedPackIds.length > 0
+            {!canAddPacksToCube
+              ? "Create or open a cube before adding packs"
+              : selectedPackIds.length > 0
               ? `${selectedPackIds.length} selected`
               : "Select packs to add them together"}
           </span>
           <button
             type="button"
             onClick={addSelectedPacks}
-            disabled={selectedPackIds.length === 0 || isAddingPacks}
+            disabled={
+              !canAddPacksToCube ||
+              selectedPackIds.length === 0 ||
+              isAddingPacks
+            }
           >
             {isAddingPacks ? "Adding..." : "Add to Cube"}
           </button>
@@ -137,10 +145,14 @@ export default function PackLibraryModal({
                   type="button"
                   className="packSelectButton"
                   onClick={() => togglePackSelection(pack.id)}
-                  disabled={cubePackIdSet.has(pack.id)}
+                  disabled={
+                    !canAddPacksToCube || cubePackIdSet.has(pack.id)
+                  }
                   aria-pressed={selectedPackIds.includes(pack.id)}
                   aria-label={
-                    cubePackIdSet.has(pack.id)
+                    !canAddPacksToCube
+                      ? "Create or open a cube before selecting packs"
+                      : cubePackIdSet.has(pack.id)
                       ? `${pack.name} is already in the cube`
                       : `Select ${pack.name}`
                   }

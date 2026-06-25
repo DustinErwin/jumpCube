@@ -257,6 +257,8 @@ async function hydrateCubePackCards(packCards) {
 export function useUserCubes(user) {
   const [cubes, setCubes] = useState([]);
   const [loadingCubes, setLoadingCubes] = useState(false);
+  const [cubesLoaded, setCubesLoaded] = useState(false);
+  const [cubesLoadedUserId, setCubesLoadedUserId] = useState(null);
   const [cubeSaveError, setCubeSaveError] = useState("");
 
   const loadCubes = useCallback(async function loadCubes() {
@@ -264,25 +266,34 @@ export function useUserCubes(user) {
     // packs/cards separately in loadCube().
     if (!user) {
       setCubes([]);
+      setCubesLoaded(true);
+      setCubesLoadedUserId(null);
       return;
     }
 
     setLoadingCubes(true);
+    setCubesLoaded(false);
+    setCubesLoadedUserId(null);
 
     const { data, error } = await supabase
       .from("cubes")
       .select("*")
       .eq("user_id", user.id)
+      .order("updated_at", { ascending: false })
       .order("created_at", { ascending: false });
 
     if (error) {
       console.error("Error loading cubes:", error);
       setLoadingCubes(false);
+      setCubesLoaded(true);
+      setCubesLoadedUserId(user.id);
       return;
     }
 
     setCubes(data || []);
     setLoadingCubes(false);
+    setCubesLoaded(true);
+    setCubesLoadedUserId(user.id);
   }, [user]);
 
   const saveCube = useCallback(async function saveCube({
@@ -390,7 +401,7 @@ export function useUserCubes(user) {
     return hydratedPacks.filter(Boolean);
   }
 
-  async function loadCube(cubeId) {
+  const loadCube = useCallback(async function loadCube(cubeId) {
     // Hydrates one cube with its packs and cards for opening in JumpCubeBox.
     const { data: cube, error: cubeError } = await supabase
       .from("cubes")
@@ -460,7 +471,7 @@ export function useUserCubes(user) {
       ...cube,
       packs: hydratedPacks,
     };
-  }
+  }, []);
 
   async function deleteCube(cubeId) {
     // Deletes only the cube. Packs remain in the user's pack library.
@@ -490,6 +501,8 @@ export function useUserCubes(user) {
   return {
     cubes,
     loadingCubes,
+    cubesLoaded,
+    cubesLoadedUserId,
     cubeSaveError,
     loadCubes,
     saveCube,

@@ -1,5 +1,9 @@
-const TARGET_NONLAND_COUNT = 12;
-const TARGET_LAND_COUNT = 8;
+import {
+  DEFAULT_PACK_CARD_LIMIT,
+  normalizePackCardLimit,
+} from "./packFormats";
+
+const LAND_SHARE = 0.4;
 const BASIC_LAND_BY_COLOR = {
   W: "Plains",
   U: "Island",
@@ -72,7 +76,7 @@ function getManaValue(card) {
   return Number.isFinite(manaValue) ? manaValue : 0;
 }
 
-function trimConvertedNonlands(convertedEntries) {
+function trimConvertedNonlands(convertedEntries, targetNonlandCount) {
   const entries = convertedEntries.map((entry) => ({ ...entry }));
   let total = entries.reduce((sum, entry) => sum + entry.quantity, 0);
 
@@ -83,7 +87,7 @@ function trimConvertedNonlands(convertedEntries) {
       entryA.card.name.localeCompare(entryB.card.name),
   );
 
-  while (total > TARGET_NONLAND_COUNT) {
+  while (total > targetNonlandCount) {
     const duplicate = duplicateCandidates.find((entry) => entry.quantity > 1);
 
     if (!duplicate) break;
@@ -92,7 +96,7 @@ function trimConvertedNonlands(convertedEntries) {
     total -= 1;
   }
 
-  if (total > TARGET_NONLAND_COUNT) {
+  if (total > targetNonlandCount) {
     const removalOrder = [...entries].sort(
       (entryA, entryB) =>
         entryA.sourceQuantity - entryB.sourceQuantity ||
@@ -101,7 +105,7 @@ function trimConvertedNonlands(convertedEntries) {
     );
 
     removalOrder.forEach((entry) => {
-      if (total <= TARGET_NONLAND_COUNT || entry.quantity === 0) return;
+      if (total <= targetNonlandCount || entry.quantity === 0) return;
 
       total -= entry.quantity;
       entry.quantity = 0;
@@ -153,12 +157,18 @@ function getColorWeights(cards) {
   return weights;
 }
 
-export function allocateBasicLands(convertedNonlands) {
+export function allocateBasicLands(convertedNonlands, targetLandCount) {
   const weights = getColorWeights(convertedNonlands);
-  const activeColors = COLOR_ORDER.filter((color) => weights[color] > 0);
+  const activeColors = COLOR_ORDER.filter((color) => weights[color] > 0)
+    .sort(
+      (colorA, colorB) =>
+        weights[colorB] - weights[colorA] ||
+        COLOR_ORDER.indexOf(colorA) - COLOR_ORDER.indexOf(colorB),
+    )
+    .slice(0, targetLandCount);
 
   if (activeColors.length === 0) {
-    return [{ name: BASIC_LAND_BY_COLOR.C, quantity: TARGET_LAND_COUNT }];
+    return [{ name: BASIC_LAND_BY_COLOR.C, quantity: targetLandCount }];
   }
 
   const totalWeight = activeColors.reduce(
@@ -166,7 +176,7 @@ export function allocateBasicLands(convertedNonlands) {
     0,
   );
   const allocations = activeColors.map((color) => {
-    const exactQuantity = (weights[color] / totalWeight) * TARGET_LAND_COUNT;
+    const exactQuantity = (weights[color] / totalWeight) * targetLandCount;
 
     return {
       color,
@@ -179,7 +189,7 @@ export function allocateBasicLands(convertedNonlands) {
     0,
   );
 
-  while (allocated < TARGET_LAND_COUNT) {
+  while (allocated < targetLandCount) {
     const nextAllocation = [...allocations].sort(
       (allocationA, allocationB) =>
         allocationB.exactQuantity -
@@ -193,7 +203,7 @@ export function allocateBasicLands(convertedNonlands) {
     allocated += 1;
   }
 
-  while (allocated > TARGET_LAND_COUNT) {
+  while (allocated > targetLandCount) {
     const nextAllocation = [...allocations]
       .filter((allocation) => allocation.quantity > 1)
       .sort(
@@ -209,13 +219,36 @@ export function allocateBasicLands(convertedNonlands) {
     allocated -= 1;
   }
 
-  return allocations.map((allocation) => ({
+  return allocations
+    .sort(
+      (allocationA, allocationB) =>
+        COLOR_ORDER.indexOf(allocationA.color) -
+        COLOR_ORDER.indexOf(allocationB.color),
+    )
+    .map((allocation) => ({
     name: BASIC_LAND_BY_COLOR[allocation.color],
     quantity: allocation.quantity,
-  }));
+    }));
 }
 
-export function buildConvertedDeckPlan(parsedEntries, cardsByNormalizedName) {
+export function getDeckConversionTargets(
+  packCardLimit = DEFAULT_PACK_CARD_LIMIT,
+) {
+  const normalizedLimit = normalizePackCardLimit(packCardLimit);
+  const lands = Math.max(1, Math.round(normalizedLimit * LAND_SHARE));
+
+  return {
+    lands,
+    nonlands: normalizedLimit - lands,
+  };
+}
+
+export function buildConvertedDeckPlan(
+  parsedEntries,
+  cardsByNormalizedName,
+  packCardLimit = DEFAULT_PACK_CARD_LIMIT,
+) {
+  const targets = getDeckConversionTargets(packCardLimit);
   const missingNames = [];
   const importedLandNames = [];
   const convertedEntries = [];
@@ -244,11 +277,14 @@ export function buildConvertedDeckPlan(parsedEntries, cardsByNormalizedName) {
     (sum, entry) => sum + entry.quantity,
     0,
   );
-  const nonlands = trimConvertedNonlands(convertedEntries);
+  const nonlands = trimConvertedNonlands(
+    convertedEntries,
+    targets.nonlands,
+  );
 
   return {
     nonlands,
-    basicLands: allocateBasicLands(nonlands),
+    basicLands: allocateBasicLands(nonlands, targets.lands),
     missingNames,
     importedLandNames,
     trimmedCount:
@@ -257,7 +293,4 @@ export function buildConvertedDeckPlan(parsedEntries, cardsByNormalizedName) {
   };
 }
 
-export const DECK_CONVERSION_TARGETS = {
-  lands: TARGET_LAND_COUNT,
-  nonlands: TARGET_NONLAND_COUNT,
-};
+export const DECK_CONVERSION_TARGETS = getDeckConversionTargets();

@@ -4,6 +4,7 @@ import {
   normalizeDeckCardName,
   parseArenaDeckList,
 } from "../utils/arenaDeckConversion";
+import { normalizePackCardLimit } from "../utils/packFormats";
 
 const CONVERSION_CARD_COLUMNS = `
   id,
@@ -83,17 +84,62 @@ async function loadCardsByNormalizedName(normalizedNames) {
   );
 }
 
-export async function convertArenaDeckToPack(deckText) {
+export async function convertArenaDeckToPack(deckText, packCardLimit) {
   const parsedEntries = parseArenaDeckList(deckText);
 
   if (parsedEntries.length === 0) {
     throw new Error("No main-deck card entries were found.");
   }
 
+  const normalizedPackCardLimit = normalizePackCardLimit(packCardLimit);
+  const parsedCardCount = parsedEntries.reduce(
+    (sum, entry) => sum + entry.quantity,
+    0,
+  );
   const cardsByNormalizedName = await loadCardsByNormalizedName(
     parsedEntries.map((entry) => entry.normalizedName),
   );
-  const plan = buildConvertedDeckPlan(parsedEntries, cardsByNormalizedName);
+
+  if (parsedCardCount <= normalizedPackCardLimit) {
+    const missingNames = [];
+    const cards = parsedEntries
+      .map((entry) => {
+        const card = cardsByNormalizedName.get(entry.normalizedName);
+
+        if (!card) {
+          missingNames.push(entry.name);
+          return null;
+        }
+
+        return normalizeSearchCard(card, entry.quantity);
+      })
+      .filter(Boolean);
+
+    if (cards.length === 0) {
+      throw new Error("No supported cards were found in the main deck.");
+    }
+
+    return {
+      mode: "direct",
+      cards,
+      parsedCardCount,
+      packCardCount: cards.reduce(
+        (sum, card) => sum + card.quantity,
+        0,
+      ),
+      missingNames,
+      importedLandNames: [],
+      trimmedCount: 0,
+      basicLands: [],
+      nonlands: [],
+    };
+  }
+
+  const plan = buildConvertedDeckPlan(
+    parsedEntries,
+    cardsByNormalizedName,
+    normalizedPackCardLimit,
+  );
   const basicCardsByNormalizedName = await loadCardsByNormalizedName(
     plan.basicLands.map((land) => normalizeDeckCardName(land.name)),
   );
@@ -118,11 +164,9 @@ export async function convertArenaDeckToPack(deckText) {
 
   return {
     ...plan,
+    mode: "converted",
     cards,
-    parsedCardCount: parsedEntries.reduce(
-      (sum, entry) => sum + entry.quantity,
-      0,
-    ),
+    parsedCardCount,
     packCardCount: cards.reduce((sum, card) => sum + card.quantity, 0),
   };
 }

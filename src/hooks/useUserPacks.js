@@ -14,26 +14,35 @@ import { normalizePackTags } from "../utils/packTags";
 export function useUserPacks(user) {
   const [packs, setPacks] = useState([]);
   const [loadingPacks, setLoadingPacks] = useState(false);
+  const [packsLoaded, setPacksLoaded] = useState(false);
+  const [packsLoadedUserId, setPacksLoadedUserId] = useState(null);
 
   const loadPacks = useCallback(async function loadPacks() {
     // This is intentionally metadata-only; opening a pack hydrates card rows in
     // usePackBuilder.loadPack().
     if (!user) {
       setPacks([]);
+      setPacksLoaded(true);
+      setPacksLoadedUserId(null);
       return;
     }
 
     setLoadingPacks(true);
+    setPacksLoaded(false);
+    setPacksLoadedUserId(null);
 
     const { data, error } = await supabase
       .from("packs")
       .select("*")
       .eq("user_id", user.id)
+      .order("updated_at", { ascending: false })
       .order("created_at", { ascending: false });
 
     if (error) {
       console.error("Error loading packs:", error);
       setLoadingPacks(false);
+      setPacksLoaded(true);
+      setPacksLoadedUserId(user.id);
       return;
     }
 
@@ -65,6 +74,8 @@ export function useUserPacks(user) {
       })),
     );
     setLoadingPacks(false);
+    setPacksLoaded(true);
+    setPacksLoadedUserId(user.id);
   }, [user]);
 
   useEffect(() => {
@@ -81,6 +92,8 @@ export function useUserPacks(user) {
   return {
     packs,
     loadingPacks,
+    packsLoaded,
+    packsLoadedUserId,
     loadPacks,
   };
 }

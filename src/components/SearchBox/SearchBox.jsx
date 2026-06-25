@@ -31,18 +31,6 @@ export default function SearchBox({
 
   return (
     <form className="searchBox" onSubmit={handleSubmit}>
-      <input
-        className="searchInput"
-        type="search"
-        placeholder="Search cards or Scryfall syntax..."
-        value={searchInput}
-        onChange={(event) => setSearchInput(event.target.value)}
-      />
-
-      <button className="searchButton" type="submit">
-        Search
-      </button>
-
       <div className="searchScopeToggles" aria-label="Search fields">
         {[
           ["title", "Title"],
@@ -58,6 +46,20 @@ export default function SearchBox({
             {label}
           </label>
         ))}
+      </div>
+
+      <div className="searchControls">
+        <input
+          className="searchInput"
+          type="search"
+          placeholder="Search cards or Scryfall syntax..."
+          value={searchInput}
+          onChange={(event) => setSearchInput(event.target.value)}
+        />
+
+        <button className="searchButton" type="submit">
+          Search
+        </button>
       </div>
     </form>
   );

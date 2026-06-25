@@ -66,18 +66,23 @@ export default function DeckConverterModal({
         {conversionResult ? (
           <div className="deckConverterResult">
             <p>
-              Created a {conversionResult.packCardCount}-card draft from{" "}
-              {conversionResult.parsedCardCount} main-deck cards.
+              {conversionResult.mode === "direct"
+                ? `Imported ${conversionResult.packCardCount} cards directly.`
+                : `Created a ${conversionResult.packCardCount}-card draft from ${conversionResult.parsedCardCount} main-deck cards.`}
             </p>
             <dl>
-              <div>
-                <dt>Imported lands removed</dt>
-                <dd>{conversionResult.importedLandNames.length}</dd>
-              </div>
-              <div>
-                <dt>Cards trimmed</dt>
-                <dd>{conversionResult.trimmedCount}</dd>
-              </div>
+              {conversionResult.mode !== "direct" && (
+                <>
+                  <div>
+                    <dt>Imported lands removed</dt>
+                    <dd>{conversionResult.importedLandNames.length}</dd>
+                  </div>
+                  <div>
+                    <dt>Cards trimmed</dt>
+                    <dd>{conversionResult.trimmedCount}</dd>
+                  </div>
+                </>
+              )}
               <div>
                 <dt>Unresolved names</dt>
                 <dd>{conversionResult.missingNames.length}</dd>
@@ -124,8 +129,9 @@ export default function DeckConverterModal({
           </label>
 
           <p className="deckConverterNote">
-            This replaces the current editor with a new draft. Imported lands
-            and the Sideboard section are excluded.
+            Lists at or below the current pack limit import directly. Larger
+            decks are converted into a pack with generated basic lands. The
+            Sideboard section is always excluded.
           </p>
 
           {errorMessage && (

@@ -54,6 +54,30 @@ const CARD_VERSION_COLUMNS = `
   card_faces
 `;
 const VERSION_PAGE_SIZE = 50;
+const SCRYFALL_FORMATS = [
+  { key: "alchemy", label: "Alchemy" },
+  { key: "brawl", label: "Brawl" },
+  { key: "commander", label: "Commander" },
+  { key: "competitivebrawl", label: "Competitive Brawl" },
+  { key: "duel", label: "Duel" },
+  { key: "gladiator", label: "Gladiator" },
+  { key: "historic", label: "Historic" },
+  { key: "legacy", label: "Legacy" },
+  { key: "modern", label: "Modern" },
+  { key: "oathbreaker", label: "Oathbreaker" },
+  { key: "oldschool", label: "Old School" },
+  { key: "pauper", label: "Pauper" },
+  { key: "paupercommander", label: "Pauper EDH" },
+  { key: "penny", label: "Penny" },
+  { key: "pioneer", label: "Pioneer" },
+  { key: "predh", label: "PreEDH" },
+  { key: "premodern", label: "Premodern" },
+  { key: "standard", label: "Standard" },
+  { key: "standardbrawl", label: "Standard Brawl" },
+  { key: "timeless", label: "Timeless" },
+  { key: "tlr", label: "TLR" },
+  { key: "vintage", label: "Vintage" },
+];
 
 function getImage(card) {
   return (
@@ -88,34 +112,6 @@ function getBackImage(card) {
   return null;
 }
 
-function getExpandedImage(card, showBack) {
-  const faceIndex = showBack ? 1 : 0;
-  const faceImages = card?.card_faces?.[faceIndex]?.image_uris;
-
-  if (showBack) {
-    return (
-      faceImages?.png ||
-      faceImages?.large ||
-      faceImages?.normal ||
-      getBackImage(card)
-    );
-  }
-
-  return (
-    card?.image_uris?.png ||
-    card?.image_uris?.large ||
-    faceImages?.png ||
-    faceImages?.large ||
-    getImage(card)
-  );
-}
-
-function formatArray(values, fallback = "None") {
-  return Array.isArray(values) && values.length > 0
-    ? values.join(", ")
-    : fallback;
-}
-
 function formatMoney(value) {
   const number = Number(value);
 
@@ -143,12 +139,54 @@ function hasDisplayPrice(card) {
   );
 }
 
-function getLegalFormats(legalities) {
-  if (!legalities || typeof legalities !== "object") return [];
+function normalizeLegalities(legalities) {
+  if (!legalities) return {};
 
-  return Object.entries(legalities)
-    .filter(([, status]) => status === "legal")
-    .map(([format]) => format);
+  if (typeof legalities === "string") {
+    try {
+      return normalizeLegalities(JSON.parse(legalities));
+    } catch {
+      return {};
+    }
+  }
+
+  return typeof legalities === "object" && !Array.isArray(legalities)
+    ? legalities
+    : {};
+}
+
+function hasLegalityData(legalities) {
+  return Object.keys(normalizeLegalities(legalities)).length > 0;
+}
+
+function formatFormatName(format) {
+  return String(format)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function getFormatLegalities(legalities) {
+  const normalizedLegalities = normalizeLegalities(legalities);
+
+  return SCRYFALL_FORMATS.map(({ key, label }) => ({
+    format: key,
+    label,
+    status: normalizedLegalities[key]
+      ? String(normalizedLegalities[key]).toLowerCase()
+      : "unknown",
+  }));
+}
+
+function getOracleText(card, showBack = false) {
+  const activeFace = card?.card_faces?.[showBack ? 1 : 0];
+
+  if (activeFace?.oracle_text) return activeFace.oracle_text;
+  if (card?.oracle_text) return card.oracle_text;
+
+  return (card?.card_faces || [])
+    .map((face) => face.oracle_text)
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function getVersionLabel(card) {
@@ -163,6 +201,9 @@ function getVersionLabel(card) {
 function normalizeCardVersions(versions, sourceCard) {
   return (versions || []).map((version) => ({
     ...version,
+    legalities: hasLegalityData(version.legalities)
+      ? version.legalities
+      : sourceCard.legalities,
     card_search_id: sourceCard.card_search_id || null,
     variant_id: version.id,
   }));
@@ -195,25 +236,18 @@ export default function CardModal({
   const [livePricesByScryfallId, setLivePricesByScryfallId] = useState({});
   const [isVersionPickerOpen, setIsVersionPickerOpen] = useState(false);
   const [hoveredVersionId, setHoveredVersionId] = useState("");
-  const [expandedCardId, setExpandedCardId] = useState(null);
   const sourceCardId = String(card?.variant_id || card?.id || "");
   const selectedCardId =
     manualSelectedCard.sourceCardId === sourceCardId
       ? manualSelectedCard.selectedCardId
       : sourceCardId;
-  const isImageExpanded = expandedCardId === selectedCardId;
-
   useEffect(() => {
     // Escape closes the modal while it is open.
     if (!isOpen || !card) return undefined;
 
     function handleKeyDown(event) {
       if (event.key === "Escape") {
-        if (isImageExpanded) {
-          setExpandedCardId(null);
-        } else {
-          onClose();
-        }
+        onClose();
       }
     }
 
@@ -222,7 +256,7 @@ export default function CardModal({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [card, isImageExpanded, isOpen, onClose]);
+  }, [card, isOpen, onClose]);
 
   useEffect(
     () => () => {
@@ -388,12 +422,42 @@ export default function CardModal({
   const backImage = getBackImage(displayedCard);
   const canFlip = Boolean(backImage);
   const isFlipped = flippedCardId === selectedCardId;
-  const expandedImage = getExpandedImage(displayedCard, isFlipped);
-  const legalFormats = getLegalFormats(displayedCard.legalities);
+  const formatLegalities = getFormatLegalities(displayedCard.legalities);
+  const oracleText = getOracleText(displayedCard, isFlipped);
   const selectedQuantity =
     selectedCards.find(
       (selectedPackCard) => selectedPackCard.id === displayedCard.id,
     )?.quantity || 0;
+  function renderQuantityControls() {
+    return (
+      <div
+        className="cardModalQuantityControls"
+        aria-label={`${displayedCard.name} pack quantity controls`}
+      >
+        <button
+          type="button"
+          onClick={() => onDecreaseFromPack?.(displayedCard.id)}
+          disabled={selectedQuantity === 0}
+          aria-label={`Remove one ${displayedCard.name} from pack`}
+        >
+          -
+        </button>
+
+        <span aria-label={`${selectedQuantity} in pack`}>
+          {selectedQuantity}
+        </span>
+
+        <button
+          type="button"
+          onClick={() => onAddToPack?.(displayedCard)}
+          disabled={isPackFull}
+          aria-label={`Add one ${displayedCard.name} to pack`}
+        >
+          +
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="cardModalOverlay" onClick={onClose}>
@@ -417,17 +481,6 @@ export default function CardModal({
           {image ? (
             <div
               className={`cardModalFlipFrame${isFlipped ? " flipped" : ""}`}
-              role="button"
-              tabIndex={0}
-              aria-label={`Enlarge ${displayedCard.name} image`}
-              title="Click to enlarge"
-              onClick={() => setExpandedCardId(selectedCardId)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  setExpandedCardId(selectedCardId);
-                }
-              }}
             >
               <div className="cardModalFlipInner">
                 <img
@@ -443,10 +496,6 @@ export default function CardModal({
                   />
                 )}
               </div>
-
-              <span className="cardModalEnlargeHint" aria-hidden="true">
-                Enlarge
-              </span>
 
               {canFlip && (
                 <button
@@ -473,6 +522,20 @@ export default function CardModal({
           ) : (
             <div className="cardModalMissingImage">No image</div>
           )}
+
+          {!readOnly && (
+            <div className="cardModalActions">
+              {renderQuantityControls()}
+            </div>
+          )}
+
+          <p className="cardModalPrices" aria-label="Card prices">
+            <span>{formatMoney(getCardPrice(displayedCard, "price_usd"))}</span>
+            <span aria-hidden="true">/</span>
+            <span className="cardModalFoilPrice">
+              {formatMoney(getCardPrice(displayedCard, "price_usd_foil"))}
+            </span>
+          </p>
         </div>
 
         <div className="cardModalDetails">
@@ -581,119 +644,38 @@ export default function CardModal({
 
           {versionsError && <p className="cardModalError">{versionsError}</p>}
 
-          <dl className="cardDataGrid">
-            <div>
-              <dt>Mana Value</dt>
-              <dd>{displayedCard.mana_value ?? "N/A"}</dd>
-            </div>
-            <div>
-              <dt>Color Identity</dt>
-              <dd>{formatArray(displayedCard.color_identity, "Colorless")}</dd>
-            </div>
-            <div>
-              <dt>Rarity</dt>
-              <dd>{displayedCard.rarity || "N/A"}</dd>
-            </div>
-            <div>
-              <dt>Set</dt>
-              <dd>{displayedCard.set_name || displayedCard.set_code || "N/A"}</dd>
-            </div>
-            <div>
-              <dt>Collector</dt>
-              <dd>{displayedCard.collector_number || "N/A"}</dd>
-            </div>
-            <div>
-              <dt>Price</dt>
-              <dd>{formatMoney(getCardPrice(displayedCard, "price_usd"))}</dd>
-            </div>
-            <div>
-              <dt>Foil</dt>
-              <dd>{formatMoney(getCardPrice(displayedCard, "price_usd_foil"))}</dd>
-            </div>
-            <div>
-              <dt>Games</dt>
-              <dd>{formatArray(displayedCard.games)}</dd>
-            </div>
-            <div>
-              <dt>Printing</dt>
-              <dd>
-                {displayedCard.is_default_printing ? "Default" : "Alternate"}
-              </dd>
-            </div>
-          </dl>
-
-          {displayedCard.oracle_text && (
+          {oracleText && (
             <div className="cardOracleText">
-              {displayedCard.oracle_text.split("\n").map((line) => (
-                <p key={line}>{line}</p>
+              {oracleText.split("\n").map((line, index) => (
+                <p key={`${line}:${index}`}>{line || "\u00a0"}</p>
               ))}
             </div>
           )}
 
           <div className="cardLegalities">
-            <h3>Legal Formats</h3>
-            <p>{formatArray(legalFormats, "None listed")}</p>
-          </div>
-
-          {!readOnly && (
-            <div className="cardModalActions">
-              <div
-                className="cardModalQuantityControls"
-                aria-label={`${displayedCard.name} pack quantity controls`}
-              >
-                <button
-                  type="button"
-                  onClick={() => onDecreaseFromPack?.(displayedCard.id)}
-                  disabled={selectedQuantity === 0}
-                  aria-label={`Remove one ${displayedCard.name} from pack`}
+            <h3>Format Legality</h3>
+            <div className="cardLegalityList">
+              {formatLegalities.map(({ format, label, status }) => (
+                <span
+                  key={format}
+                  className={
+                    status === "legal"
+                      ? "isLegal"
+                      : status === "unknown"
+                        ? "isUnknown"
+                        : "isNotLegal"
+                  }
+                  title={`${label}: ${formatFormatName(status)}`}
+                  aria-label={`${label}: ${formatFormatName(status)}`}
                 >
-                  -
-                </button>
-
-                <span aria-label={`${selectedQuantity} in pack`}>
-                  {selectedQuantity}
+                  <span className="cardLegalityName">{label}</span>
                 </span>
-
-                <button
-                  type="button"
-                  onClick={() => onAddToPack?.(displayedCard)}
-                  disabled={isPackFull}
-                  aria-label={`Add one ${displayedCard.name} to pack`}
-                >
-                  +
-                </button>
-              </div>
+              ))}
             </div>
-          )}
+          </div>
         </div>
       </section>
 
-      {isImageExpanded && expandedImage && (
-        <div
-          className="cardImageLightbox"
-          role="dialog"
-          aria-modal="true"
-          aria-label={`${displayedCard.name} enlarged image`}
-          onClick={(event) => {
-            event.stopPropagation();
-            setExpandedCardId(null);
-          }}
-        >
-          <button
-            type="button"
-            className="cardImageLightboxClose"
-            onClick={() => setExpandedCardId(null)}
-            aria-label="Close enlarged image"
-          >
-            x
-          </button>
-          <img
-            src={expandedImage}
-            alt={`${displayedCard.name}${isFlipped ? " back face" : ""}`}
-            onClick={(event) => event.stopPropagation()}
-          />
-        </div>
-      )}
     </div>
   );
 }

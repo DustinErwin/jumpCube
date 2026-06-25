@@ -170,6 +170,7 @@ export default function PackBox({
   decreaseCardQuantity,
   onCardOpen,
   addCurrentPackToCube,
+  isCubeActive = false,
   onOpenPacks,
   deletePack,
   savedPackId,
@@ -183,6 +184,7 @@ export default function PackBox({
   packTagLimit = PACK_TAG_LIMIT,
   packVisibility = "private",
   setPackVisibility,
+  isPackActive = false,
   newPack,
   onConvertDeck,
   saveStatus,
@@ -287,11 +289,26 @@ export default function PackBox({
         }
       },
       onMouseLeave: () => {
-        pendingTouchActionRef.current = null;
-        blockedTouchClickRef.current = null;
-        setPackActionHint(DEFAULT_PACK_ACTION_HINT);
+        if (
+          pendingTouchActionRef.current === actionId ||
+          blockedTouchClickRef.current === actionId
+        ) {
+          pendingTouchActionRef.current = null;
+          blockedTouchClickRef.current = null;
+        }
+
+        if (pendingTouchActionRef.current === null) {
+          setPackActionHint(DEFAULT_PACK_ACTION_HINT);
+        }
       },
       onBlur: () => {
+        if (
+          pendingTouchActionRef.current !== actionId &&
+          blockedTouchClickRef.current !== actionId
+        ) {
+          return;
+        }
+
         pendingTouchActionRef.current = null;
         blockedTouchClickRef.current = null;
         setPackActionHint(DEFAULT_PACK_ACTION_HINT);
@@ -1017,6 +1034,7 @@ export default function PackBox({
           className={`packVisibilitySwitch ${packVisibility}`}
           type="button"
           onClick={togglePackVisibility}
+          disabled={!isPackActive}
           {...getPackActionHintProps(
             "Set pack visibility. (required to share)",
           )}
@@ -1111,7 +1129,9 @@ export default function PackBox({
           className="packActionButton addPackToCubeButton"
           type="button"
           {...getPackActionHintProps(
-            selectedCards.length === 0
+            !isCubeActive
+              ? "Create or open a cube before adding this pack."
+              : selectedCards.length === 0
               ? "Add cards before saving this pack to your cube."
               : "Save this pack and add it to the current cube.",
           )}
@@ -1121,7 +1141,11 @@ export default function PackBox({
             setConfirmingDeletePack(false);
             addCurrentPackToCube();
           }}
-          disabled={selectedCards.length === 0 || saveStatus === "saving"}
+          disabled={
+            !isCubeActive ||
+            selectedCards.length === 0 ||
+            saveStatus === "saving"
+          }
           aria-label="Save and add pack to cube"
         >
           <svg
@@ -1265,7 +1289,12 @@ export default function PackBox({
         </button>
       )}
 
-      {editingName ? (
+      {!isPackActive ? (
+        <div className="packEmptyState">
+          <h2>No active pack</h2>
+          <p>Click the New Pack button to start a pack.</p>
+        </div>
+      ) : editingName ? (
         <input
           className="packNameInput"
           value={usesDraftNamePlaceholder ? "" : packName}
@@ -1309,12 +1338,12 @@ export default function PackBox({
           )}
         </h2>
       )}
-      {packNameModerationMessage && (
+      {isPackActive && packNameModerationMessage && (
         <p className="contentModerationMessage" role="alert">
           {packNameModerationMessage}
         </p>
       )}
-      {editingDescription ? (
+      {isPackActive && editingDescription ? (
         <textarea
           className="packDescriptionInput"
           value={packDescription}
@@ -1332,7 +1361,7 @@ export default function PackBox({
             }
           }}
         />
-      ) : (
+      ) : isPackActive ? (
         <p
           className="packDescription"
           onClick={() => {
@@ -1348,34 +1377,43 @@ export default function PackBox({
             </span>
           )}
         </p>
-      )}
-      {packDescriptionModerationMessage && (
+      ) : null}
+      {isPackActive && packDescriptionModerationMessage && (
         <p className="contentModerationMessage" role="alert">
           {packDescriptionModerationMessage}
         </p>
       )}
-      <div className="packMetadata">
-        <div className="packColorIdentity">
-          {sortedPackColors.length === 0 ? (
-            <i className="ms ms-c manaSymbol manaSymbolC" title="Colorless" />
-          ) : (
-            sortedPackColors.map((color) => (
-              <i
-                className={`ms ${getManaClass(color)} manaSymbol manaSymbol${color}`}
-                key={color}
-                title={color}
-              />
-            ))
-          )}
+      {isPackActive && <div className="packSummary">
+        <div className="packMetadata" aria-label="Pack color identity">
+          <div className="packColorIdentity">
+            {sortedPackColors.length === 0 ? (
+              <i className="ms ms-c manaSymbol manaSymbolC" title="Colorless" />
+            ) : (
+              sortedPackColors.map((color) => (
+                <i
+                  className={`ms ${getManaClass(color)} manaSymbol manaSymbol${color}`}
+                  key={color}
+                  title={color}
+                />
+              ))
+            )}
+          </div>
         </div>
-      </div>
-      <p className="packCount">
-        {totalCards} / {PACK_CARD_LIMIT} cards selected
-      </p>
 
-      {totalCards >= PACK_CARD_LIMIT && (
-        <p className="packLimitMessage">Pack limit reached</p>
-      )}
+        <p className="packCount">
+          <strong>{totalCards}</strong>
+          <span> / {PACK_CARD_LIMIT} cards</span>
+        </p>
+
+        <p className="packTotalPrice">
+          <span>Total</span>
+          <strong>{formatUsd(totalPrice)}</strong>
+        </p>
+
+        {totalCards >= PACK_CARD_LIMIT && (
+          <p className="packLimitMessage">Pack limit reached</p>
+        )}
+      </div>}
 
       <div className="packVisibilityToggle" aria-label="Pack visibility">
         <span>Visibility</span>
@@ -1388,6 +1426,7 @@ export default function PackBox({
               currentVisibility === "public" ? "private" : "public",
             );
           }}
+          disabled={!isPackActive}
           aria-pressed={packVisibility === "public"}
         >
           {packVisibility === "public" ? "Public" : "Private"}
@@ -1460,7 +1499,11 @@ export default function PackBox({
             setConfirmingDeletePack(false);
             addCurrentPackToCube();
           }}
-          disabled={selectedCards.length === 0 || saveStatus === "saving"}
+          disabled={
+            !isCubeActive ||
+            selectedCards.length === 0 ||
+            saveStatus === "saving"
+          }
           title="Save and add pack to cube"
           aria-label="Save and add pack to cube"
         >
@@ -1497,6 +1540,7 @@ export default function PackBox({
             setConfirmingDeletePack(false);
             setIsArchetypeMenuOpen((current) => !current);
           }}
+          disabled={!isPackActive}
           title="Add archetype tag"
           aria-label="Add archetype tag"
           aria-expanded={isArchetypeMenuOpen}
@@ -1513,7 +1557,7 @@ export default function PackBox({
             setConfirmingDeletePack(false);
             setShowPackStats(true);
           }}
-          disabled={selectedCards.length === 0}
+          disabled={!isPackActive || selectedCards.length === 0}
           title="Show pack statistics"
           aria-label="Show pack statistics"
         >
@@ -1636,9 +1680,6 @@ export default function PackBox({
           </p>
         </div>
       )}
-
-      <p className="packTotalPrice">Total: {formatUsd(totalPrice)}</p>
-
 
       {showPackStats && (
         <div className="packStatsOverlay" role="dialog" aria-modal="true">
@@ -2010,7 +2051,9 @@ export default function PackBox({
         </div>
       )} */}
       <div className="packCardScrollArea">
-        {selectedCards.length === 0 ? (
+        {!isPackActive ? (
+          <p className="emptyPack">Create or open a pack to begin.</p>
+        ) : selectedCards.length === 0 ? (
           <p className="emptyPack">Add cards to start your pack.</p>
         ) : (
           <div className="stackedPackCards">

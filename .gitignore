@@ -18,6 +18,7 @@ scripts/
 *.sql
 !supabase/migrations/202606230001_add_card_search_is_legal.sql
 !supabase/migrations/202606240001_sync_card_search_games.sql
+!supabase/migrations/202606250001_add_pack_cube_updated_at.sql
 !supabase/query-plan-tests/
 !supabase/query-plan-tests/*.sql
 .vscode/*

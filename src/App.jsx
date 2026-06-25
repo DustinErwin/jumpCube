@@ -169,10 +169,18 @@ function App() {
     setProfile,
   } = useAuth();
   const { sets } = useSets();
-  const { packs, loadPacks } = useUserPacks(user);
+  const {
+    packs,
+    packsLoaded,
+    packsLoadedUserId,
+    loadPacks,
+  } = useUserPacks(user);
   const userCubes = useUserCubes(user);
   const collection = useCollection(user);
-  const { saveCube: saveUserCube } = userCubes;
+  const {
+    saveCube: saveUserCube,
+    loadCube: loadUserCube,
+  } = userCubes;
 
   const [isPackLibraryOpen, setIsPackLibraryOpen] = useState(false);
   const [isCubeLibraryOpen, setIsCubeLibraryOpen] = useState(false);
@@ -205,17 +213,20 @@ function App() {
       typeof window === "undefined" ||
       !window.matchMedia(MOBILE_PANEL_QUERY).matches,
   );
-  const [cubeName, setCubeName] = useState("Current Jump Cube");
+  const [cubeName, setCubeName] = useState("");
   const [cubeDescription, setCubeDescription] = useState("");
   const [cubeVisibility, setCubeVisibility] = useState("private");
   const [selectedPacks, setSelectedPacks] = useState([]);
   const [savedCubeId, setSavedCubeId] = useState(null);
+  const [isCubeActive, setIsCubeActive] = useState(false);
   const [cubeSaveStatus, setCubeSaveStatus] = useState("");
   const [selectedSets, setSelectedSets] = useState([]);
   const [frogBackground, setFrogBackground] = useState(
     FALLBACK_FROG_BACKGROUND,
   );
   const lastSavedCubeSnapshotRef = useRef(null);
+  const initializedCubeUserIdRef = useRef(null);
+  const initializedPackUserIdRef = useRef(null);
   const pendingSharedPackCopyRef = useRef(false);
   const filterSearchSnapshot = JSON.stringify({
     manaValues,
@@ -288,6 +299,10 @@ function App() {
     onPackSaved: syncPackIntoCurrentCube,
     onPackDeleted: removePackFromCurrentCube,
   });
+  const {
+    loadPack: loadActivePack,
+    clearActivePack,
+  } = pack;
 
   useEffect(() => {
     if (!user?.id || pendingSharedPackCopyRef.current) return;
@@ -299,7 +314,8 @@ function App() {
         const pendingOpenPackId = takePendingOpenPack();
 
         if (pendingOpenPackId) {
-          await pack.loadPack(pendingOpenPackId);
+          initializedPackUserIdRef.current = user.id;
+          await loadActivePack(pendingOpenPackId);
           await loadPacks();
           setIsPackBoxOpen(true);
           setIsJumpCubeBoxOpen(false);
@@ -311,11 +327,12 @@ function App() {
 
         if (!sourcePackId) return;
 
+        initializedPackUserIdRef.current = user.id;
         const copiedPackId = await copyPublicPack(sourcePackId, user.id);
 
         if (!copiedPackId) return;
 
-        await Promise.all([pack.loadPack(copiedPackId), loadPacks()]);
+        await Promise.all([loadActivePack(copiedPackId), loadPacks()]);
         setIsPackBoxOpen(true);
         setIsJumpCubeBoxOpen(false);
         navigate("/", { replace: true });
@@ -327,7 +344,49 @@ function App() {
     }
 
     finishPendingSharedPackCopy();
-  }, [loadPacks, navigate, pack, user]);
+  }, [loadActivePack, loadPacks, navigate, user]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      initializedPackUserIdRef.current = null;
+      return undefined;
+    }
+
+    if (
+      !packsLoaded ||
+      packsLoadedUserId !== user.id ||
+      initializedPackUserIdRef.current === user.id
+    ) {
+      return undefined;
+    }
+
+    initializedPackUserIdRef.current = user.id;
+    const latestPack = packs[0];
+    let isCurrent = true;
+
+    const timeoutId = window.setTimeout(async () => {
+      if (!isCurrent) return;
+
+      if (latestPack?.id) {
+        await loadActivePack(latestPack.id);
+        return;
+      }
+
+      clearActivePack();
+    }, 0);
+
+    return () => {
+      isCurrent = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    clearActivePack,
+    loadActivePack,
+    packs,
+    packsLoaded,
+    packsLoadedUserId,
+    user,
+  ]);
   function requireAuth() {
     if (user) return true;
 
@@ -347,7 +406,8 @@ function App() {
 
     setIsPackLibraryOpen(false);
     setIsCubeLibraryOpen(false);
-    pack.newPack();
+    clearActivePack();
+    clearActiveCube();
   }
 
   async function copyShareLink(kind, id) {
@@ -421,6 +481,7 @@ function App() {
     // Pack must exist in the database before cube_packs can point at it.
     if (pack.selectedCards.length === 0) return;
     if (!requireAuth()) return;
+    if (!isCubeActive) return;
 
     const savedPackId = await pack.savePack({ promptOnRename: false });
 
@@ -493,7 +554,8 @@ function App() {
   function newCube() {
     if (!requireAuth()) return;
 
-    setCubeName("Current Jump Cube");
+    setIsCubeActive(true);
+    setCubeName("");
     setCubeDescription("");
     setCubeVisibility("private");
     setSelectedPacks([]);
@@ -501,6 +563,17 @@ function App() {
     setCubeSaveStatus("");
     lastSavedCubeSnapshotRef.current = null;
   }
+
+  const clearActiveCube = useCallback(() => {
+    setIsCubeActive(false);
+    setCubeName("");
+    setCubeDescription("");
+    setCubeVisibility("private");
+    setSelectedPacks([]);
+    setSavedCubeId(null);
+    setCubeSaveStatus("");
+    lastSavedCubeSnapshotRef.current = null;
+  }, []);
 
   const saveCurrentCube = useCallback(async function saveCurrentCube() {
     /*
@@ -513,6 +586,7 @@ function App() {
      *   packs: Array<pack summary with savedPackId/id>
      * }
      */
+    if (!isCubeActive) return;
     if (selectedPacks.length === 0 && !savedCubeId) return;
 
     const currentSnapshot = getCubeSnapshot(
@@ -551,36 +625,84 @@ function App() {
     cubeDescription,
     cubeVisibility,
     cubeName,
+    isCubeActive,
     savedCubeId,
     saveUserCube,
     selectedPacks,
   ]);
 
-  async function openCube(cubeId) {
+  const openCube = useCallback(async function openCube(cubeId) {
     // loadCube returns cube metadata plus hydrated pack summaries.
-    if (!requireAuth()) return;
+    if (!user) {
+      setIsAuthRequiredOpen(true);
+      return;
+    }
 
-    const cube = await userCubes.loadCube(cubeId);
+    const cube = await loadUserCube(cubeId);
 
     if (!cube) return;
 
+    setIsCubeActive(true);
     setSavedCubeId(cube.id);
-    setCubeName(normalizeTitle(cube.name, "Current Jump Cube"));
+    setCubeName(normalizeTitle(cube.name, "Unnamed Cube"));
     setCubeDescription(cube.description || "");
     setCubeVisibility(cube.visibility === "public" ? "public" : "private");
     setSelectedPacks(cube.packs || []);
     lastSavedCubeSnapshotRef.current = getCubeSnapshot(
-      cube.name || "Current Jump Cube",
+      cube.name || "Unnamed Cube",
       cube.description || "",
       cube.visibility,
       cube.packs || [],
     );
     setIsCubeLibraryOpen(false);
-  }
+  }, [loadUserCube, user]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      initializedCubeUserIdRef.current = null;
+      return undefined;
+    }
+
+    if (
+      !userCubes.cubesLoaded ||
+      userCubes.cubesLoadedUserId !== user.id ||
+      initializedCubeUserIdRef.current === user.id
+    ) {
+      return;
+    }
+
+    initializedCubeUserIdRef.current = user.id;
+    const latestCube = userCubes.cubes[0];
+    let isCurrent = true;
+
+    const timeoutId = window.setTimeout(async () => {
+      if (!isCurrent) return;
+
+      if (latestCube?.id) {
+        await openCube(latestCube.id);
+        return;
+      }
+
+      clearActiveCube();
+    }, 0);
+
+    return () => {
+      isCurrent = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    clearActiveCube,
+    openCube,
+    user,
+    userCubes.cubes,
+    userCubes.cubesLoaded,
+    userCubes.cubesLoadedUserId,
+  ]);
 
   useEffect(() => {
     // Debounced cube autosave. The snapshot prevents repeated saves from the
     // same state while still catching pack reorder/removal/name edits.
+    if (!isCubeActive) return undefined;
     if (selectedPacks.length === 0 && !savedCubeId) return undefined;
 
     const currentSnapshot = getCubeSnapshot(
@@ -601,7 +723,7 @@ function App() {
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [cubeDescription, cubeName, cubeVisibility, savedCubeId, saveCurrentCube, selectedPacks]);
+  }, [cubeDescription, cubeName, cubeVisibility, isCubeActive, savedCubeId, saveCurrentCube, selectedPacks]);
 
   useEffect(() => {
     // Infinite scroll for the card grid. loadMoreCards is internally guarded
@@ -838,11 +960,13 @@ function App() {
                   packTagLimit={pack.packTagLimit}
                   packVisibility={pack.packVisibility}
                   setPackVisibility={pack.setPackVisibility}
+                  isPackActive={pack.isPackActive}
                   selectedCards={pack.selectedCards}
                   addCard={pack.addCardToPack}
                   decreaseCardQuantity={pack.decreaseCardQuantity}
                   onCardOpen={setModalCard}
                   addCurrentPackToCube={addCurrentPackToCube}
+                  isCubeActive={isCubeActive}
                   onOpenPacks={() => {
                     if (!requireAuth()) return;
                     setIsPackLibraryOpen(true);
@@ -855,7 +979,10 @@ function App() {
                   onSharePack={(packId) => copyShareLink("pack", packId)}
                   newPack={startNewPack}
                   onConvertDeck={async (deckText, convertedPackName) => {
-                    const conversion = await convertArenaDeckToPack(deckText);
+                    const conversion = await convertArenaDeckToPack(
+                      deckText,
+                      pack.packCardLimit,
+                    );
 
                     pack.startPackFromCards(
                       conversion.cards,
@@ -884,6 +1011,7 @@ function App() {
                   setCubeDescription={setCubeDescription}
                   cubeVisibility={cubeVisibility}
                   setCubeVisibility={setCubeVisibility}
+                  isCubeActive={isCubeActive}
                   selectedPacks={selectedPacks}
                   onOpenCubes={() => {
                     if (!requireAuth()) return;
@@ -925,11 +1053,13 @@ function App() {
                   await pack.duplicatePack(packId);
                 }}
                 onSharePack={(packId) => copyShareLink("pack", packId)}
+                canAddPacksToCube={isCubeActive}
                 cubePackIds={selectedPacks.map(
                   (selectedPack) => selectedPack.savedPackId || selectedPack.id,
                 )}
                 onAddPacksToCube={async (packIds) => {
                   if (!requireAuth()) return;
+                  if (!isCubeActive) return;
 
                   const existingIds = new Set(
                     selectedPacks.map(
@@ -961,7 +1091,7 @@ function App() {
                   await userCubes.deleteCube(cubeId);
 
                   if (savedCubeId === cubeId) {
-                    newCube();
+                    clearActiveCube();
                   }
                 }}
               />

@@ -527,6 +527,7 @@ export default function JumpCubeBox({
   setCubeDescription,
   cubeVisibility = "private",
   setCubeVisibility,
+  isCubeActive = false,
   selectedPacks,
   onOpenCubes,
   onOpenPack,
@@ -599,11 +600,26 @@ export default function JumpCubeBox({
         }
       },
       onMouseLeave: () => {
-        pendingTouchActionRef.current = null;
-        blockedTouchClickRef.current = null;
-        setCubeActionHint(DEFAULT_CUBE_ACTION_HINT);
+        if (
+          pendingTouchActionRef.current === actionId ||
+          blockedTouchClickRef.current === actionId
+        ) {
+          pendingTouchActionRef.current = null;
+          blockedTouchClickRef.current = null;
+        }
+
+        if (pendingTouchActionRef.current === null) {
+          setCubeActionHint(DEFAULT_CUBE_ACTION_HINT);
+        }
       },
       onBlur: () => {
+        if (
+          pendingTouchActionRef.current !== actionId &&
+          blockedTouchClickRef.current !== actionId
+        ) {
+          return;
+        }
+
         pendingTouchActionRef.current = null;
         blockedTouchClickRef.current = null;
         setCubeActionHint(DEFAULT_CUBE_ACTION_HINT);
@@ -954,7 +970,12 @@ export default function JumpCubeBox({
         {isOpen ? "<" : ">"}
       </button>
 
-      {editingName ? (
+      {!isCubeActive ? (
+        <div className="cubeEmptyState">
+          <h2>No active cube</h2>
+          <p>Click the New Cube button to start a cube.</p>
+        </div>
+      ) : editingName ? (
         <input
           className="cubeNameInput"
           value={cubeName}
@@ -979,16 +1000,16 @@ export default function JumpCubeBox({
             setEditingName(true);
           }}
         >
-          {cubeName}
+          {cubeName || "Unnamed Cube"}
         </h2>
       )}
-      {cubeNameModerationMessage && (
+      {isCubeActive && cubeNameModerationMessage && (
         <p className="contentModerationMessage" role="alert">
           {cubeNameModerationMessage}
         </p>
       )}
 
-      {editingDescription ? (
+      {isCubeActive && editingDescription ? (
         <textarea
           className="cubeDescriptionInput"
           value={cubeDescription}
@@ -1003,7 +1024,7 @@ export default function JumpCubeBox({
             if (!cubeDescriptionModerationMessage) setEditingDescription(false);
           }}
         />
-      ) : (
+      ) : isCubeActive ? (
         <p
           className="cubeDescription"
           onClick={() => {
@@ -1018,14 +1039,16 @@ export default function JumpCubeBox({
             </span>
           )}
         </p>
-      )}
-      {cubeDescriptionModerationMessage && (
+      ) : null}
+      {isCubeActive && cubeDescriptionModerationMessage && (
         <p className="contentModerationMessage" role="alert">
           {cubeDescriptionModerationMessage}
         </p>
       )}
 
-      <p className="cubeCount">{selectedPacks.length} packs selected</p>
+      {isCubeActive && (
+        <p className="cubeCount">{selectedPacks.length} packs selected</p>
+      )}
 
       <div className="cubeVisibilityToggle" aria-label="Cube visibility">
         <span>Visibility</span>
@@ -1033,6 +1056,7 @@ export default function JumpCubeBox({
           type="button"
           className={cubeVisibility === "public" ? "public" : "private"}
           onClick={toggleCubeVisibility}
+          disabled={!isCubeActive}
           aria-pressed={cubeVisibility === "public"}
         >
           {cubeVisibility === "public" ? "Public" : "Private"}
@@ -1048,6 +1072,7 @@ export default function JumpCubeBox({
           className={`cubeVisibilitySwitch ${cubeVisibility}`}
           type="button"
           onClick={toggleCubeVisibility}
+          disabled={!isCubeActive}
           {...getCubeActionHintProps("Set Cube Visibility (required to share)")}
           aria-label={`Cube visibility: ${
             cubeVisibility === "public" ? "Public" : "Private"
@@ -1104,7 +1129,10 @@ export default function JumpCubeBox({
 
             setConfirmingDeleteCube((current) => !current);
           }}
-          disabled={selectedPacks.length === 0 && !cubeDescription.trim()}
+          disabled={
+            !isCubeActive ||
+            (selectedPacks.length === 0 && !cubeDescription.trim())
+          }
           {...getCubeActionHintProps("Clear the current cube.")}
           aria-label="Clear cube"
         >
@@ -1131,7 +1159,7 @@ export default function JumpCubeBox({
             setConfirmingDeleteCube(false);
             setShowCubeStats(true);
           }}
-          disabled={selectedPacks.length === 0}
+          disabled={!isCubeActive || selectedPacks.length === 0}
           {...getCubeActionHintProps("Show stats panel.")}
           aria-label="Show cube statistics"
         >
@@ -1147,7 +1175,7 @@ export default function JumpCubeBox({
             setConfirmingDeleteCube(false);
             onSampleDraft?.();
           }}
-          disabled={draftablePackCount < 4}
+          disabled={!isCubeActive || draftablePackCount < 4}
           {...getCubeActionHintProps(
             draftablePackCount >= 4
               ? "Run a sample two-pack draft."
@@ -1673,7 +1701,11 @@ export default function JumpCubeBox({
 
       <div className="cubePackScrollArea">
         {selectedPacks.length === 0 ? (
-          <p className="emptyCube">Add packs to build your Jump Cube.</p>
+          <p className="emptyCube">
+            {isCubeActive
+              ? "Add packs to build your Jump Cube."
+              : "Create or open a cube to begin."}
+          </p>
         ) : (
           <div className="cubePackList">
             {selectedPacks.map((pack) => (

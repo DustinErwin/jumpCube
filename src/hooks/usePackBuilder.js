@@ -11,6 +11,7 @@ import {
   PACK_TAG_LIMIT,
 } from "../utils/packTags";
 import { hasBlockedContentInFields } from "../utils/contentModeration";
+import { DEFAULT_PACK_CARD_LIMIT } from "../utils/packFormats";
 
 /*
  * usePackBuilder() owns the active pack editor.
@@ -31,7 +32,7 @@ import { hasBlockedContentInFields } from "../utils/contentModeration";
  * }
  */
 
-export const PACK_CARD_LIMIT = 20;
+export const PACK_CARD_LIMIT = DEFAULT_PACK_CARD_LIMIT;
 export const DRAFT_PACK_NAME = "Draft Pack";
 // Update this list when adding/removing archetype options in PackBox.
 export const PACK_ARCHETYPE_TAGS = [
@@ -325,6 +326,7 @@ export function usePackBuilder(user, refreshPacks, {
   onPackDeleted,
 } = {}) {
   const [selectedCards, setSelectedCards] = useState([]);
+  const [isPackActive, setIsPackActive] = useState(false);
   const [packName, setPackName] = useState(DRAFT_PACK_NAME);
   const [packDescription, setPackDescription] = useState("");
   const [packArchetypeTags, setPackArchetypeTags] = useState([]);
@@ -420,6 +422,8 @@ export function usePackBuilder(user, refreshPacks, {
   function addCardToPack(card) {
     // Adds one copy, up to PACK_CARD_LIMIT. Existing copies increment quantity
     // instead of duplicating rows in selectedCards.
+    if (!isPackActive) return;
+
     setSelectedCards((prev) => {
       if (getPackCardCount(prev) >= PACK_CARD_LIMIT) {
         return prev;
@@ -437,7 +441,7 @@ export function usePackBuilder(user, refreshPacks, {
     });
   }
 
-  async function loadPack(packId) {
+  const loadPack = useCallback(async function loadPack(packId) {
     // Loads pack metadata first, then hydrates pack_cards through v2 card
     // identity/variant relationships.
     const { data: pack, error: packError } = await supabase
@@ -480,6 +484,7 @@ export function usePackBuilder(user, refreshPacks, {
       return;
     }
 
+    setIsPackActive(true);
     setPackName(normalizePackName(pack.name, DRAFT_PACK_NAME));
     setPackDescription(sanitizeDescription(pack.description));
     const relationalTags = await loadPackTagAssignments(pack.id);
@@ -500,7 +505,7 @@ export function usePackBuilder(user, refreshPacks, {
       pack.visibility,
       hydratedCards,
     );
-  }
+  }, []);
 
   function decreaseCardQuantity(cardId) {
     // Removes one copy and drops the card entirely when quantity reaches zero.
@@ -527,6 +532,7 @@ export function usePackBuilder(user, refreshPacks, {
 
   function newPack() {
     // Resets local editor state only. It does not delete anything in Supabase.
+    setIsPackActive(true);
     setPackName(DRAFT_PACK_NAME);
     setPackDescription("");
     setPackArchetypeTags([]);
@@ -541,7 +547,26 @@ export function usePackBuilder(user, refreshPacks, {
     localStorage.removeItem("jumpCubeCurrentPack");
   }
 
+  const clearActivePack = useCallback(function clearActivePack() {
+    setIsPackActive(false);
+    setPackName(DRAFT_PACK_NAME);
+    setPackDescription("");
+    setPackArchetypeTags([]);
+    setPackVisibility("private");
+    setSelectedCards([]);
+    setSavedPackId(null);
+    setSavedPackName(null);
+    setSaveStatus("");
+    setSaveErrorMessage("");
+    setShowRenameChoice(false);
+    setPendingSaveAction(null);
+    setIsEditingText(false);
+    lastSavedSnapshotRef.current = null;
+    localStorage.removeItem("jumpCubeCurrentPack");
+  }, []);
+
   function startPackFromCards(cards, name = DRAFT_PACK_NAME) {
+    setIsPackActive(true);
     setPackName(normalizePackName(name, DRAFT_PACK_NAME));
     setPackDescription("");
     setPackArchetypeTags([]);
@@ -833,7 +858,10 @@ export function usePackBuilder(user, refreshPacks, {
 
     onPackDeleted?.(packId);
     await refreshPacks?.();
-    newPack();
+
+    if (savedPackId === packId) {
+      clearActivePack();
+    }
   }
 
   function moveCard(draggedCardId, targetCardId) {
@@ -869,6 +897,7 @@ export function usePackBuilder(user, refreshPacks, {
      */
     const cardsToSave = cardsOverride || selectedCards;
 
+    if (!isPackActive) return null;
     if (cardsToSave.length === 0) return null;
 
     if (
@@ -920,6 +949,7 @@ export function usePackBuilder(user, refreshPacks, {
     // Debounced autosave after any meaningful pack edit. The snapshot guard in
     // finishSave prevents repeat writes once the database is current.
     if (!user?.id) return undefined;
+    if (!isPackActive) return undefined;
     if (selectedCards.length === 0 && !savedPackId) return undefined;
     if (isEditingText) return undefined;
 
@@ -944,6 +974,7 @@ export function usePackBuilder(user, refreshPacks, {
     };
   }, [
     finishSave,
+    isPackActive,
     isEditingText,
     packDescription,
     packArchetypeTags,
@@ -956,7 +987,10 @@ export function usePackBuilder(user, refreshPacks, {
 
   return {
     selectedCards,
-    isPackFull: getPackCardCount(selectedCards) >= PACK_CARD_LIMIT,
+    packCardLimit: PACK_CARD_LIMIT,
+    isPackActive,
+    isPackFull:
+      !isPackActive || getPackCardCount(selectedCards) >= PACK_CARD_LIMIT,
     setSelectedCards,
     packName,
     setPackName,
@@ -982,6 +1016,7 @@ export function usePackBuilder(user, refreshPacks, {
     decreaseCardQuantity,
     removeCardFromPack,
     newPack,
+    clearActivePack,
     startPackFromCards,
     savePack,
     loadPack,
