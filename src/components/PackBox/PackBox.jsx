@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { PACK_CARD_LIMIT } from "../../hooks/usePackBuilder";
+import {
+  DRAFT_PACK_NAME,
+  PACK_CARD_LIMIT,
+} from "../../hooks/usePackBuilder";
 import {
   getPrimaryCardMechanicBucket,
   PACK_MECHANIC_BUCKETS,
@@ -19,6 +22,7 @@ import {
   validatePackTagName,
 } from "../../utils/packTags";
 import { getContentModerationMessage } from "../../utils/contentModeration";
+import DeckConverterModal from "../DeckConverterModal/DeckConverterModal";
 import "./PackBox.css";
 
 /*
@@ -56,6 +60,26 @@ const CARD_TYPE_LABELS = {
   Planeswalker: "Planeswalkers",
   Sorcery: "Sorceries",
 };
+const PACK_STATS_TYPE_ORDER = [
+  "Creature",
+  "Land",
+  "Instant",
+  "Sorcery",
+  "Artifact",
+  "Enchantment",
+  "Planeswalker",
+  "Battle",
+];
+const PACK_STATS_TYPE_LABELS = {
+  ...CARD_TYPE_LABELS,
+  Battle: "Battles",
+  Other: "Other",
+};
+const PACK_STATS_TABLE_MODES = [
+  { id: "function", label: "Function" },
+  { id: "type", label: "Card Type" },
+  { id: "mana", label: "Mana Value" },
+];
 const IDEAL_MANA_CURVE = [1, 4, 3, 2, 1, 1];
 const SWIPE_REMOVE_THRESHOLD = 88;
 const SWIPE_REMOVE_CANCEL_THRESHOLD = 56;
@@ -129,6 +153,15 @@ function getCardTypes(card) {
   );
 }
 
+function getPrimaryPackStatsType(card) {
+  const typeLine = card.type_line || "";
+  const matchedType = PACK_STATS_TYPE_ORDER.find((type) =>
+    new RegExp(`(^|[^A-Za-z])${type}([^A-Za-z]|$)`, "i").test(typeLine),
+  );
+
+  return matchedType || "Other";
+}
+
 export default function PackBox({
   packName,
   setPackName,
@@ -151,10 +184,12 @@ export default function PackBox({
   packVisibility = "private",
   setPackVisibility,
   newPack,
+  onConvertDeck,
   saveStatus,
   saveErrorMessage = "",
   showRenameChoice,
   pendingSaveAction,
+  setIsEditingText,
   moveCard,
   moveCardToMechanicBucket,
   initialShowStats = false,
@@ -213,6 +248,8 @@ export default function PackBox({
   const [tagMessage, setTagMessage] = useState("");
   const [isCreatingTag, setIsCreatingTag] = useState(false);
   const [showPackStats, setShowPackStats] = useState(initialShowStats);
+  const [isDeckConverterOpen, setIsDeckConverterOpen] = useState(false);
+  const [packStatsTableMode, setPackStatsTableMode] = useState("function");
   const [visibilityMessage, setVisibilityMessage] = useState("");
   const [shareMessage, setShareMessage] = useState("");
   const [packActionHint, setPackActionHint] = useState(
@@ -577,6 +614,8 @@ export default function PackBox({
   const packNameModerationMessage = getContentModerationMessage(packName);
   const packDescriptionModerationMessage =
     getContentModerationMessage(packDescription);
+  const usesDraftNamePlaceholder =
+    !savedPackId && packName === DRAFT_PACK_NAME;
 
   const packColorIdentity = [
     ...new Set(selectedCards.flatMap((card) => card.color_identity || [])),
@@ -605,6 +644,35 @@ export default function PackBox({
       return getPrimaryCardMechanicBucket(card)?.id === bucket.id;
     }),
   }));
+  const typeColumns = [...PACK_STATS_TYPE_ORDER, "Other"].map((type) => ({
+    id: type.toLowerCase(),
+    label: PACK_STATS_TYPE_LABELS[type],
+    cards: displayedCards.filter(
+      (card) => getPrimaryPackStatsType(card) === type,
+    ),
+  }));
+  const manaValueColumns = [0, 1, 2, 3, 4, 5, 6].map((manaValue) => ({
+    id: `mana-${manaValue}`,
+    label: manaValue === 6 ? "6+" : String(manaValue),
+    cards: displayedCards.filter((card) => {
+      if (/\bland\b/i.test(card.type_line || "")) return false;
+
+      const cardManaValue = Number(card.mana_value || 0);
+      const bucket = cardManaValue >= 6 ? 6 : Math.max(0, cardManaValue);
+
+      return bucket === manaValue;
+    }),
+  }));
+  const activeStatsColumns =
+    packStatsTableMode === "type"
+      ? typeColumns
+      : packStatsTableMode === "mana"
+        ? manaValueColumns
+        : mechanicColumns;
+  const activeStatsTableLabel =
+    PACK_STATS_TABLE_MODES.find((mode) => mode.id === packStatsTableMode)
+      ?.label || "Function";
+  const canMoveStatsCards = packStatsTableMode === "function";
   const mechanicBucketCounts = mechanicColumns.map((column) => ({
     id: column.id,
     label: column.label,
@@ -1071,6 +1139,28 @@ export default function PackBox({
         </button>
 
         <button
+          className="packActionButton convertDeckButton"
+          type="button"
+          {...getPackActionHintProps("Convert an Arena deck into a jump pack.")}
+          onClick={() => {
+            setConfirmingDeletePack(false);
+            setIsDeckConverterOpen(true);
+          }}
+          aria-label="Convert Arena deck"
+        >
+          <svg
+            aria-hidden="true"
+            className="actionIcon"
+            viewBox="0 0 24 24"
+            focusable="false"
+          >
+            <path d="M4 3h11l5 5v13H4z" />
+            <path className="actionIconInset" d="M14 4v5h5" />
+            <path className="actionIconInset" d="M7 12h10v2H7zM7 16h7v2H7z" />
+          </svg>
+        </button>
+
+        <button
           className="packActionButton archetypeMenuButton"
           type="button"
           {...getPackActionHintProps(
@@ -1178,16 +1268,29 @@ export default function PackBox({
       {editingName ? (
         <input
           className="packNameInput"
-          value={packName}
+          value={usesDraftNamePlaceholder ? "" : packName}
           aria-invalid={Boolean(packNameModerationMessage)}
           maxLength={TITLE_MAX_LENGTH}
+          placeholder="Unnamed Pack"
           autoFocus
           onChange={(e) => setPackName(sanitizeTitleInput(e.target.value))}
           onBlur={() => {
-            if (!packNameModerationMessage) setEditingName(false);
+            if (!packNameModerationMessage) {
+              if (!packName.trim() && !savedPackId) {
+                setPackName(DRAFT_PACK_NAME);
+              }
+              setEditingName(false);
+              setIsEditingText?.(false);
+            }
           }}
           onKeyDown={(e) => {
-            if (e.key === "Enter") setEditingName(false);
+            if (e.key === "Enter" && !packNameModerationMessage) {
+              if (!packName.trim() && !savedPackId) {
+                setPackName(DRAFT_PACK_NAME);
+              }
+              setEditingName(false);
+              setIsEditingText?.(false);
+            }
           }}
         />
       ) : (
@@ -1195,10 +1298,15 @@ export default function PackBox({
           className="packTitle"
           onClick={() => {
             if (!requireAuth()) return;
+            setIsEditingText?.(true);
             setEditingName(true);
           }}
         >
-          {packName}
+          {usesDraftNamePlaceholder ? (
+            <span className="placeholderText">Unnamed Pack</span>
+          ) : (
+            packName
+          )}
         </h2>
       )}
       {packNameModerationMessage && (
@@ -1218,7 +1326,10 @@ export default function PackBox({
             setPackDescription(sanitizeDescriptionInput(e.target.value))
           }
           onBlur={() => {
-            if (!packDescriptionModerationMessage) setEditingDescription(false);
+            if (!packDescriptionModerationMessage) {
+              setEditingDescription(false);
+              setIsEditingText?.(false);
+            }
           }}
         />
       ) : (
@@ -1226,6 +1337,7 @@ export default function PackBox({
           className="packDescription"
           onClick={() => {
             if (!requireAuth()) return;
+            setIsEditingText?.(true);
             setEditingDescription(true);
           }}
           title="Click to edit description"
@@ -1355,6 +1467,28 @@ export default function PackBox({
           <span aria-hidden="true">⊞</span>
         </button>
         <button
+          className="packActionButton convertDeckButton"
+          type="button"
+          onClick={() => {
+            setConfirmingDeletePack(false);
+            setIsDeckConverterOpen(true);
+          }}
+          title="Convert Arena deck"
+          aria-label="Convert Arena deck"
+        >
+          <svg
+            aria-hidden="true"
+            className="actionIcon"
+            viewBox="0 0 24 24"
+            focusable="false"
+          >
+            <path d="M4 3h11l5 5v13H4z" />
+            <path className="actionIconInset" d="M14 4v5h5" />
+            <path className="actionIconInset" d="M7 12h10v2H7zM7 16h7v2H7z" />
+          </svg>
+        </button>
+
+        <button
           className="packActionButton archetypeMenuButton"
           type="button"
           onClick={() => {
@@ -1404,6 +1538,12 @@ export default function PackBox({
           ))}
         </div>
       )}
+
+      <DeckConverterModal
+        isOpen={isDeckConverterOpen}
+        onClose={() => setIsDeckConverterOpen(false)}
+        onConvert={onConvertDeck}
+      />
 
       {isArchetypeMenuOpen && (
         <div className="archetypeMenu" aria-label="Archetype tags">
@@ -1528,22 +1668,50 @@ export default function PackBox({
             </button>
           </div>
 
+          <div
+            className="packStatsTableModeToggle"
+            role="group"
+            aria-label="Card stack sorting table"
+          >
+            {PACK_STATS_TABLE_MODES.map((mode) => (
+              <button
+                type="button"
+                key={mode.id}
+                className={packStatsTableMode === mode.id ? "active" : ""}
+                aria-pressed={packStatsTableMode === mode.id}
+                onClick={() => {
+                  setPackStatsTableMode(mode.id);
+                  setDraggedStatsCardId(null);
+                }}
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
+
           <div className="packStatsBody">
-            <div className="packStatsColumns" aria-label="Cards by mechanic">
-              {mechanicColumns.map((column) => (
+            <div
+              className={`packStatsColumns packStatsColumns-${packStatsTableMode}`}
+              aria-label={`Cards by ${activeStatsTableLabel.toLowerCase()}`}
+            >
+              {activeStatsColumns.map((column) => (
                 <section
                   className={`packStatsColumn ${
-                    draggedStatsCardId ? "canDropStatsCard" : ""
+                    canMoveStatsCards && draggedStatsCardId
+                      ? "canDropStatsCard"
+                      : ""
                   }`}
                   key={column.id}
                   onDragOver={(e) => {
-                    if (!draggedStatsCardId) return;
+                    if (!canMoveStatsCards || !draggedStatsCardId) return;
 
                     e.preventDefault();
                     e.stopPropagation();
                     e.dataTransfer.dropEffect = "move";
                   }}
                   onDrop={(e) => {
+                    if (!canMoveStatsCards) return;
+
                     e.preventDefault();
                     e.stopPropagation();
 
@@ -1557,18 +1725,23 @@ export default function PackBox({
                 >
                   <header className="packStatsColumnHeader">
                     <span>{column.label}</span>
+                    <span className="packStatsColumnCount">
+                      {column.cards.length}
+                    </span>
                   </header>
 
                   <div
                     className="packStatsStack"
                     onDragOver={(e) => {
-                      if (!draggedStatsCardId) return;
+                      if (!canMoveStatsCards || !draggedStatsCardId) return;
 
                       e.preventDefault();
                       e.stopPropagation();
                       e.dataTransfer.dropEffect = "move";
                     }}
                     onDrop={(e) => {
+                      if (!canMoveStatsCards) return;
+
                       e.preventDefault();
                       e.stopPropagation();
 
@@ -1586,10 +1759,15 @@ export default function PackBox({
                       column.cards.map((card) => (
                         <div
                           className="packStatsCard"
-                          draggable
+                          draggable={canMoveStatsCards}
                           key={card.stackId}
                           onClick={() => onCardOpen?.(card)}
                           onDragStart={(e) => {
+                            if (!canMoveStatsCards) {
+                              e.preventDefault();
+                              return;
+                            }
+
                             e.stopPropagation();
                             setDraggedStatsCardId(card.id);
                             e.dataTransfer.effectAllowed = "move";

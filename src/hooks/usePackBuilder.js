@@ -336,6 +336,7 @@ export function usePackBuilder(user, refreshPacks, {
   const [saveErrorMessage, setSaveErrorMessage] = useState("");
   const [showRenameChoice, setShowRenameChoice] = useState(false);
   const [pendingSaveAction, setPendingSaveAction] = useState(null);
+  const [isEditingText, setIsEditingText] = useState(false);
   const lastSavedSnapshotRef = useRef(null);
 
   const loadAvailablePackTags = useCallback(async function loadAvailablePackTags() {
@@ -491,6 +492,7 @@ export function usePackBuilder(user, refreshPacks, {
     setSelectedCards(hydratedCards);
     setSavedPackId(pack.id);
     setSavedPackName(pack.name || null);
+    setIsEditingText(false);
     lastSavedSnapshotRef.current = getPackSnapshot(
       pack.name || DRAFT_PACK_NAME,
       sanitizeDescription(pack.description),
@@ -534,6 +536,22 @@ export function usePackBuilder(user, refreshPacks, {
     setSavedPackName(null);
     setShowRenameChoice(false);
     setPendingSaveAction(null);
+    setIsEditingText(false);
+    lastSavedSnapshotRef.current = null;
+    localStorage.removeItem("jumpCubeCurrentPack");
+  }
+
+  function startPackFromCards(cards, name = DRAFT_PACK_NAME) {
+    setPackName(normalizePackName(name, DRAFT_PACK_NAME));
+    setPackDescription("");
+    setPackArchetypeTags([]);
+    setPackVisibility("private");
+    setSelectedCards(cards || []);
+    setSavedPackId(null);
+    setSavedPackName(null);
+    setShowRenameChoice(false);
+    setPendingSaveAction(null);
+    setIsEditingText(false);
     lastSavedSnapshotRef.current = null;
     localStorage.removeItem("jumpCubeCurrentPack");
   }
@@ -903,6 +921,7 @@ export function usePackBuilder(user, refreshPacks, {
     // finishSave prevents repeat writes once the database is current.
     if (!user?.id) return undefined;
     if (selectedCards.length === 0 && !savedPackId) return undefined;
+    if (isEditingText) return undefined;
 
     const currentSnapshot = getPackSnapshot(
       packName,
@@ -925,6 +944,7 @@ export function usePackBuilder(user, refreshPacks, {
     };
   }, [
     finishSave,
+    isEditingText,
     packDescription,
     packArchetypeTags,
     packVisibility,
@@ -957,10 +977,12 @@ export function usePackBuilder(user, refreshPacks, {
     saveErrorMessage,
     showRenameChoice,
     pendingSaveAction,
+    setIsEditingText,
     addCardToPack,
     decreaseCardQuantity,
     removeCardFromPack,
     newPack,
+    startPackFromCards,
     savePack,
     loadPack,
     deletePack,

@@ -6,10 +6,11 @@ import {
   sanitizeTitleInput,
 } from "../../utils/userText";
 import { getContentModerationMessage } from "../../utils/contentModeration";
+import { normalizePackTags } from "../../utils/packTags";
 import {
-  getPackTagColor,
-  normalizePackTags,
-} from "../../utils/packTags";
+  getPrimaryCardMechanicBucket,
+  PACK_MECHANIC_BUCKETS,
+} from "../../utils/cardMechanics";
 import "./JumpCubeBox.css";
 
 /*
@@ -47,7 +48,26 @@ const MANA_LABELS = {
 };
 const CUBE_MANA_CURVE_VALUES = [1, 2, 3, 4, 5, 6];
 const CUBE_TAG_CHART_LIMIT = 6;
-const CUBE_OTHER_TAG_COLOR = "#6f7782";
+const CUBE_TAG_CHART_COLORS = [
+  "#4e9bd8",
+  "#df6b63",
+  "#6fba74",
+  "#d7ae4d",
+  "#9a73cc",
+  "#4fb8ad",
+  "#8a929c",
+];
+const CUBE_CARD_TYPES = [
+  { id: "Creature", label: "Creatures", color: "#65a765" },
+  { id: "Land", label: "Lands", color: "#b68a58" },
+  { id: "Instant", label: "Instants", color: "#5d95d6" },
+  { id: "Sorcery", label: "Sorceries", color: "#d6b85d" },
+  { id: "Artifact", label: "Artifacts", color: "#9aa3ad" },
+  { id: "Enchantment", label: "Enchantments", color: "#b084d6" },
+  { id: "Planeswalker", label: "Planeswalkers", color: "#d16b6b" },
+  { id: "Battle", label: "Battles", color: "#58a9a5" },
+  { id: "Other", label: "Other", color: "#6f7782" },
+];
 const MOBILE_PACK_REORDER_HOLD_MS = 400;
 const MOBILE_PACK_REMOVE_HOLD_MS = 1500;
 const MOBILE_PACK_REMOVE_THRESHOLD = 88;
@@ -256,10 +276,12 @@ function getCubeTagChart(packs) {
     (tagA, tagB) =>
       tagB.count - tagA.count || tagA.name.localeCompare(tagB.name),
   );
-  const visibleTags = rankedTags.slice(0, CUBE_TAG_CHART_LIMIT).map((tag) => ({
-    ...tag,
-    colorValue: getPackTagColor(tag.color).value,
-  }));
+  const visibleTags = rankedTags
+    .slice(0, CUBE_TAG_CHART_LIMIT)
+    .map((tag, index) => ({
+      ...tag,
+      colorValue: CUBE_TAG_CHART_COLORS[index],
+    }));
   const otherCount = rankedTags
     .slice(CUBE_TAG_CHART_LIMIT)
     .reduce((total, tag) => total + tag.count, 0);
@@ -271,7 +293,7 @@ function getCubeTagChart(packs) {
             normalizedName: "other",
             name: "Other",
             count: otherCount,
-            colorValue: CUBE_OTHER_TAG_COLOR,
+            colorValue: CUBE_TAG_CHART_COLORS[CUBE_TAG_CHART_LIMIT],
           },
         ]
       : visibleTags;
@@ -301,6 +323,203 @@ function getCubeTagChart(packs) {
   };
 }
 
+function getPrimaryCubeCardType(card) {
+  const typeLine = card.type_line || "";
+
+  return (
+    CUBE_CARD_TYPES.find(
+      (type) =>
+        type.id !== "Other" &&
+        new RegExp(`(^|[^A-Za-z])${type.id}([^A-Za-z]|$)`, "i").test(typeLine),
+    ) || CUBE_CARD_TYPES[CUBE_CARD_TYPES.length - 1]
+  );
+}
+
+function getCubeCardTypeChart(packs) {
+  const counts = new Map(CUBE_CARD_TYPES.map((type) => [type.id, 0]));
+
+  packs.forEach((pack) => {
+    (pack.cards || []).forEach((card) => {
+      const type = getPrimaryCubeCardType(card);
+      const quantity = Number(card.quantity) || 1;
+
+      counts.set(type.id, counts.get(type.id) + quantity);
+    });
+  });
+
+  const totalCount = [...counts.values()].reduce(
+    (sum, count) => sum + count,
+    0,
+  );
+  let currentOffset = 0;
+  const segments = CUBE_CARD_TYPES.map((type) => ({
+    ...type,
+    count: counts.get(type.id),
+  }))
+    .filter((type) => type.count > 0)
+    .map((type) => {
+      const percentage =
+        totalCount === 0 ? 0 : (type.count / totalCount) * 100;
+      const start = currentOffset;
+      const end = start + percentage;
+
+      currentOffset = end;
+
+      return { ...type, percentage, start, end };
+    });
+
+  return {
+    totalCount,
+    segments,
+    background:
+      totalCount === 0
+        ? "#252525"
+        : `conic-gradient(${segments
+            .map(
+              (segment) =>
+                `${segment.color} ${segment.start}% ${segment.end}%`,
+            )
+            .join(", ")})`,
+  };
+}
+
+function getCubeCardFunctionChart(packs) {
+  const counts = new Map(
+    PACK_MECHANIC_BUCKETS.map((bucket) => [bucket.id, 0]),
+  );
+
+  packs.forEach((pack) => {
+    (pack.cards || []).forEach((card) => {
+      const bucket = getPrimaryCardMechanicBucket(card);
+
+      if (!bucket) return;
+
+      counts.set(
+        bucket.id,
+        (counts.get(bucket.id) || 0) + (Number(card.quantity) || 1),
+      );
+    });
+  });
+
+  const totalCount = [...counts.values()].reduce(
+    (sum, count) => sum + count,
+    0,
+  );
+  let currentOffset = 0;
+  const segments = PACK_MECHANIC_BUCKETS.map((bucket) => ({
+    ...bucket,
+    count: counts.get(bucket.id) || 0,
+  }))
+    .filter((bucket) => bucket.count > 0)
+    .map((bucket) => {
+      const percentage =
+        totalCount === 0 ? 0 : (bucket.count / totalCount) * 100;
+      const start = currentOffset;
+      const end = start + percentage;
+
+      currentOffset = end;
+
+      return { ...bucket, percentage, start, end };
+    });
+
+  return {
+    totalCount,
+    segments,
+    background:
+      totalCount === 0
+        ? "#252525"
+        : `conic-gradient(${segments
+            .map(
+              (segment) =>
+                `${segment.color} ${segment.start}% ${segment.end}%`,
+            )
+            .join(", ")})`,
+  };
+}
+
+function getLandSourceColors(card) {
+  if (!/\bland\b/i.test(card.type_line || "")) return [];
+
+  const typeLine = card.type_line || "";
+  const oracleText = [
+    card.oracle_text,
+    ...(card.card_faces || []).map((face) => face.oracle_text),
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const basicLandTypes = {
+    W: "Plains",
+    U: "Island",
+    B: "Swamp",
+    R: "Mountain",
+    G: "Forest",
+  };
+
+  return MANA_ORDER.filter((color) => {
+    if (color === "C") return false;
+
+    return (
+      new RegExp(`\\b${basicLandTypes[color]}\\b`, "i").test(typeLine) ||
+      new RegExp(`add[^.\\n]*\\{${color}\\}`, "i").test(oracleText)
+    );
+  });
+}
+
+function getCubeColorSourceChart(packs) {
+  const pips = Object.fromEntries(
+    MANA_ORDER.filter((color) => color !== "C").map((color) => [color, 0]),
+  );
+  const sources = Object.fromEntries(
+    MANA_ORDER.filter((color) => color !== "C").map((color) => [color, 0]),
+  );
+
+  packs.forEach((pack) => {
+    (pack.cards || []).forEach((card) => {
+      const quantity = Number(card.quantity) || 1;
+
+      if (/\bland\b/i.test(card.type_line || "")) {
+        getLandSourceColors(card).forEach((color) => {
+          sources[color] += quantity;
+        });
+        return;
+      }
+
+      const cardPips = getCardManaPips(card);
+
+      Object.keys(pips).forEach((color) => {
+        pips[color] += cardPips[color] * quantity;
+      });
+    });
+  });
+
+  const totalPips = Object.values(pips).reduce((sum, count) => sum + count, 0);
+  const totalSources = Object.values(sources).reduce(
+    (sum, count) => sum + count,
+    0,
+  );
+  const rows = Object.keys(pips).map((color) => {
+    const pipPercentage =
+      totalPips === 0 ? 0 : (pips[color] / totalPips) * 100;
+    const sourcePercentage =
+      totalSources === 0 ? 0 : (sources[color] / totalSources) * 100;
+
+    return {
+      color,
+      label: MANA_LABELS[color],
+      colorValue: MANA_COLORS[color],
+      pips: pips[color],
+      sources: sources[color],
+      differencePercentage: sourcePercentage - pipPercentage,
+    };
+  });
+  const largestValue = Math.max(
+    1,
+    ...rows.flatMap((row) => [row.pips, row.sources]),
+  );
+
+  return { rows, largestValue };
+}
+
 export default function JumpCubeBox({
   cubeName,
   setCubeName,
@@ -316,6 +535,7 @@ export default function JumpCubeBox({
   newCube,
   savedCubeId,
   onShareCube,
+  onSampleDraft,
   initialShowStats = false,
   onStatsClose,
   onStatsPackOpen,
@@ -331,6 +551,7 @@ export default function JumpCubeBox({
   const [confirmingDeleteCube, setConfirmingDeleteCube] = useState(false);
   const [pendingRemovePackId, setPendingRemovePackId] = useState(null);
   const [showCubeStats, setShowCubeStats] = useState(initialShowStats);
+  const [filteredManaCurvePackId, setFilteredManaCurvePackId] = useState(null);
   const [visibilityMessage, setVisibilityMessage] = useState("");
   const [shareMessage, setShareMessage] = useState("");
   const [cubeActionHint, setCubeActionHint] = useState(DEFAULT_CUBE_ACTION_HINT);
@@ -653,7 +874,16 @@ export default function JumpCubeBox({
     1,
     ...colorIdentityColumns.map((column) => column.packs.length),
   );
-  const cubeManaCurveColumns = getCubeManaCurveColumns(selectedPacks);
+  const filteredManaCurvePack =
+    selectedPacks.find(
+      (pack) =>
+        String(pack.savedPackId || pack.id) ===
+        String(filteredManaCurvePackId),
+    ) || null;
+  const cubeManaCurvePacks = filteredManaCurvePack
+    ? [filteredManaCurvePack]
+    : selectedPacks;
+  const cubeManaCurveColumns = getCubeManaCurveColumns(cubeManaCurvePacks);
   const largestCubeManaCurveCount = Math.max(
     1,
     ...cubeManaCurveColumns.map((column) => column.cardCount),
@@ -667,6 +897,12 @@ export default function JumpCubeBox({
       ),
   ).filter((level, index, levels) => index === 0 || level !== levels[index - 1]);
   const cubeTagChart = getCubeTagChart(selectedPacks);
+  const cubeCardTypeChart = getCubeCardTypeChart(selectedPacks);
+  const cubeCardFunctionChart = getCubeCardFunctionChart(selectedPacks);
+  const cubeColorSourceChart = getCubeColorSourceChart(selectedPacks);
+  const draftablePackCount = selectedPacks.filter(
+    (pack) => (pack.cards || []).length > 0,
+  ).length;
 
   function handlePackContextMenu(event, packId) {
     // Right-click/touch context menu removal flow.
@@ -903,6 +1139,36 @@ export default function JumpCubeBox({
         </button>
 
         <button
+          className="cubeActionButton sampleDraftButton"
+          type="button"
+          onClick={() => {
+            if (!requireAuth()) return;
+
+            setConfirmingDeleteCube(false);
+            onSampleDraft?.();
+          }}
+          disabled={draftablePackCount < 4}
+          {...getCubeActionHintProps(
+            draftablePackCount >= 4
+              ? "Run a sample two-pack draft."
+              : "Add at least four nonempty packs to sample draft.",
+          )}
+          aria-label="Run sample draft"
+        >
+          <svg
+            aria-hidden="true"
+            className="actionIcon"
+            viewBox="0 0 24 24"
+            focusable="false"
+          >
+            <path d="M4 5h8v11H4z" />
+            <path d="M12 8h8v11h-8z" />
+            <path className="actionIconInset" d="M7 8h2v5H7z" />
+            <path className="actionIconInset" d="M15 11h2v5h-2z" />
+          </svg>
+        </button>
+
+        <button
           className="cubeActionButton shareCubeButton"
           type="button"
           onClick={() => {
@@ -1005,8 +1271,22 @@ export default function JumpCubeBox({
               <div className="cubeManaCurveHeading">
                 <div>
                   <h3>Mana Curve</h3>
-                  <p>Card colors stacked by pack</p>
+                  <p>
+                    {filteredManaCurvePack
+                      ? filteredManaCurvePack.name
+                      : "Card colors stacked by pack"}
+                  </p>
                 </div>
+
+                {filteredManaCurvePack && (
+                  <button
+                    type="button"
+                    className="cubeManaCurveClearFilter"
+                    onClick={() => setFilteredManaCurvePackId(null)}
+                  >
+                    Remove Filter
+                  </button>
+                )}
 
                 <div
                   className="cubeManaCurveLegend"
@@ -1059,6 +1339,20 @@ export default function JumpCubeBox({
                             key={pack.id}
                             style={{ flexGrow: pack.cardCount }}
                             tabIndex={0}
+                            role="button"
+                            aria-label={`Filter mana curve to ${pack.name}`}
+                            onClick={() =>
+                              setFilteredManaCurvePackId(pack.id)
+                            }
+                            onKeyDown={(event) => {
+                              if (
+                                event.key === "Enter" ||
+                                event.key === " "
+                              ) {
+                                event.preventDefault();
+                                setFilteredManaCurvePackId(pack.id);
+                              }
+                            }}
                           >
                             {pack.colors.map((color) => (
                               <span
@@ -1093,7 +1387,11 @@ export default function JumpCubeBox({
               </div>
             </section>
 
-            <section className="cubeTagChart" aria-label="Most common pack tags">
+            <div className="cubeInlineCharts">
+              <section
+                className="cubeTagChart"
+                aria-label="Most common pack tags"
+              >
               <div
                 className="cubeTagPie"
                 style={{ "--tag-chart": cubeTagChart.background }}
@@ -1125,7 +1423,187 @@ export default function JumpCubeBox({
                   </div>
                 )}
               </div>
-            </section>
+              </section>
+
+              <section
+                className="cubeTagChart cubeCardTypeChart"
+                aria-label="Card types across the cube"
+              >
+              <div
+                className="cubeTagPie"
+                style={{ "--tag-chart": cubeCardTypeChart.background }}
+                role="img"
+                aria-label={`${cubeCardTypeChart.totalCount} cards grouped by primary card type`}
+              />
+
+              <div className="cubeTagChartDetails">
+                <div>
+                  <h3>Card Types</h3>
+                  <p>Primary type across all packs</p>
+                </div>
+
+                {cubeCardTypeChart.segments.length === 0 ? (
+                  <p className="cubeTagChartEmpty">No cards available</p>
+                ) : (
+                  <div className="cubeTagLegend">
+                    {cubeCardTypeChart.segments.map((type) => (
+                      <div className="cubeTagLegendItem" key={type.id}>
+                        <span
+                          className="cubeTagSwatch"
+                          style={{ "--tag-color": type.color }}
+                        />
+                        <span className="cubeTagCount">{type.count}</span>
+                        <span className="cubeTagName">{type.label}</span>
+                        <strong>{Math.round(type.percentage)}%</strong>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              </section>
+
+              <section
+                className="cubeTagChart cubeCardFunctionChart"
+                aria-label="Card functions across the cube"
+              >
+              <div
+                className="cubeTagPie"
+                style={{ "--tag-chart": cubeCardFunctionChart.background }}
+                role="img"
+                aria-label={`${cubeCardFunctionChart.totalCount} cards grouped by primary function`}
+              />
+
+              <div className="cubeTagChartDetails">
+                <div>
+                  <h3>Card Functions</h3>
+                  <p>Primary role across all packs</p>
+                </div>
+
+                {cubeCardFunctionChart.segments.length === 0 ? (
+                  <p className="cubeTagChartEmpty">No cards available</p>
+                ) : (
+                  <div className="cubeTagLegend">
+                    {cubeCardFunctionChart.segments.map((functionGroup) => (
+                      <div
+                        className="cubeTagLegendItem"
+                        key={functionGroup.id}
+                      >
+                        <span
+                          className="cubeTagSwatch"
+                          style={{ "--tag-color": functionGroup.color }}
+                        />
+                        <span className="cubeTagCount">
+                          {functionGroup.count}
+                        </span>
+                        <span className="cubeTagName">
+                          {functionGroup.label}
+                        </span>
+                        <strong>
+                          {Math.round(functionGroup.percentage)}%
+                        </strong>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              </section>
+
+              <section
+                className="cubeColorSourceChart"
+                aria-label="Colored mana requirements and land sources"
+              >
+              <div className="cubeColorSourceSummary">
+                <div>
+                  <h3>Color Sources</h3>
+                  <p>Colored pips compared with land sources</p>
+                </div>
+
+                <div
+                  className="cubeColorSourceDifferences"
+                  aria-label="Source share minus colored pip share"
+                >
+                  {cubeColorSourceChart.rows.map((row) => {
+                    const roundedDifference = Math.round(
+                      row.differencePercentage,
+                    );
+
+                    return (
+                      <span
+                        className={
+                          roundedDifference > 0
+                            ? "positive"
+                            : roundedDifference < 0
+                              ? "negative"
+                              : ""
+                        }
+                        key={row.color}
+                        title={`${row.label}: source share minus pip share`}
+                      >
+                        <i
+                          style={{ "--source-color": row.colorValue }}
+                          aria-hidden="true"
+                        />
+                        <strong>
+                          {roundedDifference > 0 ? "+" : ""}
+                          {roundedDifference}%
+                        </strong>
+                        <small>{row.label}</small>
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="cubeColorSourcePlot">
+                <div className="cubeColorSourceLegend">
+                  <span>
+                    <i className="pips" />
+                    Pips
+                  </span>
+                  <span>
+                    <i className="sources" />
+                    Sources
+                  </span>
+                </div>
+
+                <div className="cubeColorSourceRows">
+                  {cubeColorSourceChart.rows.map((row) => (
+                    <div className="cubeColorSourceRow" key={row.color}>
+                      <span
+                        className="cubeColorSourceSwatch"
+                        style={{ "--source-color": row.colorValue }}
+                        aria-hidden="true"
+                      />
+                      <strong>{row.label}</strong>
+
+                      <div className="cubeColorSourceBars">
+                        <div>
+                          <span
+                            className="cubeColorSourceBar pips"
+                            style={{
+                              width: `${(row.pips / cubeColorSourceChart.largestValue) * 100}%`,
+                              "--source-color": row.colorValue,
+                            }}
+                          />
+                          <small>{row.pips}</small>
+                        </div>
+                        <div>
+                          <span
+                            className="cubeColorSourceBar sources"
+                            style={{
+                              width: `${(row.sources / cubeColorSourceChart.largestValue) * 100}%`,
+                              "--source-color": row.colorValue,
+                            }}
+                          />
+                          <small>{row.sources}</small>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              </section>
+            </div>
           </div>
 
           <div className="cubeStatsColumns" aria-label="Packs by color identity">

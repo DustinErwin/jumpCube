@@ -15,7 +15,14 @@ import "./FilterBox.css";
  */
 
 const MANA_OPTIONS = ["0", "1", "2", "3", "4", "5", "6", "7"];
-const COLOR_OPTIONS = ["W", "U", "B", "R", "G", "C"];
+const COLOR_OPTIONS = [
+  { value: "W", label: "White", symbolClass: "ms-w" },
+  { value: "U", label: "Blue", symbolClass: "ms-u" },
+  { value: "B", label: "Black", symbolClass: "ms-b" },
+  { value: "R", label: "Red", symbolClass: "ms-r" },
+  { value: "G", label: "Green", symbolClass: "ms-g" },
+  { value: "C", label: "Colorless", symbolClass: "ms-c" },
+];
 const RARITY_OPTIONS = ["Common", "Uncommon", "Rare", "Mythic"];
 const TYPE_OPTIONS = [
   "Artifact",
@@ -53,7 +60,7 @@ export default function FilterBox({
   selectedSets,
   setSelectedSets,
   hasCollection = false,
-  includeOwned = false,
+  includeOwned = true,
   setIncludeOwned,
   includeUnowned = true,
   setIncludeUnowned,
@@ -102,7 +109,7 @@ export default function FilterBox({
     setTypes([]);
     setFormats([]);
     setSelectedSets([]);
-    setIncludeOwned?.(false);
+    setIncludeOwned?.(true);
     setIncludeUnowned?.(true);
     setOpenFilter(null);
   }
@@ -126,13 +133,19 @@ export default function FilterBox({
             <div className="filterDropdown">
               <div className="filterOptionsGrid">
                 {COLOR_OPTIONS.map((color) => (
-                  <label className="filterOption" key={color}>
+                  <label className="filterOption colorFilterOption" key={color.value}>
                     <input
                       type="checkbox"
-                      checked={colors.includes(color)}
-                      onChange={() => toggleValue(color, colors, setColors)}
+                      checked={colors.includes(color.value)}
+                      onChange={() =>
+                        toggleValue(color.value, colors, setColors)
+                      }
                     />
-                    {color}
+                    <i
+                      className={`ms ms-cost ${color.symbolClass} colorFilterPip`}
+                      aria-hidden="true"
+                    />
+                    <span>{color.label}</span>
                   </label>
                 ))}
               </div>

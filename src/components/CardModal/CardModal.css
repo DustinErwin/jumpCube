@@ -231,15 +231,19 @@
 
 .cardVersionList {
   display: grid;
+  grid-auto-rows: max-content;
   align-content: start;
+  gap: 2px;
   max-height: 320px;
   overflow: auto;
   padding-right: 4px;
 }
 
 .cardVersionOption {
+  height: auto;
   min-height: 38px;
   width: 100%;
+  box-sizing: border-box;
   border: 0;
   border-left: 3px solid transparent;
   border-radius: 4px;
@@ -250,6 +254,14 @@
   text-align: left;
   font: inherit;
   font-weight: 650;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.cardVersionOption span {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .cardVersionOption:hover,

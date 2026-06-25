@@ -260,6 +260,12 @@ export function getPrimaryCardMechanicBucket(card) {
     );
   }
 
+  // Lands default to the dedicated Land column even when their rules text also
+  // matches another function such as card draw, ramp, or utility.
+  if (/\bland\b/i.test(card.type_line || "")) {
+    return PACK_MECHANIC_BUCKETS.find((bucket) => bucket.id === "land") || null;
+  }
+
   return classifyCardMechanicBuckets(card)[0] || getDefaultMechanicBucket();
 }
 

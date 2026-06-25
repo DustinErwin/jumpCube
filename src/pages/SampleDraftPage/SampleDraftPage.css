@@ -1,0 +1,557 @@
+.sampleDraftPage {
+  min-height: calc(100vh - 58px);
+  padding: 24px clamp(16px, 3vw, 42px) 56px;
+  box-sizing: border-box;
+  background: #080a0e;
+  color: #f4f5f7;
+}
+
+.sampleDraftHeader {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto minmax(120px, 1fr);
+  align-items: center;
+  gap: 20px;
+  max-width: 1480px;
+  margin: 0 auto 32px;
+  padding-top: 12px;
+}
+
+.sampleDraftHeader > div {
+  display: grid;
+  gap: 7px;
+  text-align: center;
+}
+
+.sampleDraftHeader h1,
+.sampleDraftHeader p,
+.sampleDraftRound h2,
+.sampleDraftRound p,
+.sampleDraftDeckHeader h2,
+.sampleDraftDeckHeader p,
+.sampleDraftEmpty h2,
+.sampleDraftEmpty p {
+  margin: 0;
+}
+
+.sampleDraftHeader h1 {
+  font-size: clamp(1.5rem, 3vw, 2.3rem);
+}
+
+.sampleDraftHeader p,
+.sampleDraftRound p,
+.sampleDraftDeckHeader p,
+.sampleDraftEmpty p {
+  color: #aeb5c0;
+}
+
+.sampleDraftHeader button,
+.sampleDraftDeckHeader button {
+  width: max-content;
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 6px;
+  background: #202631;
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+}
+
+.sampleDraftHeader > button:last-child,
+.sampleDraftDeckActions {
+  justify-self: end;
+}
+
+.sampleDraftHeader button:hover,
+.sampleDraftHeader button:focus-visible,
+.sampleDraftDeckHeader button:hover:not(:disabled),
+.sampleDraftDeckHeader button:focus-visible {
+  border-color: #d6b85d;
+  background: #30394a;
+}
+
+.sampleDraftDeckHeader button:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.sampleDraftRound {
+  max-width: 760px;
+  margin: 0 auto 24px;
+  text-align: center;
+}
+
+.sampleDraftRound span,
+.sampleDraftDeckHeader span {
+  color: #d6b85d;
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.sampleDraftRound h2 {
+  margin: 4px 0;
+  font-size: clamp(1.35rem, 2.5vw, 2rem);
+}
+
+.sampleDraftChoices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 310px));
+  justify-content: center;
+  gap: clamp(14px, 2vw, 28px);
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+.sampleDraftPack {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: #171b23;
+  color: white;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sampleDraftPack:hover,
+.sampleDraftPack:focus-visible {
+  border-color: #d6b85d;
+  transform: translateY(-3px);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.38);
+}
+
+.sampleDraftPack img {
+  width: 100%;
+  aspect-ratio: 488 / 430;
+  display: block;
+  object-fit: cover;
+  object-position: top;
+}
+
+.sampleDraftPack > span {
+  min-height: 112px;
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  padding: 14px;
+  box-sizing: border-box;
+}
+
+.sampleDraftPack strong {
+  font-size: 1.05rem;
+}
+
+.sampleDraftPack small {
+  overflow: hidden;
+  color: #aeb5c0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sampleDraftPicks {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 24px;
+  color: #c8ccd2;
+}
+
+.sampleDraftPicks strong {
+  color: #d6b85d;
+}
+
+.sampleDraftTable {
+  max-width: 1480px;
+  margin: 0 auto;
+}
+
+.sampleDraftDeckHeader {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 0 0 24px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.sampleDraftDeckActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.sampleDraftDeckHeader h2 {
+  margin: 3px 0;
+}
+
+.sampleDraftDeckReady {
+  min-height: 430px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  color: #aeb5c0;
+}
+
+.sampleDraftDeckReady strong {
+  color: #d6b85d;
+  font-size: clamp(4rem, 10vw, 8rem);
+  line-height: 1;
+}
+
+.sampleDraftPlayArea {
+  min-height: 390px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.sampleDraftBattlefield {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: repeat(2, minmax(180px, auto));
+  gap: 12px;
+}
+
+.sampleDraftPlayRow {
+  min-width: 0;
+  display: block;
+  padding: 10px;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.sampleDraftPlayRow.landRow {
+  background: rgba(82, 112, 74, 0.09);
+  border-color: rgba(137, 170, 126, 0.2);
+}
+
+.sampleDraftPlayCards {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 3px 6px 6px;
+}
+
+.sampleDraftPlayCardSlot {
+  flex: 0 0 148px;
+  width: 148px;
+  height: 158px;
+  display: grid;
+  place-items: center;
+}
+
+.sampleDraftPlayCard {
+  width: 102px;
+  aspect-ratio: 488 / 680;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    filter 180ms ease;
+  transform-origin: center;
+}
+
+.sampleDraftPlayCard:hover,
+.sampleDraftPlayCard:focus-visible {
+  filter: brightness(1.13);
+  outline: 2px solid #d6b85d;
+  outline-offset: 2px;
+}
+
+.sampleDraftPlayCard.tapped {
+  transform: rotate(90deg);
+}
+
+.sampleDraftPlayCard img,
+.sampleDraftPlayCard .sampleDraftCardFallback {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.sampleDraftZoneEmpty {
+  align-self: center;
+  color: #69717d;
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
+.sampleDraftGraveyard {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 8px;
+  padding: 12px 8px;
+  box-sizing: border-box;
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.sampleDraftGraveyard > strong {
+  color: #aeb5c0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.sampleDraftGraveyardPile {
+  position: relative;
+  width: 108px;
+  aspect-ratio: 488 / 680;
+  display: grid;
+  place-items: center;
+  border: 1px dashed rgba(255, 255, 255, 0.24);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.sampleDraftGraveyardPile img,
+.sampleDraftGraveyardPile .sampleDraftCardFallback {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.sampleDraftGraveyardCount {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  min-width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 13px;
+  background: #202631;
+  color: white;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.sampleDraftHandArea {
+  padding-top: 20px;
+  border-top: 2px solid rgba(214, 184, 93, 0.5);
+}
+
+.sampleDraftHandHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.sampleDraftHandHeading h3,
+.sampleDraftHandHeading span {
+  margin: 0;
+}
+
+.sampleDraftHandHeading h3 {
+  font-size: 1rem;
+}
+
+.sampleDraftHandHeading span {
+  color: #aeb5c0;
+  font-size: 0.75rem;
+}
+
+.sampleDraftHand {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  align-items: start;
+  gap: 18px 10px;
+}
+
+.sampleDraftCard {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: white;
+  cursor: pointer;
+}
+
+.sampleDraftCard img,
+.sampleDraftCardFallback {
+  width: 100%;
+  aspect-ratio: 488 / 680;
+  display: block;
+  border-radius: 8px;
+}
+
+.sampleDraftCard img {
+  object-fit: cover;
+}
+
+.sampleDraftCard:hover img,
+.sampleDraftCard:focus-visible img,
+.sampleDraftCard:hover .sampleDraftCardFallback,
+.sampleDraftCard:focus-visible .sampleDraftCardFallback {
+  outline: 2px solid #d6b85d;
+  outline-offset: 2px;
+  filter: brightness(1.08);
+}
+
+.sampleDraftCardFallback {
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: #242a34;
+  text-align: center;
+}
+
+.sampleDraftCardPack {
+  display: block;
+  margin-top: 5px;
+  overflow: hidden;
+  color: #969da8;
+  font-size: 0.7rem;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sampleDraftEmptyHand {
+  grid-column: 1 / -1;
+  margin: 36px 0;
+  color: #7e8793;
+  text-align: center;
+}
+
+.sampleDraftEmpty {
+  max-width: 620px;
+  margin: 100px auto 0;
+  text-align: center;
+}
+
+.sampleDraftEmpty h2 {
+  margin-bottom: 8px;
+}
+
+@media (max-width: 760px) {
+  .sampleDraftPage {
+    padding: 16px 12px 40px;
+  }
+
+  .sampleDraftHeader {
+    grid-template-columns: auto 1fr auto;
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+
+  .sampleDraftHeader h1 {
+    font-size: 1.2rem;
+  }
+
+  .sampleDraftHeader p {
+    max-width: 130px;
+    overflow: hidden;
+    font-size: 0.72rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sampleDraftHeader button {
+    min-height: 34px;
+    padding: 6px 9px;
+    font-size: 0.72rem;
+  }
+
+  .sampleDraftChoices {
+    grid-template-columns: minmax(0, 360px);
+  }
+
+  .sampleDraftPack {
+    display: grid;
+    grid-template-columns: 108px minmax(0, 1fr);
+  }
+
+  .sampleDraftPack img {
+    height: 100%;
+    aspect-ratio: auto;
+  }
+
+  .sampleDraftPack > span {
+    min-height: 124px;
+  }
+
+  .sampleDraftDeckHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sampleDraftDeckActions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .sampleDraftDeckHeader button {
+    width: 100%;
+  }
+
+  .sampleDraftPlayArea {
+    grid-template-columns: minmax(0, 1fr) 84px;
+    gap: 8px;
+    min-height: 330px;
+  }
+
+  .sampleDraftBattlefield {
+    grid-template-rows: repeat(2, minmax(150px, auto));
+    gap: 8px;
+  }
+
+  .sampleDraftPlayRow {
+    padding: 6px;
+  }
+
+  .sampleDraftPlayCardSlot {
+    flex-basis: 126px;
+    width: 126px;
+    height: 136px;
+  }
+
+  .sampleDraftPlayCard {
+    width: 86px;
+  }
+
+  .sampleDraftGraveyard {
+    padding: 8px 4px;
+  }
+
+  .sampleDraftGraveyard > strong {
+    font-size: 0.58rem;
+  }
+
+  .sampleDraftGraveyardPile {
+    width: 70px;
+  }
+
+  .sampleDraftHand {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 8px;
+  }
+}

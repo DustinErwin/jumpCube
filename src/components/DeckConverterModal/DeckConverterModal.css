@@ -1,0 +1,203 @@
+.deckConverterOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(5, 7, 10, 0.78);
+  backdrop-filter: blur(8px);
+}
+
+.deckConverterModal {
+  width: min(620px, 100%);
+  max-height: calc(100svh - 36px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 20px;
+  border: 1px solid #424b57;
+  border-radius: 8px;
+  background: #151a21;
+  color: white;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.62);
+}
+
+.deckConverterHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.deckConverterHeader h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.deckConverterHeader button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #4a525e;
+  border-radius: 6px;
+  background: #252b33;
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+}
+
+.deckConverterModal form,
+.deckConverterModal label {
+  display: grid;
+  gap: 8px;
+}
+
+.deckConverterModal form {
+  gap: 14px;
+}
+
+.deckConverterModal label {
+  color: #d8dde4;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.deckConverterModal input,
+.deckConverterModal textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #444d59;
+  border-radius: 6px;
+  background: #0f1319;
+  color: white;
+  font: inherit;
+}
+
+.deckConverterModal input {
+  min-height: 40px;
+  padding: 8px 10px;
+}
+
+.deckConverterModal textarea {
+  min-height: 280px;
+  resize: vertical;
+  padding: 12px;
+  line-height: 1.45;
+}
+
+.deckConverterModal input:focus,
+.deckConverterModal textarea:focus {
+  outline: 2px solid #d6b85d;
+  outline-offset: 2px;
+}
+
+.deckConverterNote,
+.deckConverterError {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.deckConverterNote {
+  color: #aeb7c2;
+}
+
+.deckConverterError {
+  color: #ff9f9f;
+}
+
+.deckConverterResult {
+  display: grid;
+  gap: 16px;
+}
+
+.deckConverterResult > p,
+.deckConverterMissing p {
+  margin: 0;
+  color: #c5ccd5;
+}
+
+.deckConverterResult dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.deckConverterResult dl div {
+  padding: 10px;
+  border: 1px solid #353d48;
+  border-radius: 6px;
+  background: #10151b;
+}
+
+.deckConverterResult dt {
+  color: #9fa8b4;
+  font-size: 0.72rem;
+}
+
+.deckConverterResult dd {
+  margin: 4px 0 0;
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+.deckConverterMissing {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border-left: 3px solid #d6b85d;
+  background: rgba(214, 184, 93, 0.08);
+}
+
+.deckConverterActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.deckConverterActions button {
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid #464e59;
+  border-radius: 6px;
+  background: #252b33;
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+}
+
+.deckConverterActions button[type="submit"] {
+  border-color: #d6b85d;
+  background: #d6b85d;
+  color: #17130a;
+}
+
+.deckConverterActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+@media (max-width: 600px) {
+  .deckConverterOverlay {
+    padding: 0;
+  }
+
+  .deckConverterModal {
+    width: 100%;
+    max-height: 100svh;
+    min-height: 100svh;
+    border: 0;
+    border-radius: 0;
+    padding: 16px;
+  }
+
+  .deckConverterModal textarea {
+    min-height: 46svh;
+  }
+
+  .deckConverterResult dl {
+    grid-template-columns: 1fr;
+  }
+}

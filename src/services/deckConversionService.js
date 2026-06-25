@@ -1,0 +1,128 @@
+import { supabase } from "../utils/supabase";
+import {
+  buildConvertedDeckPlan,
+  normalizeDeckCardName,
+  parseArenaDeckList,
+} from "../utils/arenaDeckConversion";
+
+const CONVERSION_CARD_COLUMNS = `
+  id,
+  oracle_id,
+  representative_scryfall_id,
+  default_variant_id,
+  default_variant_scryfall_id,
+  name,
+  normalized_name,
+  mana_value,
+  colors,
+  color_identity,
+  type_line,
+  oracle_text,
+  rarity,
+  image_url,
+  back_image_url,
+  legalities,
+  price_usd,
+  price_usd_foil,
+  price_usd_etched,
+  games,
+  nonfoil,
+  is_token,
+  is_funny,
+  is_variant_printing,
+  is_planechase,
+  set_name,
+  set_code,
+  collector_number,
+  released_at,
+  has_back_face,
+  mana_cost,
+  image_uris,
+  card_faces
+`;
+const QUERY_BATCH_SIZE = 50;
+
+function normalizeSearchCard(card, quantity) {
+  return {
+    ...card,
+    card_search_id: card.id,
+    id: card.default_variant_id,
+    variant_id: card.default_variant_id,
+    scryfall_id:
+      card.default_variant_scryfall_id || card.representative_scryfall_id,
+    is_default_printing: true,
+    quantity,
+  };
+}
+
+async function loadCardsByNormalizedName(normalizedNames) {
+  const cards = [];
+
+  for (
+    let index = 0;
+    index < normalizedNames.length;
+    index += QUERY_BATCH_SIZE
+  ) {
+    const { data, error } = await supabase
+      .from("card_search")
+      .select(CONVERSION_CARD_COLUMNS)
+      .in(
+        "normalized_name",
+        normalizedNames.slice(index, index + QUERY_BATCH_SIZE),
+      )
+      .eq("is_legal", true)
+      .not("default_variant_id", "is", null);
+
+    if (error) throw error;
+
+    cards.push(...(data || []));
+  }
+
+  return new Map(
+    cards.map((card) => [normalizeDeckCardName(card.name), card]),
+  );
+}
+
+export async function convertArenaDeckToPack(deckText) {
+  const parsedEntries = parseArenaDeckList(deckText);
+
+  if (parsedEntries.length === 0) {
+    throw new Error("No main-deck card entries were found.");
+  }
+
+  const cardsByNormalizedName = await loadCardsByNormalizedName(
+    parsedEntries.map((entry) => entry.normalizedName),
+  );
+  const plan = buildConvertedDeckPlan(parsedEntries, cardsByNormalizedName);
+  const basicCardsByNormalizedName = await loadCardsByNormalizedName(
+    plan.basicLands.map((land) => normalizeDeckCardName(land.name)),
+  );
+  const cards = [
+    ...plan.nonlands.map((entry) =>
+      normalizeSearchCard(entry.card, entry.quantity),
+    ),
+    ...plan.basicLands
+      .map((land) => {
+        const card = basicCardsByNormalizedName.get(
+          normalizeDeckCardName(land.name),
+        );
+
+        return card ? normalizeSearchCard(card, land.quantity) : null;
+      })
+      .filter(Boolean),
+  ];
+
+  if (plan.nonlands.length === 0) {
+    throw new Error("No supported nonland cards were found in the main deck.");
+  }
+
+  return {
+    ...plan,
+    cards,
+    parsedCardCount: parsedEntries.reduce(
+      (sum, entry) => sum + entry.quantity,
+      0,
+    ),
+    packCardCount: cards.reduce((sum, card) => sum + card.quantity, 0),
+  };
+}

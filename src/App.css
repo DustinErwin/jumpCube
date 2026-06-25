@@ -81,6 +81,10 @@
   z-index: 0;
 }
 
+.app.sampleDraftRoute::before {
+  display: none;
+}
+
 .appLayout {
   position: relative;
   z-index: 1;

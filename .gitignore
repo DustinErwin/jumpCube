@@ -17,6 +17,9 @@ dist-ssr
 scripts/
 *.sql
 !supabase/migrations/202606230001_add_card_search_is_legal.sql
+!supabase/migrations/202606240001_sync_card_search_games.sql
+!supabase/query-plan-tests/
+!supabase/query-plan-tests/*.sql
 .vscode/*
 !.vscode/extensions.json
 .idea

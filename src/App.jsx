@@ -15,6 +15,7 @@ import SecretManagerPage from "./pages/SecretManagerPage/SecretManagerPage";
 import DiscoverPage from "./pages/DiscoverPage/DiscoverPage";
 import PublicItemPage from "./pages/PublicItemPage/PublicItemPage";
 import CollectionPage from "./pages/CollectionPage/CollectionPage";
+import SampleDraftPage from "./pages/SampleDraftPage/SampleDraftPage";
 import SearchBox from "./components/SearchBox/SearchBox";
 import FilterBox from "./components/FilterBox/FilterBox";
 import CardBox from "./components/CardBox/CardBox";
@@ -31,6 +32,7 @@ import {
   sanitizeTitle,
 } from "./utils/userText";
 import { copyPublicPack } from "./services/discoveryService";
+import { convertArenaDeckToPack } from "./services/deckConversionService";
 import {
   takePendingOpenPack,
   takePendingSharedPackCopy,
@@ -190,7 +192,7 @@ function App() {
   const [rarities, setRarities] = useState([]);
   const [types, setTypes] = useState([]);
   const [formats, setFormats] = useState([]);
-  const [includeOwned, setIncludeOwned] = useState(false);
+  const [includeOwned, setIncludeOwned] = useState(true);
   const [includeUnowned, setIncludeUnowned] = useState(true);
   const [ownershipWarningNonce, setOwnershipWarningNonce] = useState(0);
   const [isPackBoxOpen, setIsPackBoxOpen] = useState(
@@ -694,7 +696,9 @@ function App() {
 
   return (
     <main
-      className="app"
+      className={`app${
+        location.pathname === "/sample-draft" ? " sampleDraftRoute" : ""
+      }`}
       style={{ "--frog-background-image": `url("${frogBackground}")` }}
     >
       <NavBar
@@ -850,10 +854,21 @@ function App() {
                   savedPackId={pack.savedPackId}
                   onSharePack={(packId) => copyShareLink("pack", packId)}
                   newPack={startNewPack}
+                  onConvertDeck={async (deckText, convertedPackName) => {
+                    const conversion = await convertArenaDeckToPack(deckText);
+
+                    pack.startPackFromCards(
+                      conversion.cards,
+                      convertedPackName,
+                    );
+
+                    return conversion;
+                  }}
                   saveStatus={pack.saveStatus}
                   saveErrorMessage={pack.saveErrorMessage}
                   showRenameChoice={pack.showRenameChoice}
                   pendingSaveAction={pack.pendingSaveAction}
+                  setIsEditingText={pack.setIsEditingText}
                   moveCard={pack.moveCard}
                   moveCardToMechanicBucket={pack.moveCardToMechanicBucket}
                   isDraggingCard={isDraggingCard}
@@ -880,6 +895,7 @@ function App() {
                   newCube={newCube}
                   savedCubeId={savedCubeId}
                   onShareCube={(cubeId) => copyShareLink("cube", cubeId)}
+                  onSampleDraft={() => navigate("/sample-draft")}
                   saveStatus={cubeSaveStatus}
                   saveErrorMessage={userCubes.cubeSaveError}
                   isOpen={isJumpCubeBoxOpen}
@@ -961,6 +977,13 @@ function App() {
                 isPackFull={pack.isPackFull}
               />
             </>
+          }
+        />
+
+        <Route
+          path="/sample-draft"
+          element={
+            <SampleDraftPage cubeName={cubeName} packs={selectedPacks} />
           }
         />
 

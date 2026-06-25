@@ -151,10 +151,10 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 7px;
+  gap: 4px;
 
   margin: 0 -14px 12px;
-  padding: 8px 56px 8px 10px;
+  padding: 8px 52px 8px 10px;
   box-sizing: border-box;
 
   background: rgba(8, 8, 8, 0.64);
@@ -181,8 +181,9 @@
 }
 
 .cubeActionButton {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
   box-sizing: border-box;
 
   background: #252525;
@@ -220,8 +221,8 @@
 }
 
 .actionIcon {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   display: block;
   fill: currentColor;
 }
@@ -250,8 +251,8 @@
   position: absolute;
   right: 10px;
   top: 50%;
-  width: 38px;
-  height: 22px;
+  width: 22px;
+  height: 38px;
   padding: 3px;
   box-sizing: border-box;
   background: #762828;
@@ -265,6 +266,9 @@
 }
 
 .cubeVisibilitySwitch span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
   width: 14px;
   height: 14px;
   display: block;
@@ -282,7 +286,7 @@
 }
 
 .cubeVisibilitySwitch.public span {
-  transform: translateX(16px);
+  transform: translateY(14px);
 }
 
 .cubeVisibilitySwitch:focus-visible {
@@ -292,6 +296,10 @@
 
 .cubeVisibilityToggle {
   display: none;
+}
+
+.jumpCubeBox .visibilityMessage {
+  top: 78px;
 }
 
 .shareMessage {
@@ -565,6 +573,11 @@
   font-style: italic;
 }
 
+body:has(.jumpCubeBox.statsOpen) {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 .cubeStatsOverlay {
   position: fixed;
   inset: 0;
@@ -576,6 +589,8 @@
 
   padding: 18px;
   box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
 
   background: rgba(11, 13, 20, 0.98);
   color: white;
@@ -620,33 +635,48 @@
 }
 
 .cubeStatsVisuals {
-  flex: 0 0 clamp(220px, 34vh, 330px);
-  min-height: 220px;
-  display: flex;
+  flex: 0 0 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  align-items: start;
   gap: 12px;
 }
 
 .cubeManaCurve {
-  flex: 1 1 auto;
-  min-width: 470px;
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+  height: 800px;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
-  padding: 12px 18px 10px 32px;
+  padding: 12px 32px 10px;
   box-sizing: border-box;
   background: rgba(255, 255, 255, 0.045);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
 }
 
-.cubeTagChart {
-  flex: 0 0 min(390px, 32vw);
-  min-width: 320px;
+.cubeInlineCharts {
+  grid-column: 1 / -1;
+  min-width: 0;
   display: grid;
-  grid-template-columns: minmax(120px, 0.8fr) minmax(165px, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 12px;
+}
+
+.cubeTagChart {
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 250px;
+  display: grid;
+  grid-template-columns: minmax(76px, 0.72fr) minmax(0, 1fr);
   align-items: center;
-  gap: 18px;
-  padding: 16px;
+  gap: 12px;
+  padding: 14px;
   box-sizing: border-box;
   background: rgba(255, 255, 255, 0.045);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -654,7 +684,7 @@
 }
 
 .cubeTagPie {
-  width: min(100%, 170px);
+  width: min(100%, 138px);
   aspect-ratio: 1;
   justify-self: center;
   background: var(--tag-chart, #252525);
@@ -694,9 +724,10 @@
 .cubeTagLegendItem {
   min-width: 0;
   display: grid;
-  grid-template-columns: 10px 2ch minmax(0, 1fr) auto;
+  grid-template-columns: 9px 2.5ch minmax(0, 1fr) auto;
   align-items: center;
-  gap: 7px;
+  column-gap: 6px;
+  row-gap: 6px;
   color: #c5c9ce;
   font-size: 0.72rem;
   font-weight: 700;
@@ -712,6 +743,7 @@
   color: #d5d8dc;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  padding-right: 2px;
 }
 
 .cubeTagName {
@@ -730,10 +762,239 @@
   font-style: italic;
 }
 
-.cubeManaCurveHeading {
-  display: flex;
+.cubeColorSourceChart {
+  grid-column: span 2;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 250px;
+  display: grid;
+  grid-template-columns: minmax(250px, 0.85fr) minmax(250px, 1.15fr);
+  align-items: stretch;
+  gap: 20px;
+  padding: 16px;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+}
+
+@media (max-width: 1180px) and (min-width: 761px) {
+  .cubeInlineCharts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cubeColorSourceChart {
+    grid-column: 1 / -1;
+  }
+}
+
+.cubeColorSourceSummary {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto minmax(92px, 1fr);
+  align-content: stretch;
+  gap: 18px;
+}
+
+.cubeColorSourceSummary h3,
+.cubeColorSourceSummary p {
+  margin: 0;
+}
+
+.cubeColorSourceSummary h3 {
+  font-size: 1rem;
+}
+
+.cubeColorSourceSummary p {
+  margin-top: 3px;
+  color: #9ea6b3;
+  font-size: 0.72rem;
+}
+
+.cubeColorSourceDifferences {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: stretch;
+  width: 100%;
+  min-height: 92px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.cubeColorSourceDifferences span {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 5px 1fr auto;
   align-items: center;
-  justify-content: space-between;
+  justify-items: center;
+  gap: 2px;
+  padding: 0 5px 8px;
+  box-sizing: border-box;
+  color: #c5c9ce;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.cubeColorSourceDifferences span + span {
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cubeColorSourceDifferences span.positive {
+  color: #8fd3a1;
+}
+
+.cubeColorSourceDifferences span.negative {
+  color: #e49a9a;
+}
+
+.cubeColorSourceDifferences i {
+  width: calc(100% + 10px);
+  height: 5px;
+  display: block;
+  background: var(--source-color);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--source-color) 45%, transparent);
+}
+
+.cubeColorSourceDifferences strong {
+  min-width: 0;
+  max-width: 100%;
+  align-self: end;
+  font-size: clamp(0.78rem, 1.05vw, 1.1rem);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.cubeColorSourceDifferences small {
+  max-width: 100%;
+  overflow: hidden;
+  color: #aeb4bd;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cubeColorSourcePlot {
+  min-width: 0;
+  width: 100%;
+  max-width: 540px;
+  justify-self: end;
+  display: grid;
+  align-content: center;
+  gap: 10px;
+}
+
+.cubeColorSourceLegend {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  color: #c5c9ce;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.cubeColorSourceLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cubeColorSourceLegend i {
+  width: 12px;
+  height: 7px;
+  display: block;
+  border-radius: 2px;
+}
+
+.cubeColorSourceLegend i.pips {
+  background: #d6b85d;
+}
+
+.cubeColorSourceLegend i.sources {
+  border: 1px solid #aeb8c5;
+  background: transparent;
+}
+
+.cubeColorSourceRows {
+  display: grid;
+  gap: 10px;
+}
+
+.cubeColorSourceRow {
+  display: grid;
+  grid-template-columns: 12px 48px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.cubeColorSourceRow > strong {
+  font-size: 0.72rem;
+}
+
+.cubeColorSourceSwatch {
+  width: 11px;
+  height: 11px;
+  background: var(--source-color);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 2px;
+}
+
+.cubeColorSourceBars {
+  display: grid;
+  gap: 4px;
+}
+
+.cubeColorSourceBars > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3ch;
+  align-items: center;
+  gap: 7px;
+}
+
+.cubeColorSourceBars > div::before {
+  content: "";
+  grid-column: 1;
+  grid-row: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+}
+
+.cubeColorSourceBar {
+  position: relative;
+  z-index: 1;
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  height: 8px;
+  display: block;
+  border-radius: 2px;
+}
+
+.cubeColorSourceBar.pips {
+  background: var(--source-color);
+}
+
+.cubeColorSourceBar.sources {
+  height: 6px;
+  border: 1px solid var(--source-color);
+  background: color-mix(in srgb, var(--source-color) 38%, transparent);
+}
+
+.cubeColorSourceBars small {
+  color: #d5d8dc;
+  text-align: right;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cubeManaCurveHeading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
   gap: 18px;
 }
 
@@ -750,6 +1011,24 @@
   margin-top: 3px;
   color: #9ea6b3;
   font-size: 0.72rem;
+}
+
+.cubeManaCurveClearFilter {
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid rgba(214, 184, 93, 0.64);
+  border-radius: 6px;
+  background: rgba(214, 184, 93, 0.12);
+  color: #f5e7b2;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.cubeManaCurveClearFilter:hover,
+.cubeManaCurveClearFilter:focus-visible {
+  background: rgba(214, 184, 93, 0.24);
 }
 
 .cubeManaCurveLegend {
@@ -837,7 +1116,7 @@
 
 .cubeManaCurveBar {
   position: relative;
-  width: min(54px, 76%);
+  width: clamp(64px, 88%, 110px);
   min-height: 0;
   display: flex;
   flex-direction: column-reverse;
@@ -858,13 +1137,15 @@
 }
 
 .cubeManaCurvePack.separated {
-  border-bottom: 2px solid rgba(10, 12, 18, 0.92);
+  border-bottom: 3px solid rgba(5, 7, 11, 0.96);
 }
 
 .cubeManaCurvePack:hover,
 .cubeManaCurvePack:focus-visible {
   z-index: 5;
   filter: brightness(1.16);
+  outline: 2px solid rgba(255, 255, 255, 0.82);
+  outline-offset: -2px;
 }
 
 .cubeManaCurveColor {
@@ -914,15 +1195,15 @@
 }
 
 .cubeStatsColumns {
-  flex: 1;
-  min-height: 0;
+  flex: 0 0 auto;
+  min-height: 420px;
 
   display: grid;
   grid-template-columns: repeat(7, minmax(148px, 1fr));
   gap: 10px;
 
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: visible;
   padding-bottom: 8px;
 }
 
@@ -1107,9 +1388,9 @@
   }
 
   .cubeActionToolbar {
-    gap: 8px;
+    gap: 4px;
     margin: 0 -12px 10px;
-    padding: 8px 54px 8px 10px;
+    padding: 8px 50px 8px 8px;
   }
 
   .cubeActionHint {
@@ -1124,9 +1405,14 @@
     top: 90px;
   }
 
+  .jumpCubeBox .visibilityMessage {
+    top: 90px;
+  }
+
   .cubeActionButton {
-    width: 44px;
-    height: 44px;
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
   }
 
   .cubeStatsOverlay {
@@ -1134,23 +1420,55 @@
   }
 
   .cubeStatsVisuals {
-    flex-basis: 250px;
-    min-height: 250px;
-    overflow-x: auto;
-    padding-bottom: 4px;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .cubeInlineCharts {
+    grid-template-columns: 1fr;
   }
 
   .cubeManaCurve {
-    flex: 0 0 560px;
-    padding: 10px 12px 8px 26px;
+    width: 100%;
+    min-width: 0;
+    height: 800px;
+    padding: 10px 26px 8px;
+    overflow-x: auto;
   }
 
   .cubeTagChart {
-    flex: 0 0 330px;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    grid-template-columns: minmax(120px, 0.8fr) minmax(165px, 1fr);
+  }
+
+  .cubeColorSourceChart {
+    grid-column: auto;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    grid-template-columns: 1fr;
+  }
+
+  .cubeColorSourcePlot {
+    max-width: none;
+    justify-self: stretch;
+  }
+
+  .cubeColorSourceLegend {
+    justify-content: flex-start;
   }
 
   .cubeManaCurveHeading {
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: flex-start;
+  }
+
+  .cubeManaCurveClearFilter {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: center;
   }
 
   .cubeManaCurveLegend {
@@ -1159,14 +1477,16 @@
   }
 
   .cubeManaCurveChart {
+    min-width: 520px;
     gap: 7px;
   }
 
   .cubeManaCurveBar {
-    width: 70%;
+    width: clamp(68px, 86%, 96px);
   }
 
   .cubeStatsColumns {
+    min-height: 430px;
     grid-template-columns: repeat(7, minmax(138px, 138px));
   }
 
