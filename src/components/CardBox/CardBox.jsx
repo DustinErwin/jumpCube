@@ -12,6 +12,7 @@ import "./CardBox.css";
  * - onCardDecrease(cardId): remove one copy from active pack
  * - setIsDraggingCard(boolean): informs PackBox drag-over styling
  * - isSelectionDisabled: true when pack limit is reached
+ * - canAddCard(card): optional per-card rule check
  */
 export default function CardBox({
   cards,
@@ -21,6 +22,7 @@ export default function CardBox({
   onCardDecrease,
   setIsDraggingCard,
   isSelectionDisabled = false,
+  canAddCard,
   ownedQuantities = new Map(),
 }) {
   const [flippedCards, setFlippedCards] = useState({});
@@ -100,21 +102,23 @@ export default function CardBox({
           const quantity = getCardQuantity(card);
           const ownershipId = card.card_search_id || card.id;
           const ownedQuantity = ownedQuantities.get(ownershipId) || 0;
+          const isAddDisabled =
+            isSelectionDisabled || (canAddCard && !canAddCard(card));
 
           return (
             <div
               className={`cardBox${isFlipped ? " flipped" : ""}`}
               key={flipKey}
-              draggable={!isSelectionDisabled}
+              draggable={!isAddDisabled}
               title={
-                isSelectionDisabled
-                  ? "Pack limit reached"
+                isAddDisabled
+                  ? "Cannot add this card to the current pack"
                   : card.name
               }
               onDragStart={(e) => {
                 // Drag payload is the full card row so PackBox can add it
                 // without refetching.
-                if (isSelectionDisabled) {
+                if (isAddDisabled) {
                   e.preventDefault();
                   return;
                 }
@@ -210,7 +214,7 @@ export default function CardBox({
                     event.stopPropagation();
                     onCardAdd?.(card);
                   }}
-                  disabled={isSelectionDisabled}
+                  disabled={isAddDisabled}
                   aria-label={`Add one ${card.name} to pack`}
                 >
                   +

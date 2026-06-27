@@ -12,6 +12,22 @@
   margin: 0 auto;
 }
 
+.backgroundCredit {
+  justify-self: center;
+  max-width: 100%;
+  margin: 0 0 -1px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(7, 9, 13, 0.48);
+  color: rgba(238, 238, 238, 0.66);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .searchControls {
   display: flex;
   align-items: center;
@@ -56,6 +72,10 @@
   .searchBox {
     width: 100%;
     gap: 6px;
+  }
+
+  .backgroundCredit {
+    display: none;
   }
 
   .searchControls {

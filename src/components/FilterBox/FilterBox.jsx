@@ -68,6 +68,8 @@ export default function FilterBox({
 }) {
   const filterBoxRef = useRef(null);
   const [openFilter, setOpenFilter] = useState(null);
+  const [isMobileFilterAccordionOpen, setIsMobileFilterAccordionOpen] =
+    useState(false);
 
   useEffect(() => {
     // Any click outside the active dropdown closes it. This keeps the compact
@@ -118,9 +120,44 @@ export default function FilterBox({
     return values.length > 0 ? ` (${values.length})` : "";
   }
 
+  const activeFilterCount =
+    manaValues.length +
+    colors.length +
+    rarities.length +
+    types.length +
+    formats.length +
+    selectedSets.length +
+    (hasCollection && includeOwned !== includeUnowned ? 1 : 0);
+
   return (
     <div className="filterBox compactFilterBox" ref={filterBoxRef}>
-      <div className="filterChipBar">
+      <button
+        className="mobileFilterAccordionButton"
+        type="button"
+        onClick={() => {
+          setIsMobileFilterAccordionOpen((currentIsOpen) => {
+            if (currentIsOpen) {
+              setOpenFilter(null);
+            }
+
+            return !currentIsOpen;
+          });
+        }}
+        aria-expanded={isMobileFilterAccordionOpen}
+        aria-controls="mobileFilterAccordionPanel"
+      >
+        Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+        <span aria-hidden="true">
+          {isMobileFilterAccordionOpen ? "\u25B2" : "\u25BC"}
+        </span>
+      </button>
+
+      <div
+        id="mobileFilterAccordionPanel"
+        className={`filterChipBar ${
+          isMobileFilterAccordionOpen ? "mobileAccordionOpen" : ""
+        }`}
+      >
         <div className="filterChipWrap">
           <button
             className={`filterChip ${colors.length > 0 ? "active" : ""}`}

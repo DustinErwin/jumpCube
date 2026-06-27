@@ -1,5 +1,6 @@
 import { supabase } from "../utils/supabase";
 import { normalizePackTags } from "../utils/packTags";
+import { getPackFormat } from "../utils/packFormats";
 
 function getCardImage(card) {
   return card?.image_url || card?.image_uris?.art_crop || card?.image_uris?.normal || null;
@@ -126,6 +127,8 @@ async function hydratePublicPacks(packs) {
       ownerName: profiles.get(pack.user_id) || "Jump Cube user",
       cardCount: packCards.reduce((sum, row) => sum + (row.quantity || 1), 0),
       imageUrl: pack.cover_image_url || getCardImage(topCard),
+      formatId: getPackFormat(pack.format_id).id,
+      commanderCardId: pack.commander_card_id || null,
       tags: normalizePackTags(tagsByPack.get(pack.id) || pack.archetype_tags || []),
       cards: packCards.map((row) => {
         const card = variants.get(row.variant_id) || searchCards.get(row.card_search_id) || {};
@@ -148,7 +151,7 @@ export async function loadPublicLibrary() {
   const [packsResult, cubesResult] = await Promise.all([
     supabase
       .from("packs")
-      .select("id, user_id, name, description, visibility, archetype_tags, cover_image_url, created_at")
+      .select("id, user_id, name, description, visibility, archetype_tags, cover_image_url, format_id, commander_card_id, created_at")
       .eq("visibility", "public")
       .order("created_at", { ascending: false })
       .limit(60),
@@ -184,7 +187,7 @@ export async function loadPublicLibrary() {
   const { data: missingPacks, error: missingPacksError } = missingPackIds.length
     ? await supabase
         .from("packs")
-        .select("id, user_id, name, description, visibility, archetype_tags, cover_image_url, created_at")
+        .select("id, user_id, name, description, visibility, archetype_tags, cover_image_url, format_id, commander_card_id, created_at")
         .in("id", missingPackIds)
     : { data: [], error: null };
 
@@ -222,7 +225,7 @@ export async function loadPublicLibrary() {
 export async function loadPublicPack(packId) {
   const { data: pack, error } = await supabase
     .from("packs")
-    .select("id, user_id, name, description, visibility, archetype_tags, cover_image_url, created_at")
+    .select("id, user_id, name, description, visibility, archetype_tags, cover_image_url, format_id, commander_card_id, created_at")
     .eq("id", packId)
     .single();
 
@@ -253,7 +256,7 @@ export async function loadPublicCube(cubeId) {
   const { data: packRows, error: packsError } = packIds.length
     ? await supabase
         .from("packs")
-        .select("id, user_id, name, description, visibility, archetype_tags, cover_image_url, created_at")
+        .select("id, user_id, name, description, visibility, archetype_tags, cover_image_url, format_id, commander_card_id, created_at")
         .in("id", packIds)
     : { data: [], error: null };
 

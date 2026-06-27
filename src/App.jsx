@@ -16,6 +16,7 @@ import DiscoverPage from "./pages/DiscoverPage/DiscoverPage";
 import PublicItemPage from "./pages/PublicItemPage/PublicItemPage";
 import CollectionPage from "./pages/CollectionPage/CollectionPage";
 import SampleDraftPage from "./pages/SampleDraftPage/SampleDraftPage";
+import PackPrintablesPage from "./pages/PackPrintablesPage/PackPrintablesPage";
 import SearchBox from "./components/SearchBox/SearchBox";
 import FilterBox from "./components/FilterBox/FilterBox";
 import CardBox from "./components/CardBox/CardBox";
@@ -32,11 +33,17 @@ import {
   sanitizeTitle,
 } from "./utils/userText";
 import { copyPublicPack } from "./services/discoveryService";
-import { convertArenaDeckToPack } from "./services/deckConversionService";
+import {
+  convertArenaDeckToPack,
+  convertArenaCommanderDeckToPack,
+  convertMtgoDekToPack,
+  convertMtgoCommanderDeckToPack,
+} from "./services/deckConversionService";
 import {
   takePendingOpenPack,
   takePendingSharedPackCopy,
 } from "./utils/sharedPackCopy";
+import { getPackFormat } from "./utils/packFormats";
 import "./App.css";
 
 /*
@@ -56,6 +63,7 @@ import "./App.css";
 
 const MOBILE_PANEL_QUERY = "(max-width: 760px)";
 const FALLBACK_FROG_BACKGROUND = `${import.meta.env.BASE_URL}images/frogCube.png`;
+const COMMANDER_CREATURE_SEARCH = "t:legendary (t:creature or t:planeswalker)";
 
 // Used for pack/cube names before they are saved. Update userText.js if the
 // database constraint changes.
@@ -79,8 +87,36 @@ function getCubeSnapshot(name, description, visibility, packs) {
     name: normalizeTitle(name, "Unnamed Cube"),
     description: sanitizeDescription(description),
     visibility: visibility === "public" ? "public" : "private",
-    packs: packs.map((pack) => pack.savedPackId || pack.id),
+    packs: packs.map((pack) => ({
+      id: pack.savedPackId || pack.id,
+      formatId: getPackFormat(pack.formatId).id,
+    })),
   });
+}
+
+function getCubeFormatId(packs) {
+  return getPackFormat(packs.find((pack) => pack.formatId)?.formatId).id;
+}
+
+function canAddPackToCubeFormat(currentPacks, nextPack) {
+  if (!nextPack) return false;
+  if (currentPacks.length === 0) return true;
+
+  return getCubeFormatId(currentPacks) === getPackFormat(nextPack.formatId).id;
+}
+
+function getCubeFormatCompatiblePacks(currentPacks, nextPacks) {
+  const acceptedPacks = [...currentPacks];
+  const compatiblePacks = [];
+
+  nextPacks.forEach((nextPack) => {
+    if (!canAddPackToCubeFormat(acceptedPacks, nextPack)) return;
+
+    acceptedPacks.push(nextPack);
+    compatiblePacks.push(nextPack);
+  });
+
+  return compatiblePacks;
 }
 
 function getPackSummary({
@@ -90,6 +126,7 @@ function getPackSummary({
   archetypeTags,
   visibility,
   cards,
+  formatId,
 }) {
   /*
    * Input arguments describe the current pack UI state. Output is the compact
@@ -124,6 +161,7 @@ function getPackSummary({
     visibility: visibility || "private",
     cardCount,
     colorIdentity,
+    formatId: getPackFormat(formatId).id,
     savedPackId: id,
     cards: normalizedCards,
   };
@@ -180,6 +218,7 @@ function App() {
   const {
     saveCube: saveUserCube,
     loadCube: loadUserCube,
+    loadPackSummaries,
   } = userCubes;
 
   const [isPackLibraryOpen, setIsPackLibraryOpen] = useState(false);
@@ -220,10 +259,14 @@ function App() {
   const [savedCubeId, setSavedCubeId] = useState(null);
   const [isCubeActive, setIsCubeActive] = useState(false);
   const [cubeSaveStatus, setCubeSaveStatus] = useState("");
+  const [isPackStatsOpen, setIsPackStatsOpen] = useState(false);
+  const [isCubeStatsOpen, setIsCubeStatsOpen] = useState(false);
+  const [printableSavedPacks, setPrintableSavedPacks] = useState([]);
   const [selectedSets, setSelectedSets] = useState([]);
   const [frogBackground, setFrogBackground] = useState(
     FALLBACK_FROG_BACKGROUND,
   );
+  const [frogBackgroundCredit, setFrogBackgroundCredit] = useState(null);
   const lastSavedCubeSnapshotRef = useRef(null);
   const initializedCubeUserIdRef = useRef(null);
   const initializedPackUserIdRef = useRef(null);
@@ -387,6 +430,33 @@ function App() {
     packsLoadedUserId,
     user,
   ]);
+
+  useEffect(() => {
+    if (location.pathname !== "/printables") return undefined;
+
+    let isCurrent = true;
+    const packIds = packs.map((savedPack) => savedPack.id).filter(Boolean);
+
+    async function loadPrintableSavedPacks() {
+      if (!user?.id || !packsLoaded || packIds.length === 0) {
+        if (isCurrent) setPrintableSavedPacks([]);
+        return;
+      }
+
+      const packSummaries = await loadPackSummaries(packIds);
+
+      if (isCurrent) {
+        setPrintableSavedPacks(packSummaries);
+      }
+    }
+
+    loadPrintableSavedPacks();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [loadPackSummaries, location.pathname, packs, packsLoaded, user?.id]);
+
   function requireAuth() {
     if (user) return true;
 
@@ -437,6 +507,47 @@ function App() {
     setSearch(searchInput.trim());
   }
 
+  function handlePackFormatChange(nextFormatId) {
+    const nextFormat = getPackFormat(nextFormatId);
+    const activePackIds = new Set(
+      [pack.savedPackId, "current-pack"].filter(Boolean),
+    );
+    const activePackIsInCube = selectedPacks.some((selectedPack) =>
+      activePackIds.has(selectedPack.savedPackId || selectedPack.id),
+    );
+    const otherCubePacks = selectedPacks.filter(
+      (selectedPack) =>
+        !activePackIds.has(selectedPack.savedPackId || selectedPack.id),
+    );
+
+    if (
+      activePackIsInCube &&
+      otherCubePacks.length > 0 &&
+      getCubeFormatId(otherCubePacks) !== nextFormat.id
+    ) {
+      window.alert(
+        `This cube is a ${getPackFormat(getCubeFormatId(otherCubePacks)).name} cube. This pack cannot switch to ${nextFormat.name} while it is part of that cube.`,
+      );
+      return;
+    }
+
+    pack.setPackFormat(nextFormat.id);
+
+    if (!nextFormat.commanderSlot) return;
+
+    setSearchInput(COMMANDER_CREATURE_SEARCH);
+    setSearch(COMMANDER_CREATURE_SEARCH);
+    setManaValues([]);
+    setColors([]);
+    setColorMode("or");
+    setRarities([]);
+    setTypes([]);
+    setFormats([]);
+    setSelectedSets([]);
+    setIncludeOwned(true);
+    setIncludeUnowned(true);
+  }
+
   useEffect(() => {
     /*
      * Filter changes are search submissions too. This keeps the committed
@@ -483,6 +594,18 @@ function App() {
     if (!requireAuth()) return;
     if (!isCubeActive) return;
 
+    const nextPackFormatId = getPackFormat(pack.packFormatId).id;
+
+    if (
+      selectedPacks.length > 0 &&
+      getCubeFormatId(selectedPacks) !== nextPackFormatId
+    ) {
+      window.alert(
+        `This cube is a ${getPackFormat(getCubeFormatId(selectedPacks)).name} cube. Only packs with the same format can be added.`,
+      );
+      return;
+    }
+
     const savedPackId = await pack.savePack({ promptOnRename: false });
 
     if (!savedPackId) return;
@@ -494,6 +617,7 @@ function App() {
       archetypeTags: pack.packArchetypeTags,
       visibility: pack.packVisibility,
       cards: pack.selectedCards,
+      formatId: nextPackFormatId,
     });
 
     setSelectedPacks((currentPacks) => {
@@ -588,6 +712,13 @@ function App() {
      */
     if (!isCubeActive) return;
     if (selectedPacks.length === 0 && !savedCubeId) return;
+    if (
+      selectedPacks.length !==
+      getCubeFormatCompatiblePacks([], selectedPacks).length
+    ) {
+      setCubeSaveStatus("error");
+      return;
+    }
 
     const currentSnapshot = getCubeSnapshot(
       cubeName,
@@ -762,6 +893,10 @@ function App() {
 
         if (isCurrent && cardArt) {
           setFrogBackground(cardArt);
+          setFrogBackgroundCredit({
+            cardName: card.name || "Unknown card",
+            artistName: card.artist || "Unknown artist",
+          });
         }
       } catch (error) {
         console.error("Error loading random Frog background:", error);
@@ -841,7 +976,7 @@ function App() {
         />
       )}
 
-      {location.pathname === "/create" && (
+      {location.pathname === "/create" && !isPackStatsOpen && !isCubeStatsOpen && (
       <nav className="mobilePanelNav" aria-label="Builder panels">
         <button
           type="button"
@@ -885,6 +1020,7 @@ function App() {
                     searchScopes={searchScopes}
                     setSearchScopes={setSearchScopes}
                     onSearch={submitSearch}
+                    backgroundCredit={frogBackgroundCredit}
                   />
 
                   <FilterBox
@@ -930,6 +1066,7 @@ function App() {
                         onCardDecrease={pack.decreaseCardQuantity}
                         setIsDraggingCard={setIsDraggingCard}
                         isSelectionDisabled={pack.isPackFull}
+                        canAddCard={pack.canAddCardToPack}
                         ownedQuantities={collection.quantitiesByCardSearchId}
                       />
                       {loadingMoreCards && <p>Loading more cards...</p>}
@@ -960,6 +1097,14 @@ function App() {
                   packTagLimit={pack.packTagLimit}
                   packVisibility={pack.packVisibility}
                   setPackVisibility={pack.setPackVisibility}
+                  packFormatId={pack.packFormatId}
+                  setPackFormat={handlePackFormatChange}
+                  packFormats={pack.packFormats}
+                  packCardLimit={pack.packCardLimit}
+                  commanderCard={pack.commanderCard}
+                  commanderCardId={pack.commanderCardId}
+                  setCommanderCard={pack.setCommanderCard}
+                  hasValidCommander={pack.hasValidCommander}
                   isPackActive={pack.isPackActive}
                   selectedCards={pack.selectedCards}
                   addCard={pack.addCardToPack}
@@ -978,18 +1123,34 @@ function App() {
                   savedPackId={pack.savedPackId}
                   onSharePack={(packId) => copyShareLink("pack", packId)}
                   newPack={startNewPack}
-                  onConvertDeck={async (deckText, convertedPackName) => {
-                    const conversion = await convertArenaDeckToPack(
-                      deckText,
-                      pack.packCardLimit,
-                    );
+                  onConvertDeck={async (deckText, convertedPackName, sourceType) => {
+                    const isCommanderImport =
+                      pack.packFormats[pack.packFormatId]?.commanderSlot;
 
-                    pack.startPackFromCards(
-                      conversion.cards,
-                      convertedPackName,
-                    );
+                    if (sourceType === "mtgo") {
+                      if (isCommanderImport) {
+                        return convertMtgoCommanderDeckToPack(deckText);
+                      }
 
-                    return conversion;
+                      return convertMtgoDekToPack(
+                        deckText,
+                        pack.packCardLimit,
+                      );
+                    }
+
+                    if (isCommanderImport) {
+                      return convertArenaCommanderDeckToPack(deckText);
+                    }
+
+                    return convertArenaDeckToPack(deckText, pack.packCardLimit);
+                  }}
+                  onFinalizeConvertedDeck={(cards, convertedPackName, result) => {
+                    pack.startPackFromCards(cards, convertedPackName, {
+                      commanderCardId: result?.commanderCardId,
+                      formatId: result?.mode === "commander"
+                        ? pack.packFormats.commander.id
+                        : pack.packFormatId,
+                    });
                   }}
                   saveStatus={pack.saveStatus}
                   saveErrorMessage={pack.saveErrorMessage}
@@ -1001,6 +1162,7 @@ function App() {
                   isDraggingCard={isDraggingCard}
                   isOpen={isPackBoxOpen}
                   setIsOpen={setIsPackBoxOpen}
+                  onStatsOpenChange={setIsPackStatsOpen}
                   isAuthenticated={Boolean(user)}
                   onAuthRequired={() => setIsAuthRequiredOpen(true)}
                 />
@@ -1028,6 +1190,7 @@ function App() {
                   saveErrorMessage={userCubes.cubeSaveError}
                   isOpen={isJumpCubeBoxOpen}
                   setIsOpen={setIsJumpCubeBoxOpen}
+                  onStatsOpenChange={setIsCubeStatsOpen}
                   isAuthenticated={Boolean(user)}
                   onAuthRequired={() => setIsAuthRequiredOpen(true)}
                 />
@@ -1071,12 +1234,28 @@ function App() {
                     (packId) => !existingIds.has(packId),
                   );
                   const packSummaries =
-                    await userCubes.loadPackSummaries(newPackIds);
+                    await loadPackSummaries(newPackIds);
+                  const allowedPackSummaries = getCubeFormatCompatiblePacks(
+                    selectedPacks,
+                    packSummaries,
+                  );
+                  const rejectedCount =
+                    packSummaries.length - allowedPackSummaries.length;
 
-                  setSelectedPacks((currentPacks) => [
-                    ...currentPacks,
-                    ...packSummaries,
-                  ]);
+                  if (rejectedCount > 0) {
+                    window.alert(
+                      `${rejectedCount} pack${rejectedCount === 1 ? "" : "s"} skipped because cube packs must all use the same format.`,
+                    );
+                  }
+
+                  setSelectedPacks((currentPacks) => {
+                    const compatiblePacks = getCubeFormatCompatiblePacks(
+                      currentPacks,
+                      allowedPackSummaries,
+                    );
+
+                    return [...currentPacks, ...compatiblePacks];
+                  });
                 }}
               />
 
@@ -1105,6 +1284,7 @@ function App() {
                 onDecreaseFromPack={pack.decreaseCardQuantity}
                 selectedCards={pack.selectedCards}
                 isPackFull={pack.isPackFull}
+                canAddCard={pack.canAddCardToPack}
               />
             </>
           }
@@ -1114,6 +1294,22 @@ function App() {
           path="/sample-draft"
           element={
             <SampleDraftPage cubeName={cubeName} packs={selectedPacks} />
+          }
+        />
+
+        <Route
+          path="/printables"
+          element={
+            <PackPrintablesPage
+              activePack={{
+                id: pack.savedPackId || "current-pack",
+                name: normalizeTitle(pack.packName, "Unnamed Pack"),
+                cards: pack.selectedCards,
+                formatId: pack.packFormatId,
+              }}
+              packs={printableSavedPacks}
+              cubePacks={selectedPacks}
+            />
           }
         />
 

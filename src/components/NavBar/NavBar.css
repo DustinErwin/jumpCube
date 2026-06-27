@@ -54,6 +54,7 @@
 .navAdminLink,
 .navCreateLink,
 .navDiscoverLink,
+.navPrintablesLink,
 .navCollectionLink {
   color: #aaa;
   font-size: 0.85rem;
@@ -64,6 +65,7 @@
 .navAdminLink:hover,
 .navCreateLink:hover,
 .navDiscoverLink:hover,
+.navPrintablesLink:hover,
 .navCollectionLink:hover {
   color: white;
 }
@@ -199,6 +201,10 @@
   }
 
   .navDiscoverLink {
+    font-size: 0.72rem;
+  }
+
+  .navPrintablesLink {
     font-size: 0.72rem;
   }
 

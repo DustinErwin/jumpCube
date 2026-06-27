@@ -84,7 +84,7 @@ const IDEAL_MANA_CURVE = [1, 4, 3, 2, 1, 1];
 const SWIPE_REMOVE_THRESHOLD = 88;
 const SWIPE_REMOVE_CANCEL_THRESHOLD = 56;
 const SWIPE_REMOVE_MAX_DISTANCE = 124;
-const SWIPE_REMOVE_HOLD_MS = 1500;
+const SWIPE_REMOVE_HOLD_MS = 450;
 const MOBILE_REORDER_HOLD_MS = 400;
 const MOBILE_GESTURE_MOVE_TOLERANCE = 8;
 const DEFAULT_PACK_ACTION_HINT = "";
@@ -162,6 +162,15 @@ function getPrimaryPackStatsType(card) {
   return matchedType || "Other";
 }
 
+function isCommanderEligible(card) {
+  const typeLine = card?.type_line || "";
+  const isLegendary = /\blegendary\b/i.test(typeLine);
+  const isCreatureOrPlaneswalker =
+    /\bcreature\b/i.test(typeLine) || /\bplaneswalker\b/i.test(typeLine);
+
+  return isLegendary && isCreatureOrPlaneswalker;
+}
+
 export default function PackBox({
   packName,
   setPackName,
@@ -184,9 +193,18 @@ export default function PackBox({
   packTagLimit = PACK_TAG_LIMIT,
   packVisibility = "private",
   setPackVisibility,
+  packFormatId = "jumpstart",
+  setPackFormat,
+  packFormats = {},
+  packCardLimit = PACK_CARD_LIMIT,
+  commanderCard,
+  commanderCardId,
+  setCommanderCard,
+  hasValidCommander = true,
   isPackActive = false,
   newPack,
   onConvertDeck,
+  onFinalizeConvertedDeck,
   saveStatus,
   saveErrorMessage = "",
   showRenameChoice,
@@ -196,6 +214,7 @@ export default function PackBox({
   moveCardToMechanicBucket,
   initialShowStats = false,
   onStatsClose,
+  onStatsOpenChange,
   isDraggingCard,
   isOpen,
   setIsOpen,
@@ -653,6 +672,9 @@ export default function PackBox({
       copyNumber: index + 1,
     })),
   );
+  const packFormat = packFormats[packFormatId] || packFormats.jumpstart || {};
+  const isCommanderPack = Boolean(packFormat.commanderSlot);
+  const commanderOptions = selectedCards.filter(isCommanderEligible);
   // Stats-view columns are mechanic buckets. Manual user placement is handled
   // by getPrimaryCardMechanicBucket().
   const mechanicColumns = PACK_MECHANIC_BUCKETS.map((bucket) => ({
@@ -911,6 +933,14 @@ export default function PackBox({
       visibilityMessageTimeoutRef.current = null;
     }, 1800);
   }
+
+  useEffect(() => {
+    onStatsOpenChange?.(showPackStats);
+
+    return () => {
+      onStatsOpenChange?.(false);
+    };
+  }, [onStatsOpenChange, showPackStats]);
 
   useEffect(() => {
     return () => {
@@ -1402,7 +1432,7 @@ export default function PackBox({
 
         <p className="packCount">
           <strong>{totalCards}</strong>
-          <span> / {PACK_CARD_LIMIT} cards</span>
+          <span> / {packCardLimit} cards</span>
         </p>
 
         <p className="packTotalPrice">
@@ -1410,10 +1440,48 @@ export default function PackBox({
           <strong>{formatUsd(totalPrice)}</strong>
         </p>
 
-        {totalCards >= PACK_CARD_LIMIT && (
+        {totalCards >= packCardLimit && (
           <p className="packLimitMessage">Pack limit reached</p>
         )}
       </div>}
+
+      {isPackActive && (
+        <div className="packFormatPanel">
+          <label>
+            Format
+            <select
+              value={packFormatId}
+              onChange={(event) => setPackFormat?.(event.target.value)}
+            >
+              {Object.values(packFormats).map((format) => (
+                <option value={format.id} key={format.id}>
+                  {format.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {isCommanderPack && (
+            <label className="commanderSlotControl">
+              Commander
+              <select
+                value={commanderCard?.id || commanderCardId || ""}
+                onChange={(event) => setCommanderCard?.(event.target.value)}
+              >
+                <option value="">Choose a commander</option>
+                {commanderOptions.map((card) => (
+                  <option value={card.id} key={card.id}>
+                    {card.name}
+                  </option>
+                ))}
+              </select>
+              {!hasValidCommander && (
+                <span role="alert">Add an eligible commander for this slot.</span>
+              )}
+            </label>
+          )}
+        </div>
+      )}
 
       <div className="packVisibilityToggle" aria-label="Pack visibility">
         <span>Visibility</span>
@@ -1587,6 +1655,7 @@ export default function PackBox({
         isOpen={isDeckConverterOpen}
         onClose={() => setIsDeckConverterOpen(false)}
         onConvert={onConvertDeck}
+        onFinalize={onFinalizeConvertedDeck}
       />
 
       {isArchetypeMenuOpen && (
@@ -1687,7 +1756,7 @@ export default function PackBox({
             <div>
               <h2>{packName}</h2>
               <p>
-                {totalCards} / {PACK_CARD_LIMIT} cards selected
+                {totalCards} / {packCardLimit} cards selected
               </p>
             </div>
 

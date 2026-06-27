@@ -76,6 +76,13 @@ export default function NavBar({ user, displayName, isAdmin }) {
           <Link className="navDiscoverLink" to="/discover" onClick={closeMenu}>
             Discover
           </Link>
+          <Link
+            className="navPrintablesLink"
+            to="/printables"
+            onClick={closeMenu}
+          >
+            Printables
+          </Link>
           {user ? (
             <>
               <Link

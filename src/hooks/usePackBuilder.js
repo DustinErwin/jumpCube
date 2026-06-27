@@ -11,7 +11,12 @@ import {
   PACK_TAG_LIMIT,
 } from "../utils/packTags";
 import { hasBlockedContentInFields } from "../utils/contentModeration";
-import { DEFAULT_PACK_CARD_LIMIT } from "../utils/packFormats";
+import {
+  DEFAULT_PACK_CARD_LIMIT,
+  DEFAULT_PACK_FORMAT_ID,
+  getPackFormat,
+  PACK_FORMATS,
+} from "../utils/packFormats";
 
 /*
  * usePackBuilder() owns the active pack editor.
@@ -152,7 +157,15 @@ function normalizeVisibility(visibility) {
   return visibility === "public" ? "public" : "private";
 }
 
-function getPackSnapshot(name, description, archetypeTags, visibility, cards) {
+function getPackSnapshot(
+  name,
+  description,
+  archetypeTags,
+  visibility,
+  cards,
+  formatId = DEFAULT_PACK_FORMAT_ID,
+  commanderId = null,
+) {
   // Snapshot is compared before autosave to avoid writing the same pack in a
   // loop. Include any new saved pack field here if it should trigger autosave.
   return JSON.stringify({
@@ -163,6 +176,8 @@ function getPackSnapshot(name, description, archetypeTags, visibility, cards) {
       color: tag.color,
     })),
     visibility: normalizeVisibility(visibility),
+    formatId: getPackFormat(formatId).id,
+    commanderId,
     cards: cards.map((card) => ({
       id: card.id,
       oracleId: card.oracle_id || null,
@@ -175,6 +190,19 @@ function getPackSnapshot(name, description, archetypeTags, visibility, cards) {
 
 function getPackCardCount(cards) {
   return cards.reduce((sum, card) => sum + card.quantity, 0);
+}
+
+function isBasicLand(card) {
+  return /basic\s+land/i.test(card?.type_line || "");
+}
+
+function isCommanderEligible(card) {
+  const typeLine = card?.type_line || "";
+  const isLegendary = /\blegendary\b/i.test(typeLine);
+  const isCreatureOrPlaneswalker =
+    /\bcreature\b/i.test(typeLine) || /\bplaneswalker\b/i.test(typeLine);
+
+  return isLegendary && isCreatureOrPlaneswalker;
 }
 
 function getPackCardIdentity(card) {
@@ -199,10 +227,64 @@ function getPackCoverImage(cards) {
   );
 }
 
+function isMissingPackFormatColumnError(error) {
+  const message = String(error?.message || error?.details || "");
+
+  return (
+    error?.code === "PGRST204" &&
+    (message.includes("format_id") || message.includes("commander_card_id"))
+  );
+}
+
+function getPackFormatMigrationMessage(error) {
+  if (!isMissingPackFormatColumnError(error)) return null;
+
+  return "Pack formats need the latest database migration. Run 202606260002_add_pack_format_identity.sql, then refresh Supabase's schema cache if needed.";
+}
+
+function getPackCardSaveMigrationMessage(error) {
+  const message = String(error?.message || "");
+
+  if (!message.includes("Pack cannot contain more than 20 cards")) return null;
+
+  return "Commander packs need the latest pack format migration. Run 202606260002_add_pack_format_identity.sql so the database allows 30-card Commander packs.";
+}
+
+function getNextPackCards(cards, card, packFormat) {
+  if (getPackCardCount(cards) >= packFormat.cardLimit) {
+    return cards;
+  }
+
+  const cardIdentity = getPackCardIdentity(card);
+  const existingCard = cards.find(
+    (currentCard) => getPackCardIdentity(currentCard) === cardIdentity,
+  );
+
+  if (existingCard) {
+    if (packFormat.singleton && !isBasicLand(existingCard)) {
+      return cards;
+    }
+
+    return cards.map((currentCard) =>
+      getPackCardIdentity(currentCard) === cardIdentity
+        ? { ...currentCard, quantity: currentCard.quantity + 1 }
+        : currentCard,
+    );
+  }
+
+  return [...cards, { ...card, quantity: 1 }];
+}
+
 function mergeHydratedCard(searchCard, variantCard) {
+  const variantLegalities =
+    variantCard?.legalities && Object.keys(variantCard.legalities).length > 0
+      ? variantCard.legalities
+      : null;
+
   return {
     ...(searchCard || {}),
     ...(variantCard || {}),
+    legalities: variantLegalities || searchCard?.legalities || null,
     price_usd: variantCard?.price_usd ?? searchCard?.price_usd ?? null,
     price_usd_foil:
       variantCard?.price_usd_foil ?? searchCard?.price_usd_foil ?? null,
@@ -296,23 +378,62 @@ async function hydratePackCardRows(packCards) {
     });
   }
 
+  const fallbackSearchOracleIds = [
+    ...new Set(
+      (packCards || [])
+        .filter((row) => !searchById.has(getCardSearchId(row)))
+        .map((row) => {
+          const variantCard =
+            variantById.get(row.variant_id) ||
+            variantByScryfallId.get(row.variation_id);
+
+          return row.oracle_id || variantCard?.oracle_id || null;
+        })
+        .filter(Boolean),
+    ),
+  ];
+  const fallbackSearchByOracleId = new Map();
+
+  if (fallbackSearchOracleIds.length > 0) {
+    const { data, error } = await supabase
+      .from("card_search")
+      .select(PACK_CARD_SEARCH_COLUMNS)
+      .in("oracle_id", fallbackSearchOracleIds);
+
+    if (error) throw error;
+
+    (data || []).forEach((searchCard) => {
+      fallbackSearchByOracleId.set(searchCard.oracle_id, searchCard);
+    });
+  }
+
   return (packCards || []).map((row) => {
     const cardSearchId = getCardSearchId(row);
-    const searchCard = searchById.get(cardSearchId);
-    const fallbackVariantId = searchCard?.default_variant_id || null;
     const variantCard =
       variantById.get(row.variant_id) ||
-      variantByScryfallId.get(row.variation_id) ||
+      variantByScryfallId.get(row.variation_id);
+    const searchCard =
+      searchById.get(cardSearchId) ||
+      fallbackSearchByOracleId.get(row.oracle_id) ||
+      fallbackSearchByOracleId.get(variantCard?.oracle_id);
+    const fallbackVariantId = searchCard?.default_variant_id || null;
+    const displayVariantCard =
+      variantCard ||
       variantById.get(fallbackVariantId);
+
     return {
-      ...mergeHydratedCard(searchCard, variantCard),
-      id: row.variant_id || variantCard?.id || searchCard?.id,
+      ...mergeHydratedCard(searchCard, displayVariantCard),
+      id: row.variant_id || displayVariantCard?.id || searchCard?.id,
       card_search_id: cardSearchId || searchCard?.id || null,
-      variant_id: row.variant_id || variantCard?.id || fallbackVariantId,
-      oracle_id: row.oracle_id || searchCard?.oracle_id || variantCard?.oracle_id || null,
-      variation_id: row.variation_id || variantCard?.scryfall_id || null,
+      variant_id: row.variant_id || displayVariantCard?.id || fallbackVariantId,
+      oracle_id:
+        row.oracle_id ||
+        searchCard?.oracle_id ||
+        displayVariantCard?.oracle_id ||
+        null,
+      variation_id: row.variation_id || displayVariantCard?.scryfall_id || null,
       scryfall_id:
-        variantCard?.scryfall_id ||
+        displayVariantCard?.scryfall_id ||
         searchCard?.default_variant_scryfall_id ||
         null,
       quantity: row.quantity,
@@ -332,6 +453,8 @@ export function usePackBuilder(user, refreshPacks, {
   const [packArchetypeTags, setPackArchetypeTags] = useState([]);
   const [availablePackTags, setAvailablePackTags] = useState(FALLBACK_PACK_TAGS);
   const [packVisibility, setPackVisibility] = useState("private");
+  const [packFormatId, setPackFormatId] = useState(DEFAULT_PACK_FORMAT_ID);
+  const [commanderCardId, setCommanderCardId] = useState(null);
   const [savedPackId, setSavedPackId] = useState(null);
   const [savedPackName, setSavedPackName] = useState(null);
   const [saveStatus, setSaveStatus] = useState("");
@@ -420,24 +543,121 @@ export function usePackBuilder(user, refreshPacks, {
   }, [availablePackTags, user]);
 
   function addCardToPack(card) {
-    // Adds one copy, up to PACK_CARD_LIMIT. Existing copies increment quantity
-    // instead of duplicating rows in selectedCards.
+    // Adds one copy up to the active format limit. Singleton formats only
+    // allow duplicate basic lands.
     if (!isPackActive) return;
 
+    const packFormat = getPackFormat(packFormatId);
+    const shouldFillCommanderSlot =
+      packFormat.commanderSlot &&
+      !commanderCardId &&
+      canAddCardToPack(card) &&
+      isCommanderEligible(card);
+
     setSelectedCards((prev) => {
-      if (getPackCardCount(prev) >= PACK_CARD_LIMIT) {
-        return prev;
-      }
+      return getNextPackCards(prev, card, packFormat);
+    });
 
-      const existingCard = prev.find((c) => c.id === card.id);
+    if (shouldFillCommanderSlot) {
+      setCommanderCardId(card.id);
+    }
+  }
 
-      if (existingCard) {
-        return prev.map((c) =>
-          c.id === card.id ? { ...c, quantity: c.quantity + 1 } : c,
+  function canAddCardToPack(card) {
+    if (!isPackActive || !card) return false;
+
+    const packFormat = getPackFormat(packFormatId);
+
+    if (getPackCardCount(selectedCards) >= packFormat.cardLimit) return false;
+
+    const cardIdentity = getPackCardIdentity(card);
+    const existingCard = selectedCards.find(
+      (selectedCard) => getPackCardIdentity(selectedCard) === cardIdentity,
+    );
+
+    if (existingCard && packFormat.singleton && !isBasicLand(existingCard)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function getCommanderCard(cards = selectedCards) {
+    return (
+      cards.find((card) => card.id === commanderCardId) ||
+      cards.find(isCommanderEligible) ||
+      null
+    );
+  }
+
+  function hasValidCommander(cards = selectedCards) {
+    const packFormat = getPackFormat(packFormatId);
+
+    if (!packFormat.commanderSlot) return true;
+
+    return Boolean(getCommanderCard(cards));
+  }
+
+  function setCommanderCard(cardId) {
+    const commanderCard = selectedCards.find((card) => card.id === cardId);
+
+    if (!commanderCard || !isCommanderEligible(commanderCard)) return;
+
+    setCommanderCardId(commanderCard.id);
+  }
+
+  function setPackFormat(nextFormatId) {
+    const nextFormat = getPackFormat(nextFormatId);
+
+    setPackFormatId(nextFormat.id);
+    setSelectedCards((currentCards) => {
+      const nextCards = [];
+
+      currentCards.forEach((card) => {
+        if (getPackCardCount(nextCards) >= nextFormat.cardLimit) return;
+
+        const existingCard = nextCards.find(
+          (nextCard) =>
+            getPackCardIdentity(nextCard) === getPackCardIdentity(card),
         );
-      }
 
-      return [...prev, { ...card, quantity: 1 }];
+        if (existingCard && nextFormat.singleton && !isBasicLand(existingCard)) {
+          return;
+        }
+
+        if (existingCard) {
+          existingCard.quantity = Math.min(
+            existingCard.quantity + card.quantity,
+            nextFormat.cardLimit - getPackCardCount(nextCards) + existingCard.quantity,
+          );
+          return;
+        }
+
+        const quantity =
+          nextFormat.singleton && !isBasicLand(card) ? 1 : card.quantity;
+
+        nextCards.push({
+          ...card,
+          quantity: Math.min(
+            quantity,
+            nextFormat.cardLimit - getPackCardCount(nextCards),
+          ),
+        });
+      });
+
+      return nextCards.filter((card) => card.quantity > 0);
+    });
+
+    setCommanderCardId((currentCommanderId) => {
+      if (!nextFormat.commanderSlot) return null;
+
+      const commanderStillExists = selectedCards.some(
+        (card) => card.id === currentCommanderId && isCommanderEligible(card),
+      );
+
+      if (commanderStillExists) return currentCommanderId;
+
+      return selectedCards.find(isCommanderEligible)?.id || null;
     });
   }
 
@@ -494,6 +714,12 @@ export function usePackBuilder(user, refreshPacks, {
 
     setPackArchetypeTags(normalizeArchetypeTags(loadedTags));
     setPackVisibility(normalizeVisibility(pack.visibility));
+    const loadedFormatId = getPackFormat(pack.format_id).id;
+    const loadedCommanderCardId =
+      loadedFormatId === DEFAULT_PACK_FORMAT_ID ? null : pack.commander_card_id;
+
+    setPackFormatId(loadedFormatId);
+    setCommanderCardId(loadedCommanderCardId);
     setSelectedCards(hydratedCards);
     setSavedPackId(pack.id);
     setSavedPackName(pack.name || null);
@@ -504,6 +730,8 @@ export function usePackBuilder(user, refreshPacks, {
       loadedTags,
       pack.visibility,
       hydratedCards,
+      loadedFormatId,
+      loadedCommanderCardId,
     );
   }, []);
 
@@ -524,10 +752,18 @@ export function usePackBuilder(user, refreshPacks, {
         )
         .filter((card) => card.quantity > 0);
     });
+
+    if (commanderCardId === cardId) {
+      setCommanderCardId(null);
+    }
   }
 
   function removeCardFromPack(cardId) {
     setSelectedCards((prev) => prev.filter((card) => card.id !== cardId));
+
+    if (commanderCardId === cardId) {
+      setCommanderCardId(null);
+    }
   }
 
   function newPack() {
@@ -537,6 +773,8 @@ export function usePackBuilder(user, refreshPacks, {
     setPackDescription("");
     setPackArchetypeTags([]);
     setPackVisibility("private");
+    setPackFormatId(DEFAULT_PACK_FORMAT_ID);
+    setCommanderCardId(null);
     setSelectedCards([]);
     setSavedPackId(null);
     setSavedPackName(null);
@@ -553,6 +791,8 @@ export function usePackBuilder(user, refreshPacks, {
     setPackDescription("");
     setPackArchetypeTags([]);
     setPackVisibility("private");
+    setPackFormatId(DEFAULT_PACK_FORMAT_ID);
+    setCommanderCardId(null);
     setSelectedCards([]);
     setSavedPackId(null);
     setSavedPackName(null);
@@ -565,12 +805,22 @@ export function usePackBuilder(user, refreshPacks, {
     localStorage.removeItem("jumpCubeCurrentPack");
   }, []);
 
-  function startPackFromCards(cards, name = DRAFT_PACK_NAME) {
+  function startPackFromCards(cards, name = DRAFT_PACK_NAME, options = {}) {
+    const nextFormat = getPackFormat(options.formatId || DEFAULT_PACK_FORMAT_ID);
+    const nextCommanderId =
+      nextFormat.commanderSlot
+          ? options.commanderCardId ||
+          cards?.find(isCommanderEligible)?.id ||
+          null
+        : null;
+
     setIsPackActive(true);
     setPackName(normalizePackName(name, DRAFT_PACK_NAME));
     setPackDescription("");
     setPackArchetypeTags([]);
     setPackVisibility("private");
+    setPackFormatId(nextFormat.id);
+    setCommanderCardId(nextCommanderId);
     setSelectedCards(cards || []);
     setSavedPackId(null);
     setSavedPackName(null);
@@ -610,6 +860,14 @@ export function usePackBuilder(user, refreshPacks, {
     }
 
     const cardsToSave = cardsOverride || selectedCards;
+    const packFormat = getPackFormat(packFormatId);
+
+    if (packFormat.commanderSlot && !cardsToSave.some(isCommanderEligible)) {
+      setSaveErrorMessage("Commander packs need one eligible commander.");
+      setSaveStatus("error");
+      return null;
+    }
+
     const tagsToSave = normalizeArchetypeTags(packArchetypeTags).map(
       (tag) =>
         availablePackTags.find(
@@ -624,6 +882,8 @@ export function usePackBuilder(user, refreshPacks, {
       packArchetypeTags,
       packVisibility,
       cardsToSave,
+      packFormatId,
+      commanderCardId,
     );
 
     if (packId && currentSnapshot === lastSavedSnapshotRef.current) {
@@ -652,6 +912,8 @@ export function usePackBuilder(user, refreshPacks, {
           archetype_tags: getLegacyArchetypeTagNames(tagsToSave),
           cover_image_url: getPackCoverImage(cardsToSave),
           visibility: normalizeVisibility(packVisibility),
+          format_id: packFormat.id,
+          commander_card_id: commanderCardId,
           user_id: user.id,
         })
         .select()
@@ -659,7 +921,11 @@ export function usePackBuilder(user, refreshPacks, {
 
       if (packError) {
         console.error("Error saving pack:", packError);
-        setSaveErrorMessage(packError.message || "Pack could not be saved.");
+        setSaveErrorMessage(
+          getPackFormatMigrationMessage(packError) ||
+            packError.message ||
+            "Pack could not be saved.",
+        );
         setSaveStatus("error");
         return null;
       }
@@ -676,12 +942,18 @@ export function usePackBuilder(user, refreshPacks, {
           archetype_tags: getLegacyArchetypeTagNames(tagsToSave),
           cover_image_url: getPackCoverImage(cardsToSave),
           visibility: normalizeVisibility(packVisibility),
+          format_id: packFormat.id,
+          commander_card_id: commanderCardId,
         })
         .eq("id", actualPackId);
 
       if (updateError) {
         console.error("Error updating pack:", updateError);
-        setSaveErrorMessage(updateError.message || "Pack could not be updated.");
+        setSaveErrorMessage(
+          getPackFormatMigrationMessage(updateError) ||
+            updateError.message ||
+            "Pack could not be updated.",
+        );
         setSaveStatus("error");
         return null;
       }
@@ -717,7 +989,10 @@ export function usePackBuilder(user, refreshPacks, {
 
       if (cardsError) {
         console.error("Error saving pack cards:", cardsError);
-        setSaveErrorMessage("Pack cards could not be saved.");
+        setSaveErrorMessage(
+          getPackCardSaveMigrationMessage(cardsError) ||
+            "Pack cards could not be saved.",
+        );
         setSaveStatus("error");
         return null;
       }
@@ -743,6 +1018,8 @@ export function usePackBuilder(user, refreshPacks, {
       archetypeTags: tagsToSave,
       coverImageUrl: getPackCoverImage(cardsToSave),
       visibility: normalizeVisibility(packVisibility),
+      formatId: packFormat.id,
+      commanderCardId,
       cards: cardsToSave,
     });
     setSaveStatus("saved");
@@ -756,6 +1033,8 @@ export function usePackBuilder(user, refreshPacks, {
     packDescription,
     packVisibility,
     packName,
+    packFormatId,
+    commanderCardId,
     onPackSaved,
     refreshPacks,
     selectedCards,
@@ -802,6 +1081,8 @@ export function usePackBuilder(user, refreshPacks, {
           .filter((name) => PACK_ARCHETYPE_TAGS.includes(name)),
         visibility: normalizeVisibility(originalPack.visibility),
         cover_image_url: originalPack.cover_image_url || null,
+        format_id: getPackFormat(originalPack.format_id).id,
+        commander_card_id: originalPack.commander_card_id || null,
         user_id: user.id,
       })
       .select()
@@ -959,6 +1240,8 @@ export function usePackBuilder(user, refreshPacks, {
       packArchetypeTags,
       packVisibility,
       selectedCards,
+      packFormatId,
+      commanderCardId,
     );
 
     if (savedPackId && currentSnapshot === lastSavedSnapshotRef.current) {
@@ -980,6 +1263,8 @@ export function usePackBuilder(user, refreshPacks, {
     packArchetypeTags,
     packVisibility,
     packName,
+    packFormatId,
+    commanderCardId,
     savedPackId,
     selectedCards,
     user,
@@ -987,10 +1272,19 @@ export function usePackBuilder(user, refreshPacks, {
 
   return {
     selectedCards,
-    packCardLimit: PACK_CARD_LIMIT,
+    packFormatId,
+    setPackFormat,
+    packFormats: PACK_FORMATS,
+    packCardLimit: getPackFormat(packFormatId).cardLimit,
+    commanderCardId,
+    commanderCard: getCommanderCard(),
+    setCommanderCard,
+    hasValidCommander: hasValidCommander(),
     isPackActive,
     isPackFull:
-      !isPackActive || getPackCardCount(selectedCards) >= PACK_CARD_LIMIT,
+      !isPackActive ||
+      getPackCardCount(selectedCards) >= getPackFormat(packFormatId).cardLimit,
+    canAddCardToPack,
     setSelectedCards,
     packName,
     setPackName,

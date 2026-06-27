@@ -8,6 +8,7 @@ import "./SearchBox.css";
  * - setSearchInput(next): updates text as user types
  * - searchScopes/setSearchScopes: Title/Type/Text field switches
  * - onSearch(): commits the searchInput in App, which triggers useCards()
+ * - backgroundCredit: optional { cardName, artistName } for page art credit
  */
 export default function SearchBox({
   searchInput,
@@ -15,6 +16,7 @@ export default function SearchBox({
   searchScopes,
   setSearchScopes,
   onSearch,
+  backgroundCredit,
 }) {
   function handleSubmit(event) {
     // Prevent page navigation and let App decide when the query is committed.
@@ -31,6 +33,13 @@ export default function SearchBox({
 
   return (
     <form className="searchBox" onSubmit={handleSubmit}>
+      {backgroundCredit?.cardName && backgroundCredit?.artistName && (
+        <p className="backgroundCredit">
+          Background: {backgroundCredit.cardName} by{" "}
+          {backgroundCredit.artistName}
+        </p>
+      )}
+
       <div className="searchScopeToggles" aria-label="Search fields">
         {[
           ["title", "Title"],

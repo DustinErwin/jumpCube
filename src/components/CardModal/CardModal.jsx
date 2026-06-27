@@ -14,6 +14,7 @@ import "./CardModal.css";
  * - onDecreaseFromPack(cardId): remove one selected version copy
  * - selectedCards: active pack cards with quantity
  * - isPackFull: disables plus button at PACK_CARD_LIMIT
+ * - canAddCard(card): optional per-card rule check
  */
 
 const CARD_VERSION_COLUMNS = `
@@ -217,6 +218,7 @@ export default function CardModal({
   onDecreaseFromPack,
   selectedCards = [],
   isPackFull,
+  canAddCard,
   readOnly = false,
 }) {
   const versionPickerRef = useRef(null);
@@ -428,6 +430,8 @@ export default function CardModal({
     selectedCards.find(
       (selectedPackCard) => selectedPackCard.id === displayedCard.id,
     )?.quantity || 0;
+  const isAddDisabled =
+    isPackFull || (canAddCard && !canAddCard(displayedCard));
   function renderQuantityControls() {
     return (
       <div
@@ -450,7 +454,7 @@ export default function CardModal({
         <button
           type="button"
           onClick={() => onAddToPack?.(displayedCard)}
-          disabled={isPackFull}
+          disabled={isAddDisabled}
           aria-label={`Add one ${displayedCard.name} to pack`}
         >
           +

@@ -69,22 +69,12 @@ const CUBE_CARD_TYPES = [
   { id: "Other", label: "Other", color: "#6f7782" },
 ];
 const MOBILE_PACK_REORDER_HOLD_MS = 400;
-const MOBILE_PACK_REMOVE_HOLD_MS = 1500;
+const MOBILE_PACK_REMOVE_HOLD_MS = 450;
 const MOBILE_PACK_REMOVE_THRESHOLD = 88;
 const MOBILE_PACK_REMOVE_CANCEL_THRESHOLD = 56;
 const MOBILE_PACK_REMOVE_MAX_DISTANCE = 124;
 const MOBILE_PACK_GESTURE_TOLERANCE = 8;
 const DEFAULT_CUBE_ACTION_HINT = "";
-const CUBE_COLOR_COLUMNS = [
-  // Stats view groups packs by overall color identity, not mana-cost pips.
-  { id: "W", label: "White" },
-  { id: "U", label: "Blue" },
-  { id: "B", label: "Black" },
-  { id: "R", label: "Red" },
-  { id: "G", label: "Green" },
-  { id: "C", label: "Colorless" },
-  { id: "M", label: "Multicolor" },
-];
 
 function getManaCost(card) {
   return card.mana_cost || "";
@@ -323,6 +313,24 @@ function getCubeTagChart(packs) {
   };
 }
 
+function getPackColoredManaPips(pack) {
+  const totals = MANA_ORDER.filter((color) => color !== "C").reduce(
+    (counts, color) => ({ ...counts, [color]: 0 }),
+    {},
+  );
+
+  (pack.cards || []).forEach((card) => {
+    const cardPips = getCardManaPips(card);
+    const quantity = Number(card.quantity) || 1;
+
+    Object.keys(totals).forEach((color) => {
+      totals[color] += cardPips[color] * quantity;
+    });
+  });
+
+  return totals;
+}
+
 function getPrimaryCubeCardType(card) {
   const typeLine = card.type_line || "";
 
@@ -420,6 +428,64 @@ function getCubeCardFunctionChart(packs) {
       currentOffset = end;
 
       return { ...bucket, percentage, start, end };
+    });
+
+  return {
+    totalCount,
+    segments,
+    background:
+      totalCount === 0
+        ? "#252525"
+        : `conic-gradient(${segments
+            .map(
+              (segment) =>
+                `${segment.color} ${segment.start}% ${segment.end}%`,
+            )
+            .join(", ")})`,
+  };
+}
+
+function getCubePrimaryPackColorChart(packs) {
+  const counts = MANA_ORDER.filter((color) => color !== "C").reduce(
+    (totals, color) => ({ ...totals, [color]: 0 }),
+    {},
+  );
+
+  packs.forEach((pack) => {
+    const pips = getPackColoredManaPips(pack);
+    const highestPipCount = Math.max(...Object.values(pips));
+
+    if (highestPipCount <= 0) return;
+
+    Object.entries(pips).forEach(([color, count]) => {
+      if (count === highestPipCount) {
+        counts[color] += 1;
+      }
+    });
+  });
+
+  const totalCount = Object.values(counts).reduce(
+    (sum, count) => sum + count,
+    0,
+  );
+  let currentOffset = 0;
+  const segments = MANA_ORDER.filter((color) => color !== "C")
+    .map((color) => ({
+      id: color,
+      label: MANA_LABELS[color],
+      color: MANA_COLORS[color],
+      count: counts[color],
+    }))
+    .filter((segment) => segment.count > 0)
+    .map((segment) => {
+      const percentage =
+        totalCount === 0 ? 0 : (segment.count / totalCount) * 100;
+      const start = currentOffset;
+      const end = start + percentage;
+
+      currentOffset = end;
+
+      return { ...segment, percentage, start, end };
     });
 
   return {
@@ -539,7 +605,7 @@ export default function JumpCubeBox({
   onSampleDraft,
   initialShowStats = false,
   onStatsClose,
-  onStatsPackOpen,
+  onStatsOpenChange,
   saveStatus,
   saveErrorMessage = "",
   isOpen,
@@ -573,6 +639,14 @@ export default function JumpCubeBox({
   const cubeNameModerationMessage = getContentModerationMessage(cubeName);
   const cubeDescriptionModerationMessage =
     getContentModerationMessage(cubeDescription);
+
+  useEffect(() => {
+    onStatsOpenChange?.(showCubeStats);
+
+    return () => {
+      onStatsOpenChange?.(false);
+    };
+  }, [onStatsOpenChange, showCubeStats]);
 
   function getCubeActionHintProps(hint, actionId = hint) {
     return {
@@ -870,26 +944,6 @@ export default function JumpCubeBox({
     return classes[color] || "";
   }
 
-  function getPackColorColumnId(pack) {
-    // Used only by cube stats view columns.
-    const colors = getPackColorIdentity(pack);
-
-    if (colors.length === 0) return "C";
-    if (colors.length > 1) return "M";
-
-    return colors[0];
-  }
-
-  const colorIdentityColumns = CUBE_COLOR_COLUMNS.map((column) => ({
-    ...column,
-    packs: selectedPacks.filter(
-      (pack) => getPackColorColumnId(pack) === column.id,
-    ),
-  }));
-  const largestColorColumn = Math.max(
-    1,
-    ...colorIdentityColumns.map((column) => column.packs.length),
-  );
   const filteredManaCurvePack =
     selectedPacks.find(
       (pack) =>
@@ -915,6 +969,8 @@ export default function JumpCubeBox({
   const cubeTagChart = getCubeTagChart(selectedPacks);
   const cubeCardTypeChart = getCubeCardTypeChart(selectedPacks);
   const cubeCardFunctionChart = getCubeCardFunctionChart(selectedPacks);
+  const cubePrimaryPackColorChart =
+    getCubePrimaryPackColorChart(selectedPacks);
   const cubeColorSourceChart = getCubeColorSourceChart(selectedPacks);
   const draftablePackCount = selectedPacks.filter(
     (pack) => (pack.cards || []).length > 0,
@@ -1537,6 +1593,43 @@ export default function JumpCubeBox({
               </section>
 
               <section
+                className="cubeTagChart cubePrimaryColorChart"
+                aria-label="Primary pack colors across the cube"
+              >
+              <div
+                className="cubeTagPie"
+                style={{ "--tag-chart": cubePrimaryPackColorChart.background }}
+                role="img"
+                aria-label={`${cubePrimaryPackColorChart.totalCount} primary pack color assignments`}
+              />
+
+              <div className="cubeTagChartDetails">
+                <div>
+                  <h3>Primary Colors</h3>
+                  <p>Highest pip color per pack</p>
+                </div>
+
+                {cubePrimaryPackColorChart.segments.length === 0 ? (
+                  <p className="cubeTagChartEmpty">No colored pips available</p>
+                ) : (
+                  <div className="cubeTagLegend">
+                    {cubePrimaryPackColorChart.segments.map((color) => (
+                      <div className="cubeTagLegendItem" key={color.id}>
+                        <span
+                          className="cubeTagSwatch"
+                          style={{ "--tag-color": color.color }}
+                        />
+                        <span className="cubeTagCount">{color.count}</span>
+                        <span className="cubeTagName">{color.label}</span>
+                        <strong>{Math.round(color.percentage)}%</strong>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              </section>
+
+              <section
                 className="cubeColorSourceChart"
                 aria-label="Colored mana requirements and land sources"
               >
@@ -1632,69 +1725,6 @@ export default function JumpCubeBox({
               </div>
               </section>
             </div>
-          </div>
-
-          <div className="cubeStatsColumns" aria-label="Packs by color identity">
-            {colorIdentityColumns.map((column) => (
-              <section className="cubeStatsColumn" key={column.id}>
-                <header className="cubeStatsColumnHeader">
-                  <span>{column.label}</span>
-                  <strong>{column.packs.length}</strong>
-                </header>
-
-                <div className="cubeStatsStack">
-                  {column.packs.length === 0 ? (
-                    <p className="cubeStatsEmpty">No packs</p>
-                  ) : (
-                    column.packs.map((pack) => (
-                      <button
-                        className="cubeStatsPack"
-                        type="button"
-                        key={pack.id}
-                        onClick={() => {
-                          if (onStatsPackOpen) {
-                            onStatsPackOpen(pack);
-                            return;
-                          }
-
-                          setShowCubeStats(false);
-                          handlePackClick(pack);
-                        }}
-                      >
-                        {getPackManaBackdrop(pack)}
-                        <span className="cubeStatsPackName">{pack.name}</span>
-                      </button>
-                    ))
-                  )}
-                </div>
-
-                <dl className="cubeStatsData">
-                  <div>
-                    <dt>Packs</dt>
-                    <dd>{column.packs.length}</dd>
-                  </div>
-                  <div>
-                    <dt>Share</dt>
-                    <dd>
-                      {selectedPacks.length === 0
-                        ? "0%"
-                        : `${Math.round(
-                            (column.packs.length / selectedPacks.length) * 100,
-                          )}%`}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Curve</dt>
-                    <dd>
-                      {Math.round(
-                        (column.packs.length / largestColorColumn) * 100,
-                      )}
-                      %
-                    </dd>
-                  </div>
-                </dl>
-              </section>
-            ))}
           </div>
         </div>
       )}
