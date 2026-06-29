@@ -1,3 +1,8 @@
+import {
+  CARD_ROLE_BUCKETS,
+  getPrimaryCardRoleBucket,
+} from "./cardRoleAnalysis";
+
 /*
  * Card mechanic classification for PackBox stats.
  *
@@ -143,63 +148,7 @@ export const CARD_MECHANIC_TAGS = [
   },
 ];
 
-export const PACK_MECHANIC_BUCKETS = [
-  {
-    id: "synergy",
-    label: "Synergy",
-    shortLabel: "Synergy",
-    color: "#d6a35d",
-    // Cards that create or reward board texture, recursion, graveyard, or growth.
-    mechanicIds: ["tokens", "recursion", "graveyard-fuel", "pump"],
-  },
-  {
-    id: "interaction",
-    label: "Interaction",
-    shortLabel: "Interact",
-    color: "#d87979",
-    // Cards that answer opposing cards or spells.
-    mechanicIds: ["removal", "countermagic"],
-  },
-  {
-    id: "card-draw",
-    label: "Card Draw",
-    shortLabel: "Draw",
-    color: "#84b8d8",
-    // Includes raw draw plus land-to-hand effects as card flow/fixing, not ramp.
-    mechanicIds: ["card-draw", "land-to-hand"],
-  },
-  {
-    id: "ramp",
-    label: "Ramp",
-    shortLabel: "Ramp",
-    color: "#75b86f",
-    // Extra mana or lands to battlefield. Land-to-hand intentionally stays out.
-    mechanicIds: ["land-to-battlefield", "mana-production"],
-  },
-  {
-    id: "protection",
-    label: "Protection",
-    shortLabel: "Protect",
-    color: "#d8d0ad",
-    mechanicIds: ["protection"],
-  },
-  {
-    id: "utility",
-    label: "Utility",
-    shortLabel: "Utility",
-    color: "#9a8fd8",
-    // Card quality and setup effects that do not necessarily generate cards.
-    mechanicIds: ["selection"],
-  },
-  {
-    id: "land",
-    label: "Land",
-    shortLabel: "Land",
-    color: "#b68a58",
-    // Type-line bucket. This is intentionally separate from land-search text.
-    matchesCard: (card) => /\bland\b/i.test(card.type_line || ""),
-  },
-];
+export const PACK_MECHANIC_BUCKETS = CARD_ROLE_BUCKETS;
 const DEFAULT_PACK_MECHANIC_BUCKET_ID = "utility";
 
 function getDefaultMechanicBucket() {
@@ -251,22 +200,7 @@ export function classifyCardMechanicBuckets(card) {
 }
 
 export function getPrimaryCardMechanicBucket(card) {
-  // Manual placement from the stats drag/drop UI always wins over regex rules.
-  if (card.manualMechanicBucket) {
-    return (
-      PACK_MECHANIC_BUCKETS.find(
-        (bucket) => bucket.id === card.manualMechanicBucket,
-      ) || null
-    );
-  }
-
-  // Lands default to the dedicated Land column even when their rules text also
-  // matches another function such as card draw, ramp, or utility.
-  if (/\bland\b/i.test(card.type_line || "")) {
-    return PACK_MECHANIC_BUCKETS.find((bucket) => bucket.id === "land") || null;
-  }
-
-  return classifyCardMechanicBuckets(card)[0] || getDefaultMechanicBucket();
+  return getPrimaryCardRoleBucket(card) || getDefaultMechanicBucket();
 }
 
 export function getPackMechanicBucketCounts(cards) {

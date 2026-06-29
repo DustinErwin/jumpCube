@@ -1059,7 +1059,7 @@
   min-height: 360px;
 
   display: grid;
-  grid-template-columns: repeat(7, minmax(132px, 1fr));
+  grid-template-columns: repeat(8, minmax(132px, 1fr));
   gap: 10px;
 
   overflow-x: auto;
@@ -1407,7 +1407,7 @@
 
 .packMechanicLabels {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 4px;
 }
 
@@ -1988,7 +1988,7 @@
   }
 
   .packStatsColumns {
-    grid-template-columns: repeat(7, minmax(132px, 132px));
+    grid-template-columns: repeat(8, minmax(132px, 132px));
   }
 
   .packStatsColumns-type {
