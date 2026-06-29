@@ -1,10 +1,14 @@
 const SCRYFALL_API_BASE_URL = "https://api.scryfall.com";
 const SCRYFALL_COLLECTION_BATCH_SIZE = 75;
-const SCRYFALL_REQUEST_INTERVAL_MS = 175;
 const SCRYFALL_MAX_RETRIES = 3;
-const SCRYFALL_429_COOLDOWN_MS = 15000;
+const SCRYFALL_429_COOLDOWN_MS = 30000;
+// Scryfall hard limits: search/named/random/collection are 2 requests/second.
+const SCRYFALL_STRICT_INTERVAL_MS = 500;
+// Other api.scryfall.com endpoints are 10 requests/second.
+const SCRYFALL_DEFAULT_INTERVAL_MS = 100;
 const SCRYFALL_CACHE_PREFIX = "jumpCube:scryfall:";
 const SCRYFALL_CACHE_INDEX_KEY = `${SCRYFALL_CACHE_PREFIX}index`;
+const SCRYFALL_RATE_LIMIT_KEY = `${SCRYFALL_CACHE_PREFIX}rateLimit`;
 const SCRYFALL_MAX_PERSISTED_CACHE_ENTRIES = 250;
 const CACHE_TTL = {
   card: 1000 * 60 * 60 * 24 * 14,
@@ -89,6 +93,35 @@ function writeCacheIndex(entries) {
     );
   } catch {
     // Cache persistence is best-effort only.
+  }
+}
+
+function getEndpointRateLimitMs(url) {
+  return /\/cards\/(?:search|named|random|collection)(?:[/?]|$)/i.test(url)
+    ? SCRYFALL_STRICT_INTERVAL_MS
+    : SCRYFALL_DEFAULT_INTERVAL_MS;
+}
+
+function readRateLimitState() {
+  if (!canUseLocalStorage()) return {};
+
+  try {
+    return JSON.parse(window.localStorage.getItem(SCRYFALL_RATE_LIMIT_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function writeRateLimitState(nextState) {
+  if (!canUseLocalStorage()) return;
+
+  try {
+    window.localStorage.setItem(
+      SCRYFALL_RATE_LIMIT_KEY,
+      JSON.stringify(nextState),
+    );
+  } catch {
+    // Cross-tab rate limiting is best-effort.
   }
 }
 
@@ -210,10 +243,44 @@ function noteRateLimit(response, attempt) {
     Math.max(SCRYFALL_429_COOLDOWN_MS, getRetryDelay(response, attempt));
 
   globalCooldownUntil = Math.max(globalCooldownUntil, cooldownUntil);
+  writeRateLimitState({
+    ...readRateLimitState(),
+    cooldownUntil: globalCooldownUntil,
+  });
 }
 
-async function runQueued(task) {
+async function waitForSharedRateLimit(url) {
+  const endpointIntervalMs = getEndpointRateLimitMs(url);
+  const now = Date.now();
+  const rateLimitState = readRateLimitState();
+  const sharedCooldownUntil = Number(rateLimitState.cooldownUntil) || 0;
+  const sharedNextRequestAt = Number(rateLimitState.nextRequestAt) || 0;
+  const waitUntil = Math.max(
+    globalCooldownUntil,
+    sharedCooldownUntil,
+    sharedNextRequestAt,
+  );
+  const delay = Math.max(0, waitUntil - now);
+
+  if (delay > 0) {
+    await wait(delay);
+  }
+
+  const nextRequestAt = Date.now() + endpointIntervalMs;
+
+  writeRateLimitState({
+    ...readRateLimitState(),
+    cooldownUntil: Math.max(globalCooldownUntil, sharedCooldownUntil),
+    nextRequestAt,
+  });
+}
+
+async function runQueued(url, task) {
   const queuedTask = queueTail.then(async () => {
+    const endpointIntervalMs = getEndpointRateLimitMs(url);
+
+    await waitForSharedRateLimit(url);
+
     const cooldownDelay = Math.max(0, globalCooldownUntil - Date.now());
 
     if (cooldownDelay > 0) {
@@ -221,7 +288,7 @@ async function runQueued(task) {
     }
 
     const elapsed = Date.now() - lastRequestStartedAt;
-    const delay = Math.max(0, SCRYFALL_REQUEST_INTERVAL_MS - elapsed);
+    const delay = Math.max(0, endpointIntervalMs - elapsed);
 
     if (delay > 0) {
       await wait(delay);
@@ -298,7 +365,7 @@ export async function fetchScryfallJson(pathOrUrl, options = {}) {
     return pendingRequests.get(cacheKey);
   }
 
-  const requestPromise = runQueued(async () => {
+  const requestPromise = runQueued(url, async () => {
     const payload = await performFetch(url, fetchOptions, body);
 
     setCachedPayload(cacheKey, payload, ttlMs);
