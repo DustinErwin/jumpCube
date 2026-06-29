@@ -83,12 +83,31 @@ function getFilterQuery({
     }
   }
 
-  rarities.forEach((rarity) => filters.push(`rarity:${rarity.toLowerCase()}`));
+  if (rarities.length > 0) {
+    const rarityFilters = rarities.map(
+      (rarity) => `rarity:${rarity.toLowerCase()}`,
+    );
+
+    filters.push(`(${rarityFilters.join(" or ")})`);
+  }
+
   types.forEach((type) => filters.push(`type:${quoteScryfallValue(type)}`));
-  formats.forEach((format) => filters.push(`format:${format.toLowerCase()}`));
-  selectedSets.forEach((setCode) =>
-    filters.push(`set:${setCode.toLowerCase()}`),
-  );
+
+  if (formats.length > 0) {
+    const formatFilters = formats.map(
+      (format) => `format:${format.toLowerCase()}`,
+    );
+
+    filters.push(`(${formatFilters.join(" or ")})`);
+  }
+
+  if (selectedSets.length > 0) {
+    const setFilters = selectedSets.map(
+      (setCode) => `set:${setCode.toLowerCase()}`,
+    );
+
+    filters.push(`(${setFilters.join(" or ")})`);
+  }
 
   return filters.join(" ");
 }

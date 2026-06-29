@@ -589,7 +589,7 @@ export default function PackBox({
 
   const selectedScryfallIdKey = [
     ...new Set(selectedCards.map(getCardScryfallId).filter(Boolean)),
-  ].join(",");
+  ].sort().join(",");
 
   useEffect(() => {
     const scryfallIds = selectedScryfallIdKey

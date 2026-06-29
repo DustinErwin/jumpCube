@@ -14,6 +14,7 @@ const CACHE_TTL = {
 };
 
 const memoryCache = new Map();
+const collectionCardCache = new Map();
 const pendingRequests = new Map();
 let queueTail = Promise.resolve();
 let lastRequestStartedAt = 0;
@@ -358,12 +359,50 @@ export async function getScryfallCardById(id) {
 
 function getIdentifierKey(identifier) {
   return [
-    identifier.id ? `id:${identifier.id}` : "",
-    identifier.oracle_id ? `oracle:${identifier.oracle_id}` : "",
-    identifier.name ? `name:${identifier.name}` : "",
+    identifier.id ? `id:${String(identifier.id).toLowerCase()}` : "",
+    identifier.oracle_id
+      ? `oracle:${String(identifier.oracle_id).toLowerCase()}`
+      : "",
+    identifier.name ? `name:${String(identifier.name).toLowerCase()}` : "",
   ]
     .filter(Boolean)
     .join("|");
+}
+
+function getCachedCollectionCard(identifier) {
+  const cacheKey = getIdentifierKey(identifier);
+  const cachedEntry = collectionCardCache.get(cacheKey);
+
+  if (!cachedEntry) return null;
+  if (cachedEntry.expiresAt > Date.now()) return cachedEntry.card;
+
+  collectionCardCache.delete(cacheKey);
+  return null;
+}
+
+function setCachedCollectionCard(identifier, card) {
+  const cacheKey = getIdentifierKey(identifier);
+
+  if (!cacheKey || !card) return;
+
+  collectionCardCache.set(cacheKey, {
+    card,
+    expiresAt: Date.now() + CACHE_TTL.collection,
+  });
+}
+
+function cacheCollectionCard(card) {
+  if (!card) return;
+
+  setCachedCollectionCard({ id: card.id }, card);
+
+  if (card.oracle_id) {
+    setCachedCollectionCard({ oracle_id: card.oracle_id }, card);
+  }
+
+  if (card.name) {
+    setCachedCollectionCard({ name: card.name }, card);
+  }
 }
 
 export async function getScryfallCardCollection(identifiers) {
@@ -375,25 +414,39 @@ export async function getScryfallCardCollection(identifiers) {
         .filter(Boolean)
         .map((identifier) => [getIdentifierKey(identifier), identifier]),
     ).values(),
-  ];
+  ].sort((identifierA, identifierB) =>
+    getIdentifierKey(identifierA).localeCompare(getIdentifierKey(identifierB)),
+  );
+  const identifiersToFetch = uniqueIdentifiers.filter((identifier) => {
+    const cachedCard = getCachedCollectionCard(identifier);
+
+    if (cachedCard) {
+      cards.push(cachedCard);
+      return false;
+    }
+
+    return true;
+  });
 
   for (
     let index = 0;
-    index < uniqueIdentifiers.length;
+    index < identifiersToFetch.length;
     index += SCRYFALL_COLLECTION_BATCH_SIZE
   ) {
+    const batchIdentifiers = identifiersToFetch.slice(
+      index,
+      index + SCRYFALL_COLLECTION_BATCH_SIZE,
+    );
     const payload = await fetchScryfallJson("/cards/collection", {
       method: "POST",
       cacheTtlMs: CACHE_TTL.collection,
-      body: JSON.stringify({
-        identifiers: uniqueIdentifiers.slice(
-          index,
-          index + SCRYFALL_COLLECTION_BATCH_SIZE,
-        ),
-      }),
+      body: { identifiers: batchIdentifiers },
     });
 
-    cards.push(...(payload.data || []));
+    (payload.data || []).forEach((card) => {
+      cacheCollectionCard(card);
+      cards.push(card);
+    });
     missing.push(...(payload.not_found || []));
   }
 

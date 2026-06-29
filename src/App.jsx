@@ -33,7 +33,6 @@ import {
   sanitizeTitle,
 } from "./utils/userText";
 import { copyPublicPack } from "./services/discoveryService";
-import { fetchScryfallJson } from "./services/scryfallApi";
 import {
   convertArenaDeckToPack,
   convertArenaCommanderDeckToPack,
@@ -168,17 +167,6 @@ function getPackSummary({
   };
 }
 
-function getCardArt(card) {
-  // Scryfall random cards can provide images either at top-level or per-face.
-  return (
-    card?.image_uris?.art_crop ||
-    card?.image_uris?.normal ||
-    card?.card_faces?.find((face) => face.image_uris)?.image_uris?.art_crop ||
-    card?.card_faces?.find((face) => face.image_uris)?.image_uris?.normal ||
-    null
-  );
-}
-
 function isDraftPackName(name) {
   return normalizeTitle(name, DRAFT_PACK_NAME) === DRAFT_PACK_NAME;
 }
@@ -264,10 +252,7 @@ function App() {
   const [isCubeStatsOpen, setIsCubeStatsOpen] = useState(false);
   const [printableSavedPacks, setPrintableSavedPacks] = useState([]);
   const [selectedSets, setSelectedSets] = useState([]);
-  const [frogBackground, setFrogBackground] = useState(
-    FALLBACK_FROG_BACKGROUND,
-  );
-  const [frogBackgroundCredit, setFrogBackgroundCredit] = useState(null);
+  const frogBackground = FALLBACK_FROG_BACKGROUND;
   const lastSavedCubeSnapshotRef = useRef(null);
   const initializedCubeUserIdRef = useRef(null);
   const initializedPackUserIdRef = useRef(null);
@@ -890,39 +875,6 @@ function App() {
   }, [loadMoreCards]);
 
   useEffect(() => {
-    // Decorative search-area background: random non-funny Frog creature art.
-    // FALLBACK_FROG_BACKGROUND keeps the UI usable if Scryfall is unavailable.
-    let isCurrent = true;
-
-    async function loadRandomFrogBackground() {
-      try {
-        const card = await fetchScryfallJson(
-          "/cards/random?q=t%3Afrog%20t%3Acreature%20-is%3Afunny",
-          { cacheTtlMs: 1000 * 60 * 60 * 24 },
-        );
-
-        const cardArt = getCardArt(card);
-
-        if (isCurrent && cardArt) {
-          setFrogBackground(cardArt);
-          setFrogBackgroundCredit({
-            cardName: card.name || "Unknown card",
-            artistName: card.artist || "Unknown artist",
-          });
-        }
-      } catch (error) {
-        console.error("Error loading random Frog background:", error);
-      }
-    }
-
-    loadRandomFrogBackground();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, []);
-
-  useEffect(() => {
     // Side panels sit below the visible nav. This updates a CSS variable as the
     // nav scrolls in/out so PackBox and JumpCubeBox move smoothly with it.
     let animationFrame = null;
@@ -1032,7 +984,6 @@ function App() {
                     searchScopes={searchScopes}
                     setSearchScopes={setSearchScopes}
                     onSearch={submitSearch}
-                    backgroundCredit={frogBackgroundCredit}
                   />
 
                   <FilterBox

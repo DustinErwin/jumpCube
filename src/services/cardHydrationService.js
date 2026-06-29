@@ -5,14 +5,13 @@ import {
 import { normalizeScryfallCard } from "./scryfallCardModel";
 
 function getIdentifiersFromRow(row) {
-  const identifiers = [];
   const scryfallId = row.variation_id || row.scryfall_id || null;
 
-  if (scryfallId) identifiers.push({ id: scryfallId });
-  if (row.oracle_id) identifiers.push({ oracle_id: row.oracle_id });
-  if (row.name) identifiers.push({ name: row.name });
+  if (scryfallId) return [{ id: scryfallId }];
+  if (row.oracle_id) return [{ oracle_id: row.oracle_id }];
+  if (row.name) return [{ name: row.name }];
 
-  return identifiers;
+  return [];
 }
 
 function getHydratedCardKey(card) {
