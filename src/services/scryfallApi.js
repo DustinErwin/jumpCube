@@ -1,7 +1,8 @@
 const SCRYFALL_API_BASE_URL = "https://api.scryfall.com";
 const SCRYFALL_COLLECTION_BATCH_SIZE = 75;
-const SCRYFALL_REQUEST_INTERVAL_MS = 100;
+const SCRYFALL_REQUEST_INTERVAL_MS = 175;
 const SCRYFALL_MAX_RETRIES = 3;
+const SCRYFALL_429_COOLDOWN_MS = 15000;
 const SCRYFALL_CACHE_PREFIX = "jumpCube:scryfall:";
 const SCRYFALL_CACHE_INDEX_KEY = `${SCRYFALL_CACHE_PREFIX}index`;
 const SCRYFALL_MAX_PERSISTED_CACHE_ENTRIES = 250;
@@ -16,6 +17,7 @@ const memoryCache = new Map();
 const pendingRequests = new Map();
 let queueTail = Promise.resolve();
 let lastRequestStartedAt = 0;
+let globalCooldownUntil = 0;
 
 function getScryfallError(payload, fallbackMessage) {
   return new Error(
@@ -201,8 +203,22 @@ function getRetryDelay(response, attempt) {
   return Math.min(8000, 1500 * (attempt + 1));
 }
 
+function noteRateLimit(response, attempt) {
+  const cooldownUntil =
+    Date.now() +
+    Math.max(SCRYFALL_429_COOLDOWN_MS, getRetryDelay(response, attempt));
+
+  globalCooldownUntil = Math.max(globalCooldownUntil, cooldownUntil);
+}
+
 async function runQueued(task) {
   const queuedTask = queueTail.then(async () => {
+    const cooldownDelay = Math.max(0, globalCooldownUntil - Date.now());
+
+    if (cooldownDelay > 0) {
+      await wait(cooldownDelay);
+    }
+
     const elapsed = Date.now() - lastRequestStartedAt;
     const delay = Math.max(0, SCRYFALL_REQUEST_INTERVAL_MS - elapsed);
 
@@ -239,6 +255,10 @@ async function performFetch(url, options, body) {
       (response.status === 429 || response.status >= 500) &&
       attempt < SCRYFALL_MAX_RETRIES
     ) {
+      if (response.status === 429) {
+        noteRateLimit(response, attempt);
+      }
+
       await wait(getRetryDelay(response, attempt));
       continue;
     }
@@ -246,6 +266,9 @@ async function performFetch(url, options, body) {
     const error = getScryfallError(payload, `Scryfall request failed: ${url}`);
 
     error.status = response.status;
+    if (response.status === 429) {
+      noteRateLimit(response, attempt);
+    }
     throw error;
   }
 
@@ -323,6 +346,12 @@ export async function getScryfallCardByName(name, { fuzzy = false } = {}) {
   });
 
   return fetchScryfallJson(`/cards/named?${params}`, {
+    cacheTtlMs: CACHE_TTL.card,
+  });
+}
+
+export async function getScryfallCardById(id) {
+  return fetchScryfallJson(`/cards/${id}`, {
     cacheTtlMs: CACHE_TTL.card,
   });
 }

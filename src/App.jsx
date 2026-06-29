@@ -33,6 +33,7 @@ import {
   sanitizeTitle,
 } from "./utils/userText";
 import { copyPublicPack } from "./services/discoveryService";
+import { fetchScryfallJson } from "./services/scryfallApi";
 import {
   convertArenaDeckToPack,
   convertArenaCommanderDeckToPack,
@@ -895,13 +896,11 @@ function App() {
 
     async function loadRandomFrogBackground() {
       try {
-        const response = await fetch(
-          "https://api.scryfall.com/cards/random?q=t%3Afrog%20t%3Acreature%20-is%3Afunny",
+        const card = await fetchScryfallJson(
+          "/cards/random?q=t%3Afrog%20t%3Acreature%20-is%3Afunny",
+          { cacheTtlMs: 1000 * 60 * 60 * 24 },
         );
 
-        if (!response.ok) return;
-
-        const card = await response.json();
         const cardArt = getCardArt(card);
 
         if (isCurrent && cardArt) {

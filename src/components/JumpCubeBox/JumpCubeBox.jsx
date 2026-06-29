@@ -1348,129 +1348,6 @@ export default function JumpCubeBox({
           </div>
 
           <div className="cubeStatsVisuals">
-            <section
-              className="cubeManaCurve"
-              aria-label="Cube mana curve by pack and color"
-            >
-              <div className="cubeManaCurveHeading">
-                <div>
-                  <h3>Mana Curve</h3>
-                  <p>
-                    {filteredManaCurvePack
-                      ? filteredManaCurvePack.name
-                      : "Card colors stacked by pack"}
-                  </p>
-                </div>
-
-                {filteredManaCurvePack && (
-                  <button
-                    type="button"
-                    className="cubeManaCurveClearFilter"
-                    onClick={() => setFilteredManaCurvePackId(null)}
-                  >
-                    Remove Filter
-                  </button>
-                )}
-
-                <div
-                  className="cubeManaCurveLegend"
-                  aria-label="Card color legend"
-                >
-                  {MANA_ORDER.map((color) => (
-                    <span key={color}>
-                      <i style={{ "--mana-color": MANA_COLORS[color] }} />
-                      {MANA_LABELS[color]}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="cubeManaCurveChart">
-                <div className="cubeManaCurveGrid" aria-hidden="true">
-                  {cubeManaCurveLevels.map((level) => (
-                    <div
-                      className="cubeManaCurveGridLine"
-                      key={level}
-                      style={{
-                        bottom: `${(level / largestCubeManaCurveCount) * 100}%`,
-                      }}
-                    >
-                      <span>{level}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {cubeManaCurveColumns.map((column) => (
-                  <div className="cubeManaCurveColumn" key={column.manaValue}>
-                    <span className="cubeManaCurveCount">
-                      {column.cardCount}
-                    </span>
-                    <div className="cubeManaCurveTrack">
-                      <div
-                        className="cubeManaCurveBar"
-                        style={{
-                          height:
-                            column.cardCount === 0
-                              ? "0%"
-                              : `${(column.cardCount / largestCubeManaCurveCount) * 100}%`,
-                        }}
-                      >
-                        {column.packSegments.map((pack, packIndex) => (
-                          <div
-                            className={`cubeManaCurvePack ${
-                              packIndex > 0 ? "separated" : ""
-                            }`}
-                            key={pack.id}
-                            style={{ flexGrow: pack.cardCount }}
-                            tabIndex={0}
-                            role="button"
-                            aria-label={`Filter mana curve to ${pack.name}`}
-                            onClick={() =>
-                              setFilteredManaCurvePackId(pack.id)
-                            }
-                            onKeyDown={(event) => {
-                              if (
-                                event.key === "Enter" ||
-                                event.key === " "
-                              ) {
-                                event.preventDefault();
-                                setFilteredManaCurvePackId(pack.id);
-                              }
-                            }}
-                          >
-                            {pack.colors.map((color) => (
-                              <span
-                                className="cubeManaCurveColor"
-                                key={color.color}
-                                style={{
-                                  "--mana-color": MANA_COLORS[color.color],
-                                  flexGrow: color.count,
-                                }}
-                              />
-                            ))}
-                            <span
-                              className="cubeManaCurveTooltip"
-                              role="tooltip"
-                            >
-                              <strong>{pack.name}</strong>
-                              <small>
-                                {pack.cardCount}{" "}
-                                {pack.cardCount === 1 ? "card" : "cards"} at{" "}
-                                {column.label} mana
-                              </small>
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <strong className="cubeManaCurveLabel">
-                      {column.label}
-                    </strong>
-                  </div>
-                ))}
-              </div>
-            </section>
-
             <div className="cubeInlineCharts">
               <section
                 className="cubeTagChart"
@@ -1725,6 +1602,129 @@ export default function JumpCubeBox({
               </div>
               </section>
             </div>
+
+            <section
+              className="cubeManaCurve"
+              aria-label="Cube mana curve by pack and color"
+            >
+              <div className="cubeManaCurveHeading">
+                <div>
+                  <h3>Mana Curve</h3>
+                  <p>
+                    {filteredManaCurvePack
+                      ? filteredManaCurvePack.name
+                      : "Card colors stacked by pack"}
+                  </p>
+                </div>
+
+                {filteredManaCurvePack && (
+                  <button
+                    type="button"
+                    className="cubeManaCurveClearFilter"
+                    onClick={() => setFilteredManaCurvePackId(null)}
+                  >
+                    Remove Filter
+                  </button>
+                )}
+
+                <div
+                  className="cubeManaCurveLegend"
+                  aria-label="Card color legend"
+                >
+                  {MANA_ORDER.map((color) => (
+                    <span key={color}>
+                      <i style={{ "--mana-color": MANA_COLORS[color] }} />
+                      {MANA_LABELS[color]}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="cubeManaCurveChart">
+                <div className="cubeManaCurveGrid" aria-hidden="true">
+                  {cubeManaCurveLevels.map((level) => (
+                    <div
+                      className="cubeManaCurveGridLine"
+                      key={level}
+                      style={{
+                        bottom: `${(level / largestCubeManaCurveCount) * 100}%`,
+                      }}
+                    >
+                      <span>{level}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {cubeManaCurveColumns.map((column) => (
+                  <div className="cubeManaCurveColumn" key={column.manaValue}>
+                    <span className="cubeManaCurveCount">
+                      {column.cardCount}
+                    </span>
+                    <div className="cubeManaCurveTrack">
+                      <div
+                        className="cubeManaCurveBar"
+                        style={{
+                          height:
+                            column.cardCount === 0
+                              ? "0%"
+                              : `${(column.cardCount / largestCubeManaCurveCount) * 100}%`,
+                        }}
+                      >
+                        {column.packSegments.map((pack, packIndex) => (
+                          <div
+                            className={`cubeManaCurvePack ${
+                              packIndex > 0 ? "separated" : ""
+                            }`}
+                            key={pack.id}
+                            style={{ flexGrow: pack.cardCount }}
+                            tabIndex={0}
+                            role="button"
+                            aria-label={`Filter mana curve to ${pack.name}`}
+                            onClick={() =>
+                              setFilteredManaCurvePackId(pack.id)
+                            }
+                            onKeyDown={(event) => {
+                              if (
+                                event.key === "Enter" ||
+                                event.key === " "
+                              ) {
+                                event.preventDefault();
+                                setFilteredManaCurvePackId(pack.id);
+                              }
+                            }}
+                          >
+                            {pack.colors.map((color) => (
+                              <span
+                                className="cubeManaCurveColor"
+                                key={color.color}
+                                style={{
+                                  "--mana-color": MANA_COLORS[color.color],
+                                  flexGrow: color.count,
+                                }}
+                              />
+                            ))}
+                            <span
+                              className="cubeManaCurveTooltip"
+                              role="tooltip"
+                            >
+                              <strong>{pack.name}</strong>
+                              <small>
+                                {pack.cardCount}{" "}
+                                {pack.cardCount === 1 ? "card" : "cards"} at{" "}
+                                {column.label} mana
+                              </small>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <strong className="cubeManaCurveLabel">
+                      {column.label}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            </section>
           </div>
         </div>
       )}

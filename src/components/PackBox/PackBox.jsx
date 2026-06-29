@@ -26,6 +26,7 @@ import {
   validatePackTagName,
 } from "../../utils/packTags";
 import { getContentModerationMessage } from "../../utils/contentModeration";
+import { getScryfallCardCollection } from "../../services/scryfallApi";
 import DeckConverterModal from "../DeckConverterModal/DeckConverterModal";
 import "./PackBox.css";
 
@@ -604,23 +605,12 @@ export default function PackBox({
 
     async function loadLivePrices() {
       try {
-        const response = await fetch(
-          "https://api.scryfall.com/cards/collection",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              identifiers: scryfallIds.map((id) => ({ id })),
-            }),
-          },
+        const payload = await getScryfallCardCollection(
+          scryfallIds.map((id) => ({ id })),
         );
-
-        if (!response.ok) return;
-
-        const payload = await response.json();
         const nextPricesByScryfallId = {};
 
-        (payload.data || []).forEach((card) => {
+        (payload.cards || []).forEach((card) => {
           if (card.id && card.prices) {
             nextPricesByScryfallId[card.id] = card.prices;
           }

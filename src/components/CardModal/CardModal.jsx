@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { searchScryfallCards } from "../../services/scryfallApi";
+import {
+  getScryfallCardById,
+  searchScryfallCards,
+} from "../../services/scryfallApi";
 import { normalizeScryfallCards } from "../../services/scryfallCardModel";
 import "./CardModal.css";
 
@@ -338,12 +341,9 @@ export default function CardModal({
 
     async function loadLivePrices() {
       try {
-        const response = await fetch(
-          `https://api.scryfall.com/cards/${selectedCard.scryfall_id}`,
-        );
-        const payload = await response.json();
+        const payload = await getScryfallCardById(selectedCard.scryfall_id);
 
-        if (!isCurrent || !response.ok || !payload.prices) return;
+        if (!isCurrent || !payload.prices) return;
 
         setLivePricesByScryfallId((currentPrices) => ({
           ...currentPrices,
