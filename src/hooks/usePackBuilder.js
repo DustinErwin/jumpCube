@@ -17,6 +17,7 @@ import {
   getPackFormat,
   PACK_FORMATS,
 } from "../utils/packFormats";
+import { hydrateSavedCardRows } from "../services/cardHydrationService";
 
 /*
  * usePackBuilder() owns the active pack editor.
@@ -48,66 +49,6 @@ export const PACK_ARCHETYPE_TAGS = [
   "Combo",
   "Ramp",
 ];
-const PACK_CARD_SEARCH_COLUMNS = `
-  id,
-  oracle_id,
-  default_variant_id,
-  default_variant_scryfall_id,
-  name,
-  mana_value,
-  mana_cost,
-  colors,
-  color_identity,
-  type_line,
-  oracle_text,
-  legalities,
-  games,
-  nonfoil,
-  is_token,
-  is_funny,
-  is_variant_printing,
-  is_planechase,
-  image_url,
-  back_image_url,
-  image_uris,
-  card_faces,
-  price_usd,
-  price_usd_foil,
-  price_usd_etched,
-  has_back_face
-`;
-const PACK_CARD_VARIANT_COLUMNS = `
-  id,
-  scryfall_id,
-  oracle_id,
-  name,
-  mana_value,
-  mana_cost,
-  colors,
-  color_identity,
-  type_line,
-  oracle_text,
-  rarity,
-  image_url,
-  back_image_url,
-  image_uris,
-  card_faces,
-  legalities,
-  prices,
-  price_usd,
-  price_usd_foil,
-  price_usd_etched,
-  games,
-  nonfoil,
-  is_token,
-  is_funny,
-  is_variant_printing,
-  is_planechase,
-  set_name,
-  set_code,
-  collector_number,
-  has_back_face
-`;
 
 function normalizePackName(name, fallback = "Unnamed Pack") {
   return sanitizeTitle(name, fallback);
@@ -275,171 +216,21 @@ function getNextPackCards(cards, card, packFormat) {
   return [...cards, { ...card, quantity: 1 }];
 }
 
-function mergeHydratedCard(searchCard, variantCard) {
-  const variantLegalities =
-    variantCard?.legalities && Object.keys(variantCard.legalities).length > 0
-      ? variantCard.legalities
-      : null;
-
-  return {
-    ...(searchCard || {}),
-    ...(variantCard || {}),
-    legalities: variantLegalities || searchCard?.legalities || null,
-    price_usd: variantCard?.price_usd ?? searchCard?.price_usd ?? null,
-    price_usd_foil:
-      variantCard?.price_usd_foil ?? searchCard?.price_usd_foil ?? null,
-    price_usd_etched:
-      variantCard?.price_usd_etched ?? searchCard?.price_usd_etched ?? null,
-  };
-}
-
 async function hydratePackCardRows(packCards) {
-  const getCardSearchId = (row) => row.card_search_id || row.card_id || null;
-  const cardSearchIds = [
-    ...new Set(packCards.map(getCardSearchId).filter(Boolean)),
-  ];
-  const variantIds = [
-    ...new Set(packCards.map((row) => row.variant_id).filter(Boolean)),
-  ];
-  const variantScryfallIds = [
-    ...new Set(
-      packCards
-        .filter((row) => !row.variant_id)
-        .map((row) => row.variation_id)
-        .filter(Boolean),
-    ),
-  ];
-
-  const [searchResult, variantResult, variantByScryfallResult] = await Promise.all([
-    cardSearchIds.length > 0
-      ? supabase
-          .from("card_search")
-          .select(PACK_CARD_SEARCH_COLUMNS)
-          .in("id", cardSearchIds)
-      : Promise.resolve({ data: [], error: null }),
-    variantIds.length > 0
-      ? supabase
-          .from("card_variants")
-          .select(PACK_CARD_VARIANT_COLUMNS)
-          .in("id", variantIds)
-      : Promise.resolve({ data: [], error: null }),
-    variantScryfallIds.length > 0
-      ? supabase
-          .from("card_variants")
-          .select(PACK_CARD_VARIANT_COLUMNS)
-          .in("scryfall_id", variantScryfallIds)
-      : Promise.resolve({ data: [], error: null }),
-  ]);
-
-  if (searchResult.error) {
-    throw searchResult.error;
-  }
-
-  if (variantResult.error) {
-    throw variantResult.error;
-  }
-
-  if (variantByScryfallResult.error) {
-    throw variantByScryfallResult.error;
-  }
-
-  const searchById = new Map((searchResult.data || []).map((card) => [card.id, card]));
-  const variantById = new Map(
-    (variantResult.data || []).map((variant) => [variant.id, variant]),
-  );
-  const variantByScryfallId = new Map(
-    (variantByScryfallResult.data || []).map((variant) => [
-      variant.scryfall_id,
-      variant,
-    ]),
-  );
-  (variantByScryfallResult.data || []).forEach((variant) => {
-    variantById.set(variant.id, variant);
-  });
-  const fallbackVariantIds = [
-    ...new Set(
-      (packCards || [])
-        .filter((row) => !row.variant_id)
-        .map((row) => searchById.get(getCardSearchId(row))?.default_variant_id)
-        .filter(Boolean),
-    ),
-  ];
-
-  if (fallbackVariantIds.length > 0) {
-    const { data, error } = await supabase
-      .from("card_variants")
-      .select(PACK_CARD_VARIANT_COLUMNS)
-      .in("id", fallbackVariantIds);
-
-    if (error) throw error;
-
-    (data || []).forEach((variant) => {
-      variantById.set(variant.id, variant);
+  // DISCONNECTED: legacy card_search/card_variants hydration. Saved pack rows
+  // are now hydrated from Scryfall using variation_id as the Scryfall card id.
+  try {
+    const hydratedCards = await hydrateSavedCardRows(packCards, {
+      includeManualMechanicBucket: true,
     });
+
+    return hydratedCards.length > 0 || (packCards || []).length === 0
+      ? hydratedCards
+      : null;
+  } catch (error) {
+    console.error("Error hydrating pack cards from Scryfall:", error);
+    return null;
   }
-
-  const fallbackSearchOracleIds = [
-    ...new Set(
-      (packCards || [])
-        .filter((row) => !searchById.has(getCardSearchId(row)))
-        .map((row) => {
-          const variantCard =
-            variantById.get(row.variant_id) ||
-            variantByScryfallId.get(row.variation_id);
-
-          return row.oracle_id || variantCard?.oracle_id || null;
-        })
-        .filter(Boolean),
-    ),
-  ];
-  const fallbackSearchByOracleId = new Map();
-
-  if (fallbackSearchOracleIds.length > 0) {
-    const { data, error } = await supabase
-      .from("card_search")
-      .select(PACK_CARD_SEARCH_COLUMNS)
-      .in("oracle_id", fallbackSearchOracleIds);
-
-    if (error) throw error;
-
-    (data || []).forEach((searchCard) => {
-      fallbackSearchByOracleId.set(searchCard.oracle_id, searchCard);
-    });
-  }
-
-  return (packCards || []).map((row) => {
-    const cardSearchId = getCardSearchId(row);
-    const variantCard =
-      variantById.get(row.variant_id) ||
-      variantByScryfallId.get(row.variation_id);
-    const searchCard =
-      searchById.get(cardSearchId) ||
-      fallbackSearchByOracleId.get(row.oracle_id) ||
-      fallbackSearchByOracleId.get(variantCard?.oracle_id);
-    const fallbackVariantId = searchCard?.default_variant_id || null;
-    const displayVariantCard =
-      variantCard ||
-      variantById.get(fallbackVariantId);
-
-    return {
-      ...mergeHydratedCard(searchCard, displayVariantCard),
-      id: row.variant_id || displayVariantCard?.id || searchCard?.id,
-      card_search_id: cardSearchId || searchCard?.id || null,
-      variant_id: row.variant_id || displayVariantCard?.id || fallbackVariantId,
-      oracle_id:
-        row.oracle_id ||
-        searchCard?.oracle_id ||
-        displayVariantCard?.oracle_id ||
-        null,
-      variation_id: row.variation_id || displayVariantCard?.scryfall_id || null,
-      scryfall_id:
-        displayVariantCard?.scryfall_id ||
-        searchCard?.default_variant_scryfall_id ||
-        null,
-      quantity: row.quantity,
-      manualMechanicBucket: row.manual_mechanic_bucket || null,
-    };
-  });
 }
 
 export function usePackBuilder(user, refreshPacks, {
@@ -701,8 +492,18 @@ export function usePackBuilder(user, refreshPacks, {
       hydratedCards = await hydratePackCardRows(packCards || []);
     } catch (hydrateError) {
       console.error("Error hydrating v2 pack cards:", hydrateError);
-      return;
+      hydratedCards = null;
     }
+
+    const selectedPackCards = hydratedCards || (packCards || []).map((row) => ({
+      id: row.variation_id || row.variant_id || row.card_search_id || row.card_id,
+      card_search_id: row.card_search_id || row.card_id || null,
+      variant_id: row.variant_id || null,
+      oracle_id: row.oracle_id || null,
+      variation_id: row.variation_id || null,
+      quantity: row.quantity,
+      manualMechanicBucket: row.manual_mechanic_bucket || null,
+    }));
 
     setIsPackActive(true);
     setPackName(normalizePackName(pack.name, DRAFT_PACK_NAME));
@@ -720,7 +521,7 @@ export function usePackBuilder(user, refreshPacks, {
 
     setPackFormatId(loadedFormatId);
     setCommanderCardId(loadedCommanderCardId);
-    setSelectedCards(hydratedCards);
+    setSelectedCards(selectedPackCards);
     setSavedPackId(pack.id);
     setSavedPackName(pack.name || null);
     setIsEditingText(false);
@@ -729,7 +530,7 @@ export function usePackBuilder(user, refreshPacks, {
       sanitizeDescription(pack.description),
       loadedTags,
       pack.visibility,
-      hydratedCards,
+      selectedPackCards,
       loadedFormatId,
       loadedCommanderCardId,
     );
@@ -829,6 +630,49 @@ export function usePackBuilder(user, refreshPacks, {
     setIsEditingText(false);
     lastSavedSnapshotRef.current = null;
     localStorage.removeItem("jumpCubeCurrentPack");
+  }
+
+  function openSavedPackFromSummary(packSummary) {
+    if (!packSummary) return false;
+
+    const nextCards = packSummary.cards || [];
+    const nextFormatId = getPackFormat(packSummary.formatId).id;
+    const nextCommanderCardId =
+      nextFormatId === DEFAULT_PACK_FORMAT_ID
+        ? null
+        : packSummary.commanderCardId || null;
+    const nextName = normalizePackName(packSummary.name, DRAFT_PACK_NAME);
+    const nextDescription = sanitizeDescription(packSummary.description);
+    const nextTags = normalizeArchetypeTags(
+      packSummary.archetypeTags || packSummary.packTags || [],
+    );
+    const nextVisibility = normalizeVisibility(packSummary.visibility);
+
+    setIsPackActive(true);
+    setPackName(nextName);
+    setPackDescription(nextDescription);
+    setPackArchetypeTags(nextTags);
+    setPackVisibility(nextVisibility);
+    setPackFormatId(nextFormatId);
+    setCommanderCardId(nextCommanderCardId);
+    setSelectedCards(nextCards);
+    setSavedPackId(packSummary.savedPackId || packSummary.id || null);
+    setSavedPackName(packSummary.name || null);
+    setShowRenameChoice(false);
+    setPendingSaveAction(null);
+    setIsEditingText(false);
+    lastSavedSnapshotRef.current = getPackSnapshot(
+      nextName,
+      nextDescription,
+      nextTags,
+      nextVisibility,
+      nextCards,
+      nextFormatId,
+      nextCommanderCardId,
+    );
+    localStorage.removeItem("jumpCubeCurrentPack");
+
+    return true;
   }
 
   const finishSave = useCallback(async function finishSave(
@@ -962,8 +806,8 @@ export function usePackBuilder(user, refreshPacks, {
     const packCards = cardsToSave.map((card) => ({
       pack_id: actualPackId,
       card_id: null,
-      card_search_id: card.card_search_id || null,
-      variant_id: card.variant_id || null,
+      card_search_id: null,
+      variant_id: null,
       oracle_id: card.oracle_id || null,
       variation_id: card.variation_id || card.scryfall_id || null,
       quantity: card.quantity,
@@ -1096,8 +940,8 @@ export function usePackBuilder(user, refreshPacks, {
     const copiedCards = originalCards.map((card) => ({
       pack_id: newPack.id,
       card_id: null,
-      card_search_id: card.card_search_id || null,
-      variant_id: card.variant_id || null,
+      card_search_id: null,
+      variant_id: null,
       oracle_id: card.oracle_id || null,
       variation_id: card.variation_id || null,
       quantity: card.quantity,
@@ -1312,6 +1156,7 @@ export function usePackBuilder(user, refreshPacks, {
     newPack,
     clearActivePack,
     startPackFromCards,
+    openSavedPackFromSummary,
     savePack,
     loadPack,
     deletePack,

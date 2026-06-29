@@ -336,6 +336,7 @@ function App() {
     hasCollection: collection.hasCollection,
     includeOwned,
     includeUnowned,
+    ownedCardKeys: collection.quantitiesByCardSearchId,
     limit: 50,
   });
   const pack = usePackBuilder(user, loadPacks, {
@@ -660,7 +661,19 @@ function App() {
     if (!requireAuth()) return;
 
     if (!(await saveCurrentPackBeforeLeaving())) return;
-    await pack.loadPack(packId);
+    const cubePack = selectedPacks.find(
+      (selectedPack) =>
+        String(selectedPack.savedPackId || selectedPack.id) === String(packId),
+    );
+    const hasHydratedCubePackCards = (cubePack?.cards || []).some(
+      (card) => card?.name || card?.image_url || card?.scryfall_id,
+    );
+
+    if (hasHydratedCubePackCards) {
+      pack.openSavedPackFromSummary(cubePack);
+    } else {
+      await pack.loadPack(packId);
+    }
     setIsPackBoxOpen(true);
 
     if (window.matchMedia(MOBILE_PANEL_QUERY).matches) {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DRAFT_PACK_NAME,
   PACK_CARD_LIMIT,
@@ -7,6 +7,10 @@ import {
   getPrimaryCardMechanicBucket,
   PACK_MECHANIC_BUCKETS,
 } from "../../utils/cardMechanics";
+import {
+  analyzePackThemes,
+  getPackThemeSuggestions,
+} from "../../utils/packThemeAnalysis";
 import {
   DESCRIPTION_MAX_LENGTH,
   TITLE_MAX_LENGTH,
@@ -88,6 +92,7 @@ const SWIPE_REMOVE_HOLD_MS = 450;
 const MOBILE_REORDER_HOLD_MS = 400;
 const MOBILE_GESTURE_MOVE_TOLERANCE = 8;
 const DEFAULT_PACK_ACTION_HINT = "";
+const PACK_AUTO_TAG_CACHE_KEY = "jumpCube:packAutoThemeTags:v1";
 
 function parsePrice(price) {
   if (price === null || price === undefined || price === "") return null;
@@ -672,6 +677,10 @@ export default function PackBox({
       copyNumber: index + 1,
     })),
   );
+  const packAnalysis = useMemo(
+    () => analyzePackThemes(selectedCards),
+    [selectedCards],
+  );
   const packFormat = packFormats[packFormatId] || packFormats.jumpstart || {};
   const isCommanderPack = Boolean(packFormat.commanderSlot);
   const commanderOptions = selectedCards.filter(isCommanderEligible);
@@ -838,6 +847,112 @@ export default function PackBox({
 
     onAuthRequired?.();
     return false;
+  }
+
+  function getAutoTagCacheId() {
+    if (savedPackId) return `saved:${savedPackId}`;
+
+    const cardSignature = selectedCards
+      .map((card) => card.scryfall_id || card.variation_id || card.oracle_id || card.id)
+      .filter(Boolean)
+      .sort()
+      .join("|");
+
+    return `draft:${packName}:${cardSignature}`;
+  }
+
+  function hasAutoTaggedPack() {
+    try {
+      const cache = JSON.parse(
+        window.localStorage.getItem(PACK_AUTO_TAG_CACHE_KEY) || "{}",
+      );
+
+      return Boolean(cache[getAutoTagCacheId()]);
+    } catch {
+      return false;
+    }
+  }
+
+  function markPackAutoTagged() {
+    try {
+      const cache = JSON.parse(
+        window.localStorage.getItem(PACK_AUTO_TAG_CACHE_KEY) || "{}",
+      );
+
+      cache[getAutoTagCacheId()] = {
+        at: new Date().toISOString(),
+      };
+      window.localStorage.setItem(PACK_AUTO_TAG_CACHE_KEY, JSON.stringify(cache));
+    } catch {
+      // Auto-tagging is best-effort; failing to persist should not block stats.
+    }
+  }
+
+  async function applyThemeTagsOnce() {
+    if (
+      !isAuthenticated ||
+      selectedCards.length === 0 ||
+      packArchetypeTags.length > 0 ||
+      hasAutoTaggedPack()
+    ) {
+      return;
+    }
+
+    const remainingSlots = packTagLimit - packArchetypeTags.length;
+    const suggestions = getPackThemeSuggestions(
+      selectedCards,
+      packArchetypeTags,
+      Math.min(3, remainingSlots),
+    );
+
+    if (suggestions.length === 0) {
+      markPackAutoTagged();
+      return;
+    }
+
+    const nextTags = [...packArchetypeTags];
+
+    for (const suggestion of suggestions) {
+      if (nextTags.length >= packTagLimit) break;
+
+      const existingTag =
+        availablePackTags.find(
+          (tag) => tag.normalizedName === suggestion.normalizedName,
+        ) || null;
+      const tag =
+        existingTag ||
+        (await createPackTag?.(suggestion.name, suggestion.color));
+
+      if (!tag || tag.error) continue;
+      if (
+        nextTags.some(
+          (currentTag) => currentTag.normalizedName === tag.normalizedName,
+        )
+      ) {
+        continue;
+      }
+
+      nextTags.push(tag);
+    }
+
+    if (nextTags.length > packArchetypeTags.length) {
+      setPackArchetypeTags(nextTags);
+      setTagMessage(
+        `Suggested ${nextTags.length - packArchetypeTags.length} pack tag${
+          nextTags.length - packArchetypeTags.length === 1 ? "" : "s"
+        } from pack themes.`,
+      );
+    }
+
+    markPackAutoTagged();
+  }
+
+  function openPackStats() {
+    if (!requireAuth()) return;
+
+    setConfirmingDeletePack(false);
+    setShowPackStats(true);
+    applyThemeTagsOnce();
   }
 
   function toggleArchetypeTag(tag) {
@@ -1236,12 +1351,7 @@ export default function PackBox({
           className="packActionButton packStatsButton"
           type="button"
           {...getPackActionHintProps("Show stats panel.")}
-          onClick={() => {
-            if (!requireAuth()) return;
-
-            setConfirmingDeletePack(false);
-            setShowPackStats(true);
-          }}
+          onClick={openPackStats}
           disabled={selectedCards.length === 0}
           aria-label="Show pack statistics"
         >
@@ -1619,12 +1729,7 @@ export default function PackBox({
         <button
           className="packActionButton packStatsButton"
           type="button"
-          onClick={() => {
-            if (!requireAuth()) return;
-
-            setConfirmingDeletePack(false);
-            setShowPackStats(true);
-          }}
+          onClick={openPackStats}
           disabled={!isPackActive || selectedCards.length === 0}
           title="Show pack statistics"
           aria-label="Show pack statistics"
@@ -1776,6 +1881,64 @@ export default function PackBox({
             >
               x
             </button>
+          </div>
+
+          <div
+            className="packAnalysisPanel"
+            aria-label="Pack analysis"
+          >
+            <div className="packAnalysisScores">
+              <div>
+                <span>Synergy</span>
+                <strong>{packAnalysis.synergy}</strong>
+              </div>
+              <div>
+                <span>Power</span>
+                <strong>{packAnalysis.power}</strong>
+              </div>
+              <div>
+                <span>Curve</span>
+                <strong>{packAnalysis.curve}</strong>
+              </div>
+            </div>
+
+            <div className="packAnalysisDetails">
+              <div>
+                <span>Theme</span>
+                <strong>{packAnalysis.topTheme}</strong>
+              </div>
+              <div className="packAnalysisChips" aria-label="Theme signals">
+                {packAnalysis.themes.length > 0 ? (
+                  packAnalysis.themes.map((theme) => (
+                    <span key={theme.normalizedName}>{theme.name}</span>
+                  ))
+                ) : (
+                  <span>Mixed</span>
+                )}
+              </div>
+            </div>
+
+            <div className="packAnalysisDetails">
+              <div>
+                <span>Suggested tags</span>
+                <strong>
+                  {packAnalysis.suggestedTags.length > 0
+                    ? packAnalysis.suggestedTags
+                        .map((tag) => tag.name)
+                        .join(", ")
+                    : "None"}
+                </strong>
+              </div>
+              <div className="packAnalysisWarnings" aria-label="Pack warnings">
+                {packAnalysis.warnings.length > 0 ? (
+                  packAnalysis.warnings.map((warning) => (
+                    <span key={warning}>{warning}</span>
+                  ))
+                ) : (
+                  <span className="positive">No major warnings</span>
+                )}
+              </div>
+            </div>
           </div>
 
           <div

@@ -37,10 +37,21 @@ export function useCollection(user) {
   const quantitiesByCardSearchId = useMemo(
     () =>
       collectionItems.reduce((quantities, item) => {
-        quantities.set(
+        [
           item.card_search_id,
-          (quantities.get(item.card_search_id) || 0) + item.quantity,
-        );
+          item.variant?.scryfall_id,
+          item.card?.default_variant_scryfall_id,
+          item.card?.representative_scryfall_id,
+          item.variant?.oracle_id,
+          item.card?.oracle_id,
+        ]
+          .filter(Boolean)
+          .forEach((cardKey) => {
+            quantities.set(
+              cardKey,
+              (quantities.get(cardKey) || 0) + item.quantity,
+            );
+          });
         return quantities;
       }, new Map()),
     [collectionItems],

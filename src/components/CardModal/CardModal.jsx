@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { supabase } from "../../utils/supabase";
+import { searchScryfallCards } from "../../services/scryfallApi";
+import { normalizeScryfallCards } from "../../services/scryfallCardModel";
 import "./CardModal.css";
 
 /*
@@ -17,44 +18,6 @@ import "./CardModal.css";
  * - canAddCard(card): optional per-card rule check
  */
 
-const CARD_VERSION_COLUMNS = `
-  id,
-  scryfall_id,
-  oracle_id,
-  name,
-  mana_value,
-  colors,
-  color_identity,
-  type_line,
-  oracle_text,
-  rarity,
-  image_url,
-  back_image_url,
-  legalities,
-  prices,
-  price_usd,
-  price_usd_foil,
-  price_usd_etched,
-  price_eur,
-  price_eur_foil,
-  price_tix,
-  games,
-  nonfoil,
-  is_token,
-  is_funny,
-  is_variant_printing,
-  is_planechase,
-  set_name,
-  set_code,
-  set_type,
-  collector_number,
-  released_at,
-  has_back_face,
-  mana_cost,
-  image_uris,
-  card_faces
-`;
-const VERSION_PAGE_SIZE = 50;
 const SCRYFALL_FORMATS = [
   { key: "alchemy", label: "Alchemy" },
   { key: "brawl", label: "Brawl" },
@@ -121,15 +84,6 @@ function formatMoney(value) {
 
 function getCardPrice(card, priceKey) {
   return card?.[priceKey] ?? card?.prices?.[priceKey.replace("price_", "")] ?? null;
-}
-
-function getTodayDateString() {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
 }
 
 function hasDisplayPrice(card) {
@@ -200,13 +154,14 @@ function getVersionLabel(card) {
 }
 
 function normalizeCardVersions(versions, sourceCard) {
-  return (versions || []).map((version) => ({
+  return normalizeScryfallCards(versions || []).map((version) => ({
     ...version,
     legalities: hasLegalityData(version.legalities)
       ? version.legalities
       : sourceCard.legalities,
-    card_search_id: sourceCard.card_search_id || null,
-    variant_id: version.id,
+    card_search_id: version.scryfall_id,
+    variant_id: version.scryfall_id,
+    variation_id: version.scryfall_id,
   }));
 }
 
@@ -224,6 +179,7 @@ export default function CardModal({
   const versionPickerRef = useRef(null);
   const touchPreviewVersionIdRef = useRef("");
   const versionRequestIdRef = useRef(0);
+  const nextVersionsPageRef = useRef("");
   const [versions, setVersions] = useState(() => (card ? [card] : []));
   const [manualSelectedCard, setManualSelectedCard] = useState({
     sourceCardId: "",
@@ -232,7 +188,6 @@ export default function CardModal({
   const [isLoadingVersions, setIsLoadingVersions] = useState(false);
   const [hasLoadedVersions, setHasLoadedVersions] = useState(false);
   const [hasMoreVersions, setHasMoreVersions] = useState(false);
-  const [loadedVersionCount, setLoadedVersionCount] = useState(0);
   const [versionsError, setVersionsError] = useState("");
   const [flippedCardId, setFlippedCardId] = useState(null);
   const [livePricesByScryfallId, setLivePricesByScryfallId] = useState({});
@@ -272,62 +227,50 @@ export default function CardModal({
 
     const requestId = versionRequestIdRef.current + 1;
     versionRequestIdRef.current = requestId;
-    const start = append ? loadedVersionCount : 0;
     setIsLoadingVersions(true);
     setVersionsError("");
 
-    let query = supabase
-      .from("card_variants")
-      .select(CARD_VERSION_COLUMNS)
-      .contains("games", ["paper"])
-      .eq("lang", "en")
-      .lte("released_at", getTodayDateString())
-      .eq("is_token", false)
-      .eq("is_funny", false)
-      .eq("is_planechase", false)
-      .neq("set_type", "funny")
-      .neq("layout", "art_series")
-      .order("set_code", { ascending: true })
-      .order("collector_number", { ascending: true })
-      .range(start, start + VERSION_PAGE_SIZE - 1);
+    try {
+      const query = card.oracle_id
+        ? `oracleid:${card.oracle_id} game:paper -is:extra`
+        : `!"${card.name}" game:paper -is:extra`;
+      const payload = await searchScryfallCards(query, {
+        pageUrl: append ? nextVersionsPageRef.current : "",
+        unique: "prints",
+        order: "released",
+      });
 
-    if (card.oracle_id) {
-      query = query.eq("oracle_id", card.oracle_id);
-    } else {
-      query = query.eq("name", card.name);
-    }
+      if (requestId !== versionRequestIdRef.current) return;
 
-    const { data, error } = await query;
+      const hydratedVersions = normalizeCardVersions(payload.data || [], card);
 
-    if (requestId !== versionRequestIdRef.current) return;
+      setVersions((currentVersions) => {
+        const nextVersions = append
+          ? [...currentVersions, ...hydratedVersions]
+          : hydratedVersions;
+        const versionsById = new Map(
+          nextVersions.map((version) => [String(version.id), version]),
+        );
 
-    if (error) {
+        if (!versionsById.has(sourceCardId)) {
+          versionsById.set(sourceCardId, card);
+        }
+
+        return [...versionsById.values()];
+      });
+      setHasLoadedVersions(true);
+      setHasMoreVersions(Boolean(payload.has_more && payload.next_page));
+      nextVersionsPageRef.current = payload.next_page || "";
+    } catch (error) {
+      if (requestId !== versionRequestIdRef.current) return;
+
       console.error("Error loading card versions:", error);
       setVersionsError("Could not load versions.");
-      setIsLoadingVersions(false);
-      return;
-    }
-
-    const hydratedVersions = normalizeCardVersions(data || [], card);
-
-    setVersions((currentVersions) => {
-      const nextVersions = append
-        ? [...currentVersions, ...hydratedVersions]
-        : hydratedVersions;
-      const versionsById = new Map(
-        nextVersions.map((version) => [String(version.id), version]),
-      );
-
-      if (!versionsById.has(sourceCardId)) {
-        versionsById.set(sourceCardId, card);
+    } finally {
+      if (requestId === versionRequestIdRef.current) {
+        setIsLoadingVersions(false);
       }
-
-      return [...versionsById.values()];
-    });
-    setHasLoadedVersions(true);
-    setHasMoreVersions(hydratedVersions.length === VERSION_PAGE_SIZE);
-    setLoadedVersionCount(start + hydratedVersions.length);
-    setIsLoadingVersions(false);
+    }
   }
 
   const selectedCard = useMemo(

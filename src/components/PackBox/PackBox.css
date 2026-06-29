@@ -867,6 +867,8 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+  overflow-y: auto;
+  overflow-x: hidden;
 
   padding: 18px;
   box-sizing: border-box;
@@ -913,6 +915,103 @@
   font-weight: 800;
 }
 
+.packAnalysisPanel {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(220px, 1fr) minmax(260px, 1.2fr);
+  gap: 12px;
+  align-items: stretch;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.packAnalysisScores {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.packAnalysisScores div,
+.packAnalysisDetails {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  align-content: center;
+}
+
+.packAnalysisScores div {
+  padding: 7px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.22);
+  text-align: center;
+}
+
+.packAnalysisDetails > div:not(.packAnalysisChips):not(.packAnalysisWarnings) {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 3px;
+}
+
+.packAnalysisPanel span {
+  display: block;
+  color: #aeb6c2;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.packAnalysisPanel strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #f4f0d4;
+  font-size: 0.92rem;
+  font-weight: 950;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.packAnalysisScores strong {
+  color: #d6b85d;
+  font-size: 1.05rem;
+}
+
+.packAnalysisChips,
+.packAnalysisWarnings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.packAnalysisChips span,
+.packAnalysisWarnings span {
+  max-width: 100%;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(214, 184, 93, 0.12);
+  color: #e8edf4;
+  font-size: 0.68rem;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.packAnalysisWarnings span {
+  background: rgba(255, 138, 96, 0.12);
+  color: #ffd5c4;
+}
+
+.packAnalysisWarnings span.positive {
+  background: rgba(117, 214, 129, 0.14);
+  color: #bff4c6;
+  border: 1px solid rgba(117, 214, 129, 0.28);
+}
+
 .packStatsTableModeToggle {
   align-self: center;
   display: inline-grid;
@@ -948,15 +1047,16 @@
 }
 
 .packStatsBody {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) minmax(150px, 26%);
+  flex: 1 0 auto;
+  min-height: 560px;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 
 .packStatsColumns {
-  min-height: 0;
+  flex: 0 0 min(52vh, 520px);
+  min-height: 360px;
 
   display: grid;
   grid-template-columns: repeat(7, minmax(132px, 1fr));
@@ -1060,10 +1160,10 @@
 }
 
 .packStatsVisualArea {
-  min-height: 0;
+  min-height: 180px;
   padding: 12px;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: visible;
   background: rgba(0, 0, 0, 0.16);
   display: flex;
   gap: 18px;
@@ -1897,6 +1997,14 @@
 
   .packStatsTableModeToggle {
     width: min(100%, 340px);
+  }
+
+  .packAnalysisPanel {
+    grid-template-columns: 1fr;
+  }
+
+  .packAnalysisScores {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .packStatsBody {

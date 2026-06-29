@@ -100,8 +100,17 @@ export default function CardBox({
           const flipKey = getFlipKey(card, index);
           const isFlipped = Boolean(flippedCards[flipKey]);
           const quantity = getCardQuantity(card);
-          const ownershipId = card.card_search_id || card.id;
-          const ownedQuantity = ownedQuantities.get(ownershipId) || 0;
+          const ownedQuantity = [
+            card.card_search_id,
+            card.scryfall_id,
+            card.variation_id,
+            card.oracle_id,
+            card.id,
+          ].reduce(
+            (quantityTotal, ownershipId) =>
+              quantityTotal || ownedQuantities.get(ownershipId) || 0,
+            0,
+          );
           const isAddDisabled =
             isSelectionDisabled || (canAddCard && !canAddCard(card));
 

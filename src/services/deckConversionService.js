@@ -1,4 +1,3 @@
-import { supabase } from "../utils/supabase";
 import {
   buildCommanderDeckPlan,
   buildConvertedDeckPlan,
@@ -7,54 +6,17 @@ import {
   parseArenaDeckList,
   parseMtgoDek,
 } from "../utils/arenaDeckConversion";
+import { getScryfallCardByName } from "./scryfallApi";
+import { normalizeScryfallCard } from "./scryfallCardModel";
 import { normalizePackCardLimit } from "../utils/packFormats";
-
-const CONVERSION_CARD_COLUMNS = `
-  id,
-  oracle_id,
-  representative_scryfall_id,
-  default_variant_id,
-  default_variant_scryfall_id,
-  name,
-  normalized_name,
-  mana_value,
-  edhrec_rank,
-  colors,
-  color_identity,
-  type_line,
-  oracle_text,
-  rarity,
-  image_url,
-  back_image_url,
-  legalities,
-  price_usd,
-  price_usd_foil,
-  price_usd_etched,
-  games,
-  nonfoil,
-  is_token,
-  is_funny,
-  is_variant_printing,
-  is_planechase,
-  set_name,
-  set_code,
-  collector_number,
-  released_at,
-  has_back_face,
-  mana_cost,
-  image_uris,
-  card_faces
-`;
-const QUERY_BATCH_SIZE = 50;
 
 function normalizeSearchCard(card, quantity) {
   return {
     ...card,
-    card_search_id: card.id,
-    id: card.default_variant_id,
-    variant_id: card.default_variant_id,
-    scryfall_id:
-      card.default_variant_scryfall_id || card.representative_scryfall_id,
+    card_search_id: card.scryfall_id,
+    id: card.scryfall_id,
+    variant_id: card.scryfall_id,
+    variation_id: card.scryfall_id,
     is_default_printing: true,
     quantity,
   };
@@ -75,32 +37,52 @@ function normalizeRolePlanEntry(entry) {
   };
 }
 
-async function loadCardsByNormalizedName(normalizedNames) {
-  const cards = [];
-
-  for (
-    let index = 0;
-    index < normalizedNames.length;
-    index += QUERY_BATCH_SIZE
-  ) {
-    const { data, error } = await supabase
-      .from("card_search")
-      .select(CONVERSION_CARD_COLUMNS)
-      .in(
-        "normalized_name",
-        normalizedNames.slice(index, index + QUERY_BATCH_SIZE),
-      )
-      .eq("is_legal", true)
-      .not("default_variant_id", "is", null);
-
-    if (error) throw error;
-
-    cards.push(...(data || []));
+async function resolveDeckCardByName(name) {
+  try {
+    return normalizeScryfallCard(await getScryfallCardByName(name));
+  } catch {
+    try {
+      return normalizeScryfallCard(
+        await getScryfallCardByName(name, { fuzzy: true }),
+      );
+    } catch {
+      return null;
+    }
   }
+}
 
-  return new Map(
-    cards.map((card) => [normalizeDeckCardName(card.name), card]),
+async function loadCardsByDeckEntries(parsedEntries) {
+  const cardsByNormalizedName = new Map();
+
+  await Promise.all(
+    parsedEntries.map(async (entry) => {
+      if (cardsByNormalizedName.has(entry.normalizedName)) return;
+
+      const card = await resolveDeckCardByName(entry.name);
+
+      if (card) {
+        cardsByNormalizedName.set(entry.normalizedName, card);
+      }
+    }),
   );
+
+  return cardsByNormalizedName;
+}
+
+async function loadCardsByNames(names) {
+  const cardsByNormalizedName = new Map();
+
+  await Promise.all(
+    [...new Set(names || [])].map(async (name) => {
+      const card = await resolveDeckCardByName(name);
+
+      if (card) {
+        cardsByNormalizedName.set(normalizeDeckCardName(name), card);
+      }
+    }),
+  );
+
+  return cardsByNormalizedName;
 }
 
 async function convertDeckEntriesToPack(parsedEntries, packCardLimit) {
@@ -113,9 +95,7 @@ async function convertDeckEntriesToPack(parsedEntries, packCardLimit) {
     (sum, entry) => sum + entry.quantity,
     0,
   );
-  const cardsByNormalizedName = await loadCardsByNormalizedName(
-    parsedEntries.map((entry) => entry.normalizedName),
-  );
+  const cardsByNormalizedName = await loadCardsByDeckEntries(parsedEntries);
 
   if (parsedCardCount <= normalizedPackCardLimit) {
     const missingNames = [];
@@ -158,8 +138,8 @@ async function convertDeckEntriesToPack(parsedEntries, packCardLimit) {
     cardsByNormalizedName,
     normalizedPackCardLimit,
   );
-  const basicCardsByNormalizedName = await loadCardsByNormalizedName(
-    plan.basicLands.map((land) => normalizeDeckCardName(land.name)),
+  const basicCardsByNormalizedName = await loadCardsByNames(
+    plan.basicLands.map((land) => land.name),
   );
   const cards = [
     ...plan.nonlands.map((entry) =>
@@ -202,12 +182,10 @@ async function convertCommanderDeckEntriesToPack(parsedEntries) {
     (sum, entry) => sum + entry.quantity,
     0,
   );
-  const cardsByNormalizedName = await loadCardsByNormalizedName(
-    parsedEntries.map((entry) => entry.normalizedName),
-  );
+  const cardsByNormalizedName = await loadCardsByDeckEntries(parsedEntries);
   const plan = buildCommanderDeckPlan(parsedEntries, cardsByNormalizedName);
-  const basicCardsByNormalizedName = await loadCardsByNormalizedName(
-    plan.basicLands.map((land) => normalizeDeckCardName(land.name)),
+  const basicCardsByNormalizedName = await loadCardsByNames(
+    plan.basicLands.map((land) => land.name),
   );
   const cards = [
     ...plan.nonlands.map(normalizeRolePlanEntry),
@@ -233,7 +211,7 @@ async function convertCommanderDeckEntriesToPack(parsedEntries) {
     ...plan,
     mode: "commander",
     cards,
-    commanderCardId: plan.commander.default_variant_id,
+    commanderCardId: plan.commander.scryfall_id,
     commanderName: plan.commander.name,
     removedCards: [
       ...(plan.importedLands || []).map(normalizeRemovedPlanEntry),

@@ -56,8 +56,8 @@ export async function savePackCards(packId, selectedCards) {
   const rows = selectedCards.map((card) => ({
     pack_id: packId,
     card_id: null,
-    card_search_id: card.card_search_id || null,
-    variant_id: card.variant_id || null,
+    card_search_id: null,
+    variant_id: null,
     oracle_id: card.oracle_id || null,
     variation_id: card.variation_id || card.scryfall_id || null,
     quantity: card.quantity,

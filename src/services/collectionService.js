@@ -8,12 +8,19 @@ export async function loadUserCollection() {
   let start = 0;
 
   while (true) {
+    /*
+     * LEGACY COMPATIBILITY: collection rows still reference historical
+     * card_search/card_variants ids. Active card search, pack hydration, deck
+     * imports, and print/version data are disconnected from these tables.
+     * This join remains only to expose Scryfall ids for existing collection
+     * ownership matching until collection rows store Scryfall ids directly.
+     */
     const { data, error } = await supabase
       .from("user_collection_items")
       .select(`
         id, card_search_id, variant_id, finish, quantity, updated_at,
-        card:card_search(name, image_url, set_name, set_code, collector_number),
-        variant:card_variants(name, image_url, set_name, set_code, collector_number)
+        card:card_search(name, oracle_id, image_url, set_name, set_code, collector_number, default_variant_scryfall_id, representative_scryfall_id),
+        variant:card_variants(name, scryfall_id, oracle_id, image_url, set_name, set_code, collector_number)
       `)
       .order("updated_at", { ascending: false })
       .range(start, start + COLLECTION_PAGE_SIZE - 1);

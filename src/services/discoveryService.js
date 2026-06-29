@@ -1,70 +1,11 @@
 import { supabase } from "../utils/supabase";
 import { normalizePackTags } from "../utils/packTags";
 import { getPackFormat } from "../utils/packFormats";
+import { hydrateSavedCardRows } from "./cardHydrationService";
 
 function getCardImage(card) {
   return card?.image_url || card?.image_uris?.art_crop || card?.image_uris?.normal || null;
 }
-
-const PUBLIC_CARD_SEARCH_COLUMNS = `
-  id,
-  oracle_id,
-  default_variant_id,
-  default_variant_scryfall_id,
-  name,
-  mana_value,
-  mana_cost,
-  colors,
-  color_identity,
-  type_line,
-  oracle_text,
-  legalities,
-  games,
-  nonfoil,
-  is_token,
-  is_funny,
-  is_variant_printing,
-  is_planechase,
-  image_url,
-  back_image_url,
-  image_uris,
-  card_faces,
-  price_usd,
-  price_usd_foil,
-  has_back_face
-`;
-
-const PUBLIC_CARD_VARIANT_COLUMNS = `
-  id,
-  scryfall_id,
-  oracle_id,
-  name,
-  mana_value,
-  mana_cost,
-  colors,
-  color_identity,
-  type_line,
-  oracle_text,
-  rarity,
-  image_url,
-  back_image_url,
-  image_uris,
-  card_faces,
-  legalities,
-  prices,
-  price_usd,
-  price_usd_foil,
-  games,
-  nonfoil,
-  is_token,
-  is_funny,
-  is_variant_printing,
-  is_planechase,
-  set_name,
-  set_code,
-  collector_number,
-  has_back_face
-`;
 
 async function hydratePublicPacks(packs) {
   const packIds = packs.map((pack) => pack.id);
@@ -91,22 +32,6 @@ async function hydratePublicPacks(packs) {
   if (cardRowsResult.error) throw cardRowsResult.error;
 
   const cardRows = cardRowsResult.data || [];
-  const cardSearchIds = [...new Set(cardRows.map((row) => row.card_search_id).filter(Boolean))];
-  const variantIds = [...new Set(cardRows.map((row) => row.variant_id).filter(Boolean))];
-  const [searchCardsResult, variantsResult] = await Promise.all([
-    cardSearchIds.length
-      ? supabase.from("card_search").select(PUBLIC_CARD_SEARCH_COLUMNS).in("id", cardSearchIds)
-      : Promise.resolve({ data: [], error: null }),
-    variantIds.length
-      ? supabase.from("card_variants").select(PUBLIC_CARD_VARIANT_COLUMNS).in("id", variantIds)
-      : Promise.resolve({ data: [], error: null }),
-  ]);
-
-  if (searchCardsResult.error) throw searchCardsResult.error;
-  if (variantsResult.error) throw variantsResult.error;
-
-  const searchCards = new Map((searchCardsResult.data || []).map((card) => [card.id, card]));
-  const variants = new Map((variantsResult.data || []).map((card) => [card.id, card]));
   const profiles = new Map((profilesResult.data || []).map((profile) => [profile.id, profile.username]));
   const tagsByPack = new Map();
 
@@ -114,12 +39,12 @@ async function hydratePublicPacks(packs) {
     tagsByPack.set(row.pack_id, [...(tagsByPack.get(row.pack_id) || []), row.tag]);
   });
 
-  return packs.map((pack) => {
+  return Promise.all(packs.map(async (pack) => {
     const packCards = cardRows.filter((row) => row.pack_id === pack.id);
-    const topRow = packCards[packCards.length - 1] || packCards[0];
-    const topCard = topRow
-      ? variants.get(topRow.variant_id) || searchCards.get(topRow.card_search_id)
-      : null;
+    const hydratedCards = await hydrateSavedCardRows(packCards, {
+      includeManualMechanicBucket: true,
+    });
+    const topCard = hydratedCards[hydratedCards.length - 1] || hydratedCards[0];
 
     return {
       ...pack,
@@ -130,21 +55,9 @@ async function hydratePublicPacks(packs) {
       formatId: getPackFormat(pack.format_id).id,
       commanderCardId: pack.commander_card_id || null,
       tags: normalizePackTags(tagsByPack.get(pack.id) || pack.archetype_tags || []),
-      cards: packCards.map((row) => {
-        const card = variants.get(row.variant_id) || searchCards.get(row.card_search_id) || {};
-
-        return {
-          ...card,
-          card_search_id: row.card_search_id,
-          variant_id: row.variant_id,
-          oracle_id: row.oracle_id || card.oracle_id || null,
-          variation_id: row.variation_id || card.scryfall_id || null,
-          quantity: row.quantity || 1,
-          manualMechanicBucket: row.manual_mechanic_bucket || null,
-        };
-      }),
+      cards: hydratedCards,
     };
-  });
+  }));
 }
 
 export async function loadPublicLibrary() {

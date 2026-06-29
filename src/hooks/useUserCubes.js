@@ -4,6 +4,7 @@ import { sanitizeDescription, sanitizeTitle } from "../utils/userText";
 import { hasBlockedContentInFields } from "../utils/contentModeration";
 import { normalizePackTags } from "../utils/packTags";
 import { getPackFormat } from "../utils/packFormats";
+import { hydrateSavedCardRows } from "../services/cardHydrationService";
 
 /*
  * useUserCubes() is the database boundary for cube library operations.
@@ -22,67 +23,6 @@ import { getPackFormat } from "../utils/packFormats";
  * }
  */
 
-const CUBE_CARD_SEARCH_COLUMNS = `
-  id,
-  oracle_id,
-  default_variant_id,
-  default_variant_scryfall_id,
-  name,
-  mana_value,
-  mana_cost,
-  colors,
-  color_identity,
-  type_line,
-  oracle_text,
-  legalities,
-  games,
-  nonfoil,
-  is_token,
-  is_funny,
-  is_variant_printing,
-  is_planechase,
-  image_url,
-  back_image_url,
-  image_uris,
-  card_faces,
-  price_usd,
-  price_usd_foil,
-  price_usd_etched,
-  has_back_face
-`;
-const CUBE_CARD_VARIANT_COLUMNS = `
-  id,
-  scryfall_id,
-  oracle_id,
-  name,
-  mana_value,
-  mana_cost,
-  colors,
-  color_identity,
-  type_line,
-  oracle_text,
-  rarity,
-  image_url,
-  back_image_url,
-  image_uris,
-  card_faces,
-  legalities,
-  prices,
-  price_usd,
-  price_usd_foil,
-  price_usd_etched,
-  games,
-  nonfoil,
-  is_token,
-  is_funny,
-  is_variant_printing,
-  is_planechase,
-  set_name,
-  set_code,
-  collector_number,
-  has_back_face
-`;
-
 function buildPackSummary(pack, position = 0, hydratedCards = null) {
   /*
    * Converts the nested Supabase join shape into the pack item shape expected
@@ -93,6 +33,7 @@ function buildPackSummary(pack, position = 0, hydratedCards = null) {
    * }
    */
   const cards = hydratedCards || (pack.pack_cards || []).map((row) => ({
+    id: row.variation_id || row.variant_id || row.card_search_id || row.card_id,
     card_search_id: row.card_search_id || row.card_id || null,
     variant_id: row.variant_id || null,
     oracle_id: row.oracle_id || null,
@@ -122,24 +63,6 @@ function buildPackSummary(pack, position = 0, hydratedCards = null) {
   };
 }
 
-function mergeHydratedCard(searchCard, variantCard) {
-  const variantLegalities =
-    variantCard?.legalities && Object.keys(variantCard.legalities).length > 0
-      ? variantCard.legalities
-      : null;
-
-  return {
-    ...(searchCard || {}),
-    ...(variantCard || {}),
-    legalities: variantLegalities || searchCard?.legalities || null,
-    price_usd: variantCard?.price_usd ?? searchCard?.price_usd ?? null,
-    price_usd_foil:
-      variantCard?.price_usd_foil ?? searchCard?.price_usd_foil ?? null,
-    price_usd_etched:
-      variantCard?.price_usd_etched ?? searchCard?.price_usd_etched ?? null,
-  };
-}
-
 async function loadPackTagsByPackId(packIds) {
   const uniquePackIds = [...new Set((packIds || []).filter(Boolean))];
 
@@ -163,143 +86,18 @@ async function loadPackTagsByPackId(packIds) {
 }
 
 async function hydrateCubePackCards(packCards) {
-  const getCardSearchId = (row) => row.card_search_id || row.card_id || null;
-  const cardSearchIds = [
-    ...new Set(packCards.map(getCardSearchId).filter(Boolean)),
-  ];
-  const variantIds = [
-    ...new Set(packCards.map((row) => row.variant_id).filter(Boolean)),
-  ];
-  const variantScryfallIds = [
-    ...new Set(
-      packCards
-        .filter((row) => !row.variant_id)
-        .map((row) => row.variation_id)
-        .filter(Boolean),
-    ),
-  ];
+  // DISCONNECTED: legacy card_search/card_variants hydration. Cube and pack
+  // summaries now hydrate card facts from Scryfall by saved variation_id.
+  try {
+    const hydratedCards = await hydrateSavedCardRows(packCards);
 
-  const [searchResult, variantResult, variantByScryfallResult] = await Promise.all([
-    cardSearchIds.length > 0
-      ? supabase
-          .from("card_search")
-          .select(CUBE_CARD_SEARCH_COLUMNS)
-          .in("id", cardSearchIds)
-      : Promise.resolve({ data: [], error: null }),
-    variantIds.length > 0
-      ? supabase
-          .from("card_variants")
-          .select(CUBE_CARD_VARIANT_COLUMNS)
-          .in("id", variantIds)
-      : Promise.resolve({ data: [], error: null }),
-    variantScryfallIds.length > 0
-      ? supabase
-          .from("card_variants")
-          .select(CUBE_CARD_VARIANT_COLUMNS)
-          .in("scryfall_id", variantScryfallIds)
-      : Promise.resolve({ data: [], error: null }),
-  ]);
-
-  if (searchResult.error) throw searchResult.error;
-  if (variantResult.error) throw variantResult.error;
-  if (variantByScryfallResult.error) throw variantByScryfallResult.error;
-
-  const searchById = new Map((searchResult.data || []).map((card) => [card.id, card]));
-  const variantById = new Map(
-    (variantResult.data || []).map((variant) => [variant.id, variant]),
-  );
-  const variantByScryfallId = new Map(
-    (variantByScryfallResult.data || []).map((variant) => [
-      variant.scryfall_id,
-      variant,
-    ]),
-  );
-  (variantByScryfallResult.data || []).forEach((variant) => {
-    variantById.set(variant.id, variant);
-  });
-  const fallbackVariantIds = [
-    ...new Set(
-      (packCards || [])
-        .filter((row) => !row.variant_id)
-        .map((row) => searchById.get(getCardSearchId(row))?.default_variant_id)
-        .filter(Boolean),
-    ),
-  ];
-
-  if (fallbackVariantIds.length > 0) {
-    const { data, error } = await supabase
-      .from("card_variants")
-      .select(CUBE_CARD_VARIANT_COLUMNS)
-      .in("id", fallbackVariantIds);
-
-    if (error) throw error;
-
-    (data || []).forEach((variant) => {
-      variantById.set(variant.id, variant);
-    });
+    return hydratedCards.length > 0 || (packCards || []).length === 0
+      ? hydratedCards
+      : null;
+  } catch (error) {
+    console.error("Error hydrating cube pack cards from Scryfall:", error);
+    return null;
   }
-
-  const fallbackSearchOracleIds = [
-    ...new Set(
-      (packCards || [])
-        .filter((row) => !searchById.has(getCardSearchId(row)))
-        .map((row) => {
-          const variantCard =
-            variantById.get(row.variant_id) ||
-            variantByScryfallId.get(row.variation_id);
-
-          return row.oracle_id || variantCard?.oracle_id || null;
-        })
-        .filter(Boolean),
-    ),
-  ];
-  const fallbackSearchByOracleId = new Map();
-
-  if (fallbackSearchOracleIds.length > 0) {
-    const { data, error } = await supabase
-      .from("card_search")
-      .select(CUBE_CARD_SEARCH_COLUMNS)
-      .in("oracle_id", fallbackSearchOracleIds);
-
-    if (error) throw error;
-
-    (data || []).forEach((searchCard) => {
-      fallbackSearchByOracleId.set(searchCard.oracle_id, searchCard);
-    });
-  }
-
-  return (packCards || []).map((row) => {
-    const cardSearchId = getCardSearchId(row);
-    const variantCard =
-      variantById.get(row.variant_id) ||
-      variantByScryfallId.get(row.variation_id);
-    const searchCard =
-      searchById.get(cardSearchId) ||
-      fallbackSearchByOracleId.get(row.oracle_id) ||
-      fallbackSearchByOracleId.get(variantCard?.oracle_id);
-    const fallbackVariantId = searchCard?.default_variant_id || null;
-    const displayVariantCard =
-      variantCard ||
-      variantById.get(fallbackVariantId);
-
-    return {
-      ...mergeHydratedCard(searchCard, displayVariantCard),
-      id: row.variant_id || displayVariantCard?.id || searchCard?.id,
-      card_search_id: cardSearchId || searchCard?.id || null,
-      variant_id: row.variant_id || displayVariantCard?.id || fallbackVariantId,
-      oracle_id:
-        row.oracle_id ||
-        searchCard?.oracle_id ||
-        displayVariantCard?.oracle_id ||
-        null,
-      variation_id: row.variation_id || displayVariantCard?.scryfall_id || null,
-      scryfall_id:
-        displayVariantCard?.scryfall_id ||
-        searchCard?.default_variant_scryfall_id ||
-        null,
-      quantity: row.quantity,
-    };
-  });
 }
 
 export function useUserCubes(user) {
