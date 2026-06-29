@@ -385,11 +385,14 @@ export async function searchScryfallCards(query, {
   cacheTtlMs,
 } = {}) {
   if (pageUrl) {
-    return fetchScryfallJson(pageUrl, {
+    const payload = await fetchScryfallJson(pageUrl, {
       cacheTtlMs: cacheTtlMs ?? (pageUrl.includes("unique=prints")
         ? CACHE_TTL.prints
         : CACHE_TTL.search),
     });
+
+    cacheScryfallCards(payload.data);
+    return payload;
   }
 
   const params = new URLSearchParams({
@@ -401,27 +404,44 @@ export async function searchScryfallCards(query, {
     include_variations: "false",
   });
 
-  return fetchScryfallJson(`/cards/search?${params}`, {
+  const payload = await fetchScryfallJson(`/cards/search?${params}`, {
     cacheTtlMs: cacheTtlMs ?? (unique === "prints"
       ? CACHE_TTL.prints
       : CACHE_TTL.search),
   });
+
+  cacheScryfallCards(payload.data);
+  return payload;
 }
 
 export async function getScryfallCardByName(name, { fuzzy = false } = {}) {
+  const cachedCard = getCachedCollectionCard({ name });
+
+  if (cachedCard) return cachedCard;
+
   const params = new URLSearchParams({
     [fuzzy ? "fuzzy" : "exact"]: name,
   });
 
-  return fetchScryfallJson(`/cards/named?${params}`, {
+  const card = await fetchScryfallJson(`/cards/named?${params}`, {
     cacheTtlMs: CACHE_TTL.card,
   });
+
+  cacheCollectionCard(card);
+  return card;
 }
 
 export async function getScryfallCardById(id) {
-  return fetchScryfallJson(`/cards/${id}`, {
+  const cachedCard = getCachedCollectionCard({ id });
+
+  if (cachedCard) return cachedCard;
+
+  const card = await fetchScryfallJson(`/cards/${id}`, {
     cacheTtlMs: CACHE_TTL.card,
   });
+
+  cacheCollectionCard(card);
+  return card;
 }
 
 function getIdentifierKey(identifier) {
@@ -470,6 +490,10 @@ function cacheCollectionCard(card) {
   if (card.name) {
     setCachedCollectionCard({ name: card.name }, card);
   }
+}
+
+function cacheScryfallCards(cards) {
+  (cards || []).forEach(cacheCollectionCard);
 }
 
 export async function getScryfallCardCollection(identifiers) {

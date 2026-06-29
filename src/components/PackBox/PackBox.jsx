@@ -592,6 +592,10 @@ export default function PackBox({
   ].sort().join(",");
 
   useEffect(() => {
+    if (!isPackActive) {
+      return undefined;
+    }
+
     const scryfallIds = selectedScryfallIdKey
       .split(",")
       .map((id) => id.trim())
@@ -629,7 +633,7 @@ export default function PackBox({
     return () => {
       isCurrent = false;
     };
-  }, [selectedScryfallIdKey]);
+  }, [isPackActive, selectedScryfallIdKey]);
 
   const totalCards = selectedCards.reduce(
     (sum, card) => sum + card.quantity,
