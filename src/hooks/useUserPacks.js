@@ -24,7 +24,7 @@ export function useUserPacks(user) {
       setPacks([]);
       setPacksLoaded(true);
       setPacksLoadedUserId(null);
-      return;
+      return [];
     }
 
     setLoadingPacks(true);
@@ -43,7 +43,7 @@ export function useUserPacks(user) {
       setLoadingPacks(false);
       setPacksLoaded(true);
       setPacksLoadedUserId(user.id);
-      return;
+      return [];
     }
 
     const loadedPacks = data || [];
@@ -65,17 +65,18 @@ export function useUserPacks(user) {
       }
     }
 
-    setPacks(
-      loadedPacks.map((pack) => ({
+    const packedRows = loadedPacks.map((pack) => ({
         ...pack,
         packTags: normalizePackTags(
           tagsByPackId.get(pack.id) || pack.archetype_tags || pack.archetype_tag,
         ),
-      })),
-    );
+      }));
+
+    setPacks(packedRows);
     setLoadingPacks(false);
     setPacksLoaded(true);
     setPacksLoadedUserId(user.id);
+    return packedRows;
   }, [user]);
 
   useEffect(() => {

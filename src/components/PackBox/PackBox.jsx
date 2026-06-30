@@ -150,6 +150,14 @@ function formatUsd(value) {
   }).format(value);
 }
 
+function getScorePercent(value) {
+  const score = Number(value);
+
+  if (!Number.isFinite(score)) return 0;
+
+  return Math.max(0, Math.min(100, score));
+}
+
 function getCardTypes(card) {
   // Type matching avoids accidental substring hits inside longer words.
   const typeLine = card.type_line || "";
@@ -1882,17 +1890,25 @@ export default function PackBox({
             aria-label="Pack analysis"
           >
             <div className="packAnalysisScores">
-              <div>
+              <div
+                className="packAnalysisScoreTile"
+                style={{ "--score-percent": `${getScorePercent(packAnalysis.synergy)}%` }}
+              >
                 <span>Synergy</span>
                 <strong>{packAnalysis.synergy}</strong>
+                <div className="packAnalysisScoreMeter" aria-hidden="true">
+                  <i />
+                </div>
               </div>
-              <div>
+              <div
+                className="packAnalysisScoreTile"
+                style={{ "--score-percent": `${getScorePercent(packAnalysis.power)}%` }}
+              >
                 <span>Power</span>
                 <strong>{packAnalysis.power}</strong>
-              </div>
-              <div>
-                <span>Curve</span>
-                <strong>{packAnalysis.curve}</strong>
+                <div className="packAnalysisScoreMeter" aria-hidden="true">
+                  <i />
+                </div>
               </div>
             </div>
 
@@ -1932,6 +1948,11 @@ export default function PackBox({
                   <span className="positive">No major warnings</span>
                 )}
               </div>
+            </div>
+
+            <div className="packAnalysisPrice" aria-label="Pack total price">
+              <span>Price</span>
+              <strong>{formatUsd(totalPrice)}</strong>
             </div>
           </div>
 
@@ -2066,7 +2087,17 @@ export default function PackBox({
               aria-label="Pack statistics"
             >
               <div className="packManaCurveChart">
-                <h3 className="packManaCurveTitle">Mana Curve</h3>
+                <div className="packManaCurveHeader">
+                  <h3 className="packManaCurveTitle">Mana Curve</h3>
+                  <div
+                    className="packManaCurveScore"
+                    style={{ "--score-percent": `${getScorePercent(packAnalysis.curve)}%` }}
+                    aria-label={`Curve score ${packAnalysis.curve}`}
+                  >
+                    <span>Curve Score</span>
+                    <strong>{packAnalysis.curve}</strong>
+                  </div>
+                </div>
 
                 <div className="packManaCurveLegend">
                   <span>

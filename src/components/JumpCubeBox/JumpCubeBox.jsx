@@ -11,6 +11,11 @@ import {
   getPrimaryCardMechanicBucket,
   PACK_MECHANIC_BUCKETS,
 } from "../../utils/cardMechanics";
+import {
+  normalizeColorIdentity,
+  normalizeColorPercentages,
+  normalizeStoredPackCubeStats,
+} from "../../utils/packCubeStats";
 import "./JumpCubeBox.css";
 
 /*
@@ -105,25 +110,79 @@ function getCardManaPips(card) {
   return pips;
 }
 
+function getPackCubeStats(pack) {
+  const stats =
+    normalizeStoredPackCubeStats(pack?.cubeStats) ||
+    normalizeStoredPackCubeStats(pack?.cube_stats) ||
+    pack?.cubeStats ||
+    pack?.cube_stats;
+
+  return stats && Object.keys(stats).length > 0 ? stats : null;
+}
+
+function getZeroManaCounts(includeColorless = true) {
+  return MANA_ORDER.filter((color) => includeColorless || color !== "C").reduce(
+    (counts, color) => ({ ...counts, [color]: 0 }),
+    {},
+  );
+}
+
+function getPackColorPercentages(pack) {
+  const stats = getPackCubeStats(pack);
+  const candidates = [
+    normalizeColorPercentages(stats?.colorPercentages),
+    normalizeColorPercentages(pack?.colorPercentages),
+    normalizeColorPercentages(pack?.color_percentages),
+  ];
+
+  return candidates.find(Boolean) || null;
+}
+
 function getPackManaPipSegments(pack) {
   /*
    * Converts all card mana pips in a pack into percentage segments.
    * Segments are sorted ascending by count so the largest color lands on the
    * right side after CSS positioning.
    */
-  const totals = MANA_ORDER.reduce(
-    (counts, color) => ({ ...counts, [color]: 0 }),
-    {},
-  );
+  const stats = getPackCubeStats(pack);
+  const totals = stats?.allPipCounts
+    ? { ...getZeroManaCounts(), ...stats.allPipCounts }
+    : getZeroManaCounts();
 
-  (pack.cards || []).forEach((card) => {
-    const cardPips = getCardManaPips(card);
-    const quantity = card.quantity || 1;
+  if (!stats?.allPipCounts) {
+    const percentages = getPackColorPercentages(pack);
 
-    MANA_ORDER.forEach((color) => {
-      totals[color] += cardPips[color] * quantity;
+    if (percentages) {
+      MANA_ORDER.forEach((color) => {
+        totals[color] = Number(percentages[color]) || 0;
+      });
+    }
+  }
+
+  if (!stats?.allPipCounts && !getPackColorPercentages(pack)) {
+    (pack.cards || []).forEach((card) => {
+      const cardPips = getCardManaPips(card);
+      const quantity = card.quantity || 1;
+
+      MANA_ORDER.forEach((color) => {
+        totals[color] += cardPips[color] * quantity;
+      });
     });
-  });
+  }
+
+  if (MANA_ORDER.reduce((sum, color) => sum + totals[color], 0) === 0) {
+    const identityColors = [
+      normalizeColorIdentity(pack?.colorIdentity),
+      normalizeColorIdentity(pack?.color_identity),
+      normalizeColorIdentity(stats?.colorIdentity),
+    ].find((candidate) => candidate.length > 0);
+
+    (identityColors || []).forEach((color) => {
+      if (Object.prototype.hasOwnProperty.call(totals, color)) {
+        totals[color] = 1;
+      }
+    });
+  }
 
   const totalPips = MANA_ORDER.reduce((sum, color) => sum + totals[color], 0);
 
@@ -202,27 +261,32 @@ function getCubeManaCurveColumns(packs) {
   return CUBE_MANA_CURVE_VALUES.map((manaValue) => {
     const packSegments = packs
       .map((pack) => {
-        const colorCounts = MANA_ORDER.reduce(
-          (counts, color) => ({ ...counts, [color]: 0 }),
-          {},
-        );
+        const stats = getPackCubeStats(pack);
+        const cachedCurveBucket = stats?.manaCurve?.[manaValue];
+        const colorCounts = cachedCurveBucket?.colorCounts
+          ? { ...getZeroManaCounts(), ...cachedCurveBucket.colorCounts }
+          : getZeroManaCounts();
         let cardCount = 0;
 
-        (pack.cards || []).forEach((card) => {
-          const cardManaValue = Number(card.mana_value || 0);
-          const bucket = cardManaValue >= 6 ? 6 : Math.max(0, cardManaValue);
+        if (cachedCurveBucket) {
+          cardCount = Number(cachedCurveBucket.cardCount) || 0;
+        } else {
+          (pack.cards || []).forEach((card) => {
+            const cardManaValue = Number(card.mana_value || 0);
+            const bucket = cardManaValue >= 6 ? 6 : Math.max(0, cardManaValue);
 
-          if (bucket !== manaValue) return;
+            if (bucket !== manaValue) return;
 
-          const quantity = Number(card.quantity) || 1;
-          const colors = getCardCurveColors(card);
-          const colorShare = quantity / colors.length;
+            const quantity = Number(card.quantity) || 1;
+            const colors = getCardCurveColors(card);
+            const colorShare = quantity / colors.length;
 
-          cardCount += quantity;
-          colors.forEach((color) => {
-            colorCounts[color] += colorShare;
+            cardCount += quantity;
+            colors.forEach((color) => {
+              colorCounts[color] += colorShare;
+            });
           });
-        });
+        }
 
         return {
           id: pack.savedPackId || pack.id,
@@ -314,19 +378,45 @@ function getCubeTagChart(packs) {
 }
 
 function getPackColoredManaPips(pack) {
-  const totals = MANA_ORDER.filter((color) => color !== "C").reduce(
-    (counts, color) => ({ ...counts, [color]: 0 }),
-    {},
-  );
+  const stats = getPackCubeStats(pack);
+  const totals = stats?.colorPipCounts
+    ? { ...getZeroManaCounts(false), ...stats.colorPipCounts }
+    : getZeroManaCounts(false);
 
-  (pack.cards || []).forEach((card) => {
-    const cardPips = getCardManaPips(card);
-    const quantity = Number(card.quantity) || 1;
+  if (!stats?.colorPipCounts) {
+    const percentages = getPackColorPercentages(pack);
 
-    Object.keys(totals).forEach((color) => {
-      totals[color] += cardPips[color] * quantity;
+    if (percentages) {
+      Object.keys(totals).forEach((color) => {
+        totals[color] = Number(percentages[color]) || 0;
+      });
+      return totals;
+    }
+
+    (pack.cards || []).forEach((card) => {
+      const cardPips = getCardManaPips(card);
+      const quantity = Number(card.quantity) || 1;
+
+      Object.keys(totals).forEach((color) => {
+        totals[color] += cardPips[color] * quantity;
+      });
     });
-  });
+
+  }
+
+  if (Object.values(totals).every((count) => count <= 0)) {
+    const identityColors = [
+      normalizeColorIdentity(pack?.colorIdentity),
+      normalizeColorIdentity(pack?.color_identity),
+      normalizeColorIdentity(stats?.colorIdentity),
+    ].find((candidate) => candidate.length > 0);
+
+    (identityColors || []).forEach((color) => {
+      if (Object.prototype.hasOwnProperty.call(totals, color)) {
+        totals[color] = 1;
+      }
+    });
+  }
 
   return totals;
 }
@@ -347,6 +437,15 @@ function getCubeCardTypeChart(packs) {
   const counts = new Map(CUBE_CARD_TYPES.map((type) => [type.id, 0]));
 
   packs.forEach((pack) => {
+    const stats = getPackCubeStats(pack);
+
+    if (stats?.cardTypes) {
+      CUBE_CARD_TYPES.forEach((type) => {
+        counts.set(type.id, counts.get(type.id) + (Number(stats.cardTypes[type.id]) || 0));
+      });
+      return;
+    }
+
     (pack.cards || []).forEach((card) => {
       const type = getPrimaryCubeCardType(card);
       const quantity = Number(card.quantity) || 1;
@@ -397,6 +496,19 @@ function getCubeCardFunctionChart(packs) {
   );
 
   packs.forEach((pack) => {
+    const stats = getPackCubeStats(pack);
+
+    if (stats?.cardFunctions) {
+      PACK_MECHANIC_BUCKETS.forEach((bucket) => {
+        counts.set(
+          bucket.id,
+          (counts.get(bucket.id) || 0) +
+            (Number(stats.cardFunctions[bucket.id]) || 0),
+        );
+      });
+      return;
+    }
+
     (pack.cards || []).forEach((card) => {
       const bucket = getPrimaryCardMechanicBucket(card);
 
@@ -540,6 +652,16 @@ function getCubeColorSourceChart(packs) {
   );
 
   packs.forEach((pack) => {
+    const stats = getPackCubeStats(pack);
+
+    if (stats?.colorSources) {
+      Object.keys(pips).forEach((color) => {
+        pips[color] += Number(stats.colorSources.pips?.[color]) || 0;
+        sources[color] += Number(stats.colorSources.sources?.[color]) || 0;
+      });
+      return;
+    }
+
     (pack.cards || []).forEach((card) => {
       const quantity = Number(card.quantity) || 1;
 
@@ -922,11 +1044,15 @@ export default function JumpCubeBox({
   function getPackColorIdentity(pack) {
     // Loaded cubes and live-added packs use slightly different property names;
     // cards fallback keeps older summaries displayable.
-    const colors =
-      pack.colorIdentity ||
-      pack.color_identity ||
-      pack.cards?.flatMap((card) => card.color_identity || []) ||
-      [];
+    const stats = getPackCubeStats(pack);
+    const colors = [
+      normalizeColorIdentity(pack.colorIdentity),
+      normalizeColorIdentity(pack.color_identity),
+      normalizeColorIdentity(stats?.colorIdentity),
+      normalizeColorIdentity(
+        pack.cards?.flatMap((card) => card.color_identity || []),
+      ),
+    ].find((candidate) => candidate.length > 0) || [];
 
     return [...new Set(colors)].sort();
   }
@@ -973,7 +1099,9 @@ export default function JumpCubeBox({
     getCubePrimaryPackColorChart(selectedPacks);
   const cubeColorSourceChart = getCubeColorSourceChart(selectedPacks);
   const draftablePackCount = selectedPacks.filter(
-    (pack) => (pack.cards || []).length > 0,
+    (pack) =>
+      (Number(getPackCubeStats(pack)?.cardCount) || Number(pack.cardCount) || 0) >
+        0 || (pack.cards || []).length > 0,
   ).length;
 
   function handlePackContextMenu(event, packId) {

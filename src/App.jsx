@@ -32,6 +32,12 @@ import {
   sanitizeDescription,
   sanitizeTitle,
 } from "./utils/userText";
+import {
+  buildPackCubeStats,
+  normalizeColorIdentity,
+  normalizeColorPercentages,
+  normalizeStoredPackCubeStats,
+} from "./utils/packCubeStats";
 import { copyPublicPack } from "./services/discoveryService";
 import {
   convertArenaDeckToPack,
@@ -143,15 +149,7 @@ function getPackSummary({
    * useUserCubes.buildPackSummary() so loaded cubes and live cubes match.
    */
   const normalizedCards = cards || [];
-  const colorIdentity = [
-    ...new Set(
-      normalizedCards.flatMap((card) => card.color_identity || []),
-    ),
-  ];
-  const cardCount = normalizedCards.reduce(
-    (sum, card) => sum + card.quantity,
-    0,
-  );
+  const cubeStats = buildPackCubeStats(normalizedCards);
 
   return {
     id,
@@ -159,8 +157,10 @@ function getPackSummary({
     description: sanitizeDescription(description),
     archetypeTags: archetypeTags || [],
     visibility: visibility || "private",
-    cardCount,
-    colorIdentity,
+    cardCount: cubeStats.cardCount,
+    colorIdentity: cubeStats.colorIdentity,
+    colorPercentages: cubeStats.colorPercentages,
+    cubeStats,
     formatId: getPackFormat(formatId).id,
     savedPackId: id,
     cards: normalizedCards,
@@ -172,7 +172,47 @@ function isDraftPackName(name) {
 }
 
 function getSavedCardImage(card) {
-  return card?.image_url || card?.image_uris?.art_crop || card?.image_uris?.normal || null;
+  return card?.image_url || card?.image_uris?.normal || card?.image_uris?.small || null;
+}
+
+function getSavedPackCoverImage(pack) {
+  return pack?.coverImageUrl || getSavedCardImage(pack?.cards?.at(-1));
+}
+
+function mergeCubePackWithLibraryRow(packSummary, libraryPack) {
+  if (!libraryPack) return packSummary;
+
+  const summaryStats =
+    normalizeStoredPackCubeStats(packSummary.cubeStats) ||
+    normalizeStoredPackCubeStats(packSummary.cube_stats);
+  const libraryStats = normalizeStoredPackCubeStats(libraryPack.cube_stats);
+  const cubeStats = summaryStats || libraryStats;
+  const colorIdentity = [
+    normalizeColorIdentity(packSummary.colorIdentity),
+    normalizeColorIdentity(packSummary.color_identity),
+    normalizeColorIdentity(summaryStats?.colorIdentity),
+    normalizeColorIdentity(libraryPack.color_identity),
+    normalizeColorIdentity(libraryStats?.colorIdentity),
+  ].find((colors) => colors.length > 0) || [];
+  const colorPercentages =
+    normalizeColorPercentages(packSummary.colorPercentages) ||
+    normalizeColorPercentages(packSummary.color_percentages) ||
+    normalizeColorPercentages(summaryStats?.colorPercentages) ||
+    normalizeColorPercentages(libraryPack.color_percentages) ||
+    normalizeColorPercentages(libraryStats?.colorPercentages) ||
+    {};
+
+  return {
+    ...packSummary,
+    coverImageUrl: packSummary.coverImageUrl || libraryPack.cover_image_url || null,
+    cardCount: cubeStats?.cardCount || packSummary.cardCount,
+    colorIdentity,
+    colorPercentages,
+    cubeStats: cubeStats || packSummary.cubeStats || libraryPack.cube_stats || null,
+    color_identity: colorIdentity,
+    color_percentages: colorPercentages,
+    cube_stats: cubeStats || packSummary.cube_stats || libraryPack.cube_stats || null,
+  };
 }
 
 function App() {
@@ -754,7 +794,7 @@ function App() {
       name: normalizeTitle(cubeName, "Unnamed Cube"),
       description: sanitizeDescription(cubeDescription),
       visibility: cubeVisibility,
-      coverImageUrl: getSavedCardImage(selectedPacks[0]?.cards?.at(-1)),
+      coverImageUrl: getSavedPackCoverImage(selectedPacks[0]),
       packs: selectedPacks,
     });
 
@@ -785,7 +825,10 @@ function App() {
       return;
     }
 
-    const cube = await loadUserCube(cubeId);
+    const [cube, refreshedPacks] = await Promise.all([
+      loadUserCube(cubeId),
+      loadPacks(),
+    ]);
 
     if (!cube) return;
 
@@ -794,15 +837,28 @@ function App() {
     setCubeName(normalizeTitle(cube.name, "Unnamed Cube"));
     setCubeDescription(cube.description || "");
     setCubeVisibility(cube.visibility === "public" ? "public" : "private");
-    setSelectedPacks(cube.packs || []);
+    const libraryPacksById = new Map(
+      (refreshedPacks?.length ? refreshedPacks : packs || []).map((packRow) => [
+        packRow.id,
+        packRow,
+      ]),
+    );
+    const mergedCubePacks = (cube.packs || []).map((cubePack) =>
+      mergeCubePackWithLibraryRow(
+        cubePack,
+        libraryPacksById.get(cubePack.savedPackId || cubePack.id),
+      ),
+    );
+
+    setSelectedPacks(mergedCubePacks);
     lastSavedCubeSnapshotRef.current = getCubeSnapshot(
       cube.name || "Unnamed Cube",
       cube.description || "",
       cube.visibility,
-      cube.packs || [],
+      mergedCubePacks,
     );
     setIsCubeLibraryOpen(false);
-  }, [loadUserCube, user]);
+  }, [loadPacks, loadUserCube, packs, user]);
 
   useEffect(() => {
     if (!user?.id) {

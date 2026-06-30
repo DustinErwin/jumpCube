@@ -917,7 +917,7 @@
 
 .packAnalysisPanel {
   display: grid;
-  grid-template-columns: minmax(240px, 0.8fr) minmax(220px, 1fr) minmax(260px, 1.2fr);
+  grid-template-columns: minmax(240px, 0.8fr) minmax(220px, 1fr) minmax(260px, 1.2fr) minmax(108px, auto);
   gap: 12px;
   align-items: stretch;
   padding: 10px 12px;
@@ -928,20 +928,54 @@
 
 .packAnalysisScores {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
-.packAnalysisScores div,
-.packAnalysisDetails {
+.packAnalysisScores > div,
+.packAnalysisDetails,
+.packAnalysisPrice {
   min-width: 0;
   display: grid;
   gap: 12px;
   align-content: center;
 }
 
-.packAnalysisScores div {
+.packAnalysisScores > div {
   padding: 7px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.22);
+  text-align: center;
+}
+
+.packAnalysisScoreTile {
+  --score-percent: 0%;
+}
+
+.packAnalysisScoreMeter {
+  display: block;
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.packAnalysisScoreMeter i {
+  display: block;
+  width: var(--score-percent);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #5fbf8a, #d6b85d);
+  box-shadow: 0 0 10px rgba(214, 184, 93, 0.24);
+}
+
+.packAnalysisPrice {
+  justify-items: center;
+  padding: 7px 10px;
+  border: 1px solid rgba(214, 184, 93, 0.2);
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.22);
   text-align: center;
@@ -974,6 +1008,11 @@
 }
 
 .packAnalysisScores strong {
+  color: #d6b85d;
+  font-size: 1.05rem;
+}
+
+.packAnalysisPrice strong {
   color: #d6b85d;
   font-size: 1.05rem;
 }
@@ -1186,13 +1225,48 @@
   border-radius: 0;
 }
 
+.packManaCurveHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(82px, auto);
+  align-items: center;
+  gap: 10px;
+}
+
 .packManaCurveTitle {
   margin: 0;
   color: #d5d8dc;
   font-size: 1rem;
   font-weight: 900;
   line-height: 1;
+  text-align: right;
+}
+
+.packManaCurveScore {
+  --score-percent: 0%;
+  min-width: 82px;
+  display: grid;
+  gap: 3px;
+  justify-items: center;
+  padding: 4px 7px;
+  box-sizing: border-box;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.2);
   text-align: center;
+}
+
+.packManaCurveScore span {
+  color: #aeb6c2;
+  font-size: 0.54rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.packManaCurveScore strong {
+  color: #d6b85d;
+  font-size: 0.86rem;
+  line-height: 1;
 }
 
 .packManaCurveLegend {

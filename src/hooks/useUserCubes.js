@@ -4,6 +4,12 @@ import { sanitizeDescription, sanitizeTitle } from "../utils/userText";
 import { hasBlockedContentInFields } from "../utils/contentModeration";
 import { normalizePackTags } from "../utils/packTags";
 import { getPackFormat } from "../utils/packFormats";
+import {
+  buildPackCubeStats,
+  normalizeColorIdentity,
+  normalizeColorPercentages,
+  normalizeStoredPackCubeStats,
+} from "../utils/packCubeStats";
 import { hydrateSavedCardRows } from "../services/cardHydrationService";
 
 /*
@@ -40,10 +46,24 @@ function buildPackSummary(pack, position = 0, hydratedCards = null) {
     variation_id: row.variation_id || null,
     quantity: row.quantity,
   }));
-  const cardCount = cards.reduce((sum, card) => sum + card.quantity, 0);
+  const computedCubeStats = hydratedCards ? buildPackCubeStats(cards) : null;
+  const cubeStats =
+    computedCubeStats || normalizeStoredPackCubeStats(pack.cube_stats);
+  const cardColorIdentity = normalizeColorIdentity(
+    cards.flatMap((card) => card.color_identity || []),
+  );
+  const cardCount =
+    cubeStats?.cardCount ||
+    cards.reduce((sum, card) => sum + card.quantity, 0);
   const colorIdentity = [
-    ...new Set(cards.flatMap((card) => card.color_identity || [])),
-  ];
+    normalizeColorIdentity(cubeStats?.colorIdentity),
+    normalizeColorIdentity(pack.color_identity),
+    cardColorIdentity,
+  ].find((colors) => Array.isArray(colors) && colors.length > 0) || [];
+  const colorPercentages =
+    normalizeColorPercentages(cubeStats?.colorPercentages) ||
+    normalizeColorPercentages(pack.color_percentages) ||
+    {};
 
   return {
     id: pack.id,
@@ -54,14 +74,24 @@ function buildPackSummary(pack, position = 0, hydratedCards = null) {
       pack.packTags || pack.archetype_tags || [],
     ),
     visibility: pack.visibility || "private",
+    coverImageUrl: pack.cover_image_url || null,
     formatId: getPackFormat(pack.format_id).id,
     commanderCardId: pack.commander_card_id || null,
     cardCount,
     colorIdentity,
+    colorPercentages,
+    cubeStats: cubeStats || pack.cube_stats || null,
+    color_identity: colorIdentity,
+    color_percentages: colorPercentages,
+    cube_stats: cubeStats || pack.cube_stats || null,
     cards,
     cardsHydrated: Boolean(hydratedCards),
     position,
   };
+}
+
+function needsPackCubeStatsBackfill(pack) {
+  return !normalizeStoredPackCubeStats(pack?.cube_stats);
 }
 
 async function loadPackTagsByPackId(packIds) {
@@ -99,6 +129,47 @@ async function hydrateCubePackCards(packCards) {
     console.error("Error hydrating cube pack cards from Scryfall:", error);
     return null;
   }
+}
+
+async function savePackCubeStatsCache(packId, stats) {
+  const { error } = await supabase
+    .from("packs")
+    .update({
+      color_identity: stats.colorIdentity,
+      color_percentages: stats.colorPercentages,
+      cube_stats: stats,
+    })
+    .eq("id", packId);
+
+  if (error) {
+    console.error("Error saving pack cube stats cache:", error);
+  }
+}
+
+async function backfillPackCubeStats(pack, position, tagsByPackId) {
+  const hydratedCards = await hydrateCubePackCards(pack.pack_cards || []);
+
+  if (!hydratedCards) {
+    return buildPackSummary(
+      { ...pack, packTags: tagsByPackId.get(pack.id) },
+      position,
+    );
+  }
+
+  const stats = buildPackCubeStats(hydratedCards);
+  await savePackCubeStatsCache(pack.id, stats);
+
+  return buildPackSummary(
+    {
+      ...pack,
+      color_identity: stats.colorIdentity,
+      color_percentages: stats.colorPercentages,
+      cube_stats: stats,
+      packTags: tagsByPackId.get(pack.id),
+    },
+    position,
+    hydratedCards,
+  );
 }
 
 export function useUserCubes(user) {
@@ -216,6 +287,9 @@ export function useUserCubes(user) {
           format_id,
           commander_card_id,
           cover_image_url,
+          color_identity,
+          color_percentages,
+          cube_stats,
           pack_cards (
             card_id,
             card_search_id,
@@ -244,6 +318,10 @@ export function useUserCubes(user) {
         const hydratedCards = hydrateCards
           ? await hydrateCubePackCards(pack.pack_cards || [])
           : null;
+
+        if (!hydrateCards && needsPackCubeStatsBackfill(pack)) {
+          return backfillPackCubeStats(pack, position, tagsByPackId);
+        }
 
         return buildPackSummary(
           { ...pack, packTags: tagsByPackId.get(pack.id) },
@@ -275,23 +353,7 @@ export function useUserCubes(user) {
       .select(
         `
           position,
-          packs (
-            id,
-            name,
-            description,
-            archetype_tags,
-            visibility,
-            format_id,
-            commander_card_id,
-            pack_cards (
-              card_id,
-              card_search_id,
-              variant_id,
-              quantity,
-              oracle_id,
-              variation_id
-            )
-          )
+          pack_id
         `,
       )
       .eq("cube_id", cubeId)
@@ -302,27 +364,17 @@ export function useUserCubes(user) {
       return null;
     }
 
-    const tagsByPackId = await loadPackTagsByPackId(
-      (cubePacks || []).map((row) => row.packs?.id),
-    );
-
-    const loadedPacks = (cubePacks || [])
-      .filter((row) => row.packs)
-      .map((row) =>
-        buildPackSummary(
-          {
-            ...row.packs,
-            packTags: tagsByPackId.get(row.packs.id),
-          },
-          row.position,
-        ),
-    );
+    const orderedPackIds = (cubePacks || [])
+      .sort((rowA, rowB) => rowA.position - rowB.position)
+      .map((row) => row.pack_id)
+      .filter(Boolean);
+    const loadedPacks = await loadPackSummaries(orderedPackIds);
 
     return {
       ...cube,
       packs: loadedPacks,
     };
-  }, []);
+  }, [loadPackSummaries]);
 
   async function deleteCube(cubeId) {
     // Deletes only the cube. Packs remain in the user's pack library.

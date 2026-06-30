@@ -17,6 +17,10 @@ import {
   getPackFormat,
   PACK_FORMATS,
 } from "../utils/packFormats";
+import {
+  buildPackCubeStats,
+  normalizeStoredPackCubeStats,
+} from "../utils/packCubeStats";
 import { hydrateSavedCardRows } from "../services/cardHydrationService";
 
 /*
@@ -162,8 +166,10 @@ function getPackCoverImage(cards) {
 
   return (
     topCard?.image_url ||
-    topCard?.image_uris?.art_crop ||
     topCard?.image_uris?.normal ||
+    topCard?.image_uris?.small ||
+    topCard?.card_faces?.[0]?.image_uris?.normal ||
+    topCard?.card_faces?.[0]?.image_uris?.small ||
     null
   );
 }
@@ -173,7 +179,11 @@ function isMissingPackFormatColumnError(error) {
 
   return (
     error?.code === "PGRST204" &&
-    (message.includes("format_id") || message.includes("commander_card_id"))
+    (message.includes("format_id") ||
+      message.includes("commander_card_id") ||
+      message.includes("color_identity") ||
+      message.includes("color_percentages") ||
+      message.includes("cube_stats"))
   );
 }
 
@@ -181,6 +191,23 @@ function getPackFormatMigrationMessage(error) {
   if (!isMissingPackFormatColumnError(error)) return null;
 
   return "Pack formats need the latest database migration. Run 202606260002_add_pack_format_identity.sql, then refresh Supabase's schema cache if needed.";
+}
+
+function getPackCubeStatsMigrationMessage(error) {
+  const message = String(error?.message || error?.details || "");
+
+  if (
+    error?.code !== "PGRST204" ||
+    !(
+      message.includes("color_identity") ||
+      message.includes("color_percentages") ||
+      message.includes("cube_stats")
+    )
+  ) {
+    return null;
+  }
+
+  return "Pack cube stats need the latest database migration. Run 202606300001_add_pack_cube_stats_cache.sql, then refresh Supabase's schema cache if needed.";
 }
 
 function getPackCardSaveMigrationMessage(error) {
@@ -504,6 +531,9 @@ export function usePackBuilder(user, refreshPacks, {
       quantity: row.quantity,
       manualMechanicBucket: row.manual_mechanic_bucket || null,
     }));
+    const packCubeStats =
+      normalizeStoredPackCubeStats(pack.cube_stats) ||
+      buildPackCubeStats(selectedPackCards);
 
     setIsPackActive(true);
     setPackName(normalizePackName(pack.name, DRAFT_PACK_NAME));
@@ -541,15 +571,14 @@ export function usePackBuilder(user, refreshPacks, {
       name: normalizePackName(pack.name, DRAFT_PACK_NAME),
       description: sanitizeDescription(pack.description),
       archetypeTags: normalizeArchetypeTags(loadedTags),
+      coverImageUrl: pack.cover_image_url || getPackCoverImage(selectedPackCards),
       visibility: normalizeVisibility(pack.visibility),
       formatId: loadedFormatId,
       commanderCardId: loadedCommanderCardId,
       cardCount: getPackCardCount(selectedPackCards),
-      colorIdentity: [
-        ...new Set(
-          selectedPackCards.flatMap((card) => card.color_identity || []),
-        ),
-      ],
+      colorIdentity: pack.color_identity || packCubeStats.colorIdentity,
+      colorPercentages: pack.color_percentages || packCubeStats.colorPercentages,
+      cubeStats: packCubeStats,
       cards: selectedPackCards,
       cardsHydrated: true,
     };
@@ -724,6 +753,7 @@ export function usePackBuilder(user, refreshPacks, {
 
     const cardsToSave = cardsOverride || selectedCards;
     const packFormat = getPackFormat(packFormatId);
+    const packCubeStats = buildPackCubeStats(cardsToSave);
 
     if (packFormat.commanderSlot && !cardsToSave.some(isCommanderEligible)) {
       setSaveErrorMessage("Commander packs need one eligible commander.");
@@ -777,6 +807,9 @@ export function usePackBuilder(user, refreshPacks, {
           visibility: normalizeVisibility(packVisibility),
           format_id: packFormat.id,
           commander_card_id: commanderCardId,
+          color_identity: packCubeStats.colorIdentity,
+          color_percentages: packCubeStats.colorPercentages,
+          cube_stats: packCubeStats,
           user_id: user.id,
         })
         .select()
@@ -785,6 +818,7 @@ export function usePackBuilder(user, refreshPacks, {
       if (packError) {
         console.error("Error saving pack:", packError);
         setSaveErrorMessage(
+          getPackCubeStatsMigrationMessage(packError) ||
           getPackFormatMigrationMessage(packError) ||
             packError.message ||
             "Pack could not be saved.",
@@ -807,12 +841,16 @@ export function usePackBuilder(user, refreshPacks, {
           visibility: normalizeVisibility(packVisibility),
           format_id: packFormat.id,
           commander_card_id: commanderCardId,
+          color_identity: packCubeStats.colorIdentity,
+          color_percentages: packCubeStats.colorPercentages,
+          cube_stats: packCubeStats,
         })
         .eq("id", actualPackId);
 
       if (updateError) {
         console.error("Error updating pack:", updateError);
         setSaveErrorMessage(
+          getPackCubeStatsMigrationMessage(updateError) ||
           getPackFormatMigrationMessage(updateError) ||
             updateError.message ||
             "Pack could not be updated.",
@@ -883,6 +921,10 @@ export function usePackBuilder(user, refreshPacks, {
       visibility: normalizeVisibility(packVisibility),
       formatId: packFormat.id,
       commanderCardId,
+      cardCount: packCubeStats.cardCount,
+      colorIdentity: packCubeStats.colorIdentity,
+      colorPercentages: packCubeStats.colorPercentages,
+      cubeStats: packCubeStats,
       cards: cardsToSave,
     });
     setSaveStatus("saved");
@@ -946,6 +988,9 @@ export function usePackBuilder(user, refreshPacks, {
         cover_image_url: originalPack.cover_image_url || null,
         format_id: getPackFormat(originalPack.format_id).id,
         commander_card_id: originalPack.commander_card_id || null,
+        color_identity: originalPack.color_identity || [],
+        color_percentages: originalPack.color_percentages || {},
+        cube_stats: originalPack.cube_stats || {},
         user_id: user.id,
       })
       .select()

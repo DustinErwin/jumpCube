@@ -39,8 +39,12 @@ function normalizePackForStats(pack) {
     archetypeTags: pack.archetypeTags || pack.tags || [],
     colorIdentity:
       pack.colorIdentity ||
+      pack.cubeStats?.colorIdentity ||
       pack.cards?.flatMap((card) => card.color_identity || []) ||
       [],
+    colorPercentages:
+      pack.colorPercentages || pack.cubeStats?.colorPercentages || {},
+    cubeStats: pack.cubeStats || null,
   };
 }
 
