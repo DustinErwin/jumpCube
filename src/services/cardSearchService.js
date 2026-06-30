@@ -26,7 +26,6 @@ function getSearchScopeQuery(search, searchScopes = {}) {
   }).filter(([scope]) => searchScopes[scope] !== false);
 
   if (scopes.length === 0) return "!" + quoteScryfallValue("__NO_MATCH__");
-  if (scopes.length === 3) return trimmedSearch;
 
   return `(${scopes
     .map(([, operator]) => `${operator}:${quoteScryfallValue(trimmedSearch)}`)

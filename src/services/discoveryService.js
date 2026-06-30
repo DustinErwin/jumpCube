@@ -60,6 +60,60 @@ async function hydratePublicPacks(packs) {
   }));
 }
 
+async function summarizePublicPacks(packs) {
+  const packIds = packs.map((pack) => pack.id);
+  const userIds = [...new Set(packs.map((pack) => pack.user_id).filter(Boolean))];
+
+  const [cardRowsResult, tagRowsResult, profilesResult] = await Promise.all([
+    packIds.length
+      ? supabase
+          .from("pack_cards")
+          .select("pack_id, quantity")
+          .in("pack_id", packIds)
+      : Promise.resolve({ data: [], error: null }),
+    packIds.length
+      ? supabase
+          .from("pack_tags")
+          .select("pack_id, tag:tags(id, name, normalized_name, color, usage_count)")
+          .in("pack_id", packIds)
+      : Promise.resolve({ data: [], error: null }),
+    userIds.length
+      ? supabase.rpc("get_public_usernames", { requested_user_ids: userIds })
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (cardRowsResult.error) throw cardRowsResult.error;
+  if (tagRowsResult.error) throw tagRowsResult.error;
+  if (profilesResult.error) throw profilesResult.error;
+
+  const cardCountsByPack = new Map();
+  const profiles = new Map((profilesResult.data || []).map((profile) => [profile.id, profile.username]));
+  const tagsByPack = new Map();
+
+  (cardRowsResult.data || []).forEach((row) => {
+    cardCountsByPack.set(
+      row.pack_id,
+      (cardCountsByPack.get(row.pack_id) || 0) + (row.quantity || 1),
+    );
+  });
+
+  (tagRowsResult.data || []).forEach((row) => {
+    tagsByPack.set(row.pack_id, [...(tagsByPack.get(row.pack_id) || []), row.tag]);
+  });
+
+  return packs.map((pack) => ({
+    ...pack,
+    type: "pack",
+    ownerName: profiles.get(pack.user_id) || "Jump Cube user",
+    cardCount: cardCountsByPack.get(pack.id) || 0,
+    imageUrl: pack.cover_image_url || null,
+    formatId: getPackFormat(pack.format_id).id,
+    commanderCardId: pack.commander_card_id || null,
+    tags: normalizePackTags(tagsByPack.get(pack.id) || pack.archetype_tags || []),
+    cards: [],
+  }));
+}
+
 export async function loadPublicLibrary() {
   const [packsResult, cubesResult] = await Promise.all([
     supabase
@@ -106,10 +160,10 @@ export async function loadPublicLibrary() {
 
   if (missingPacksError) throw missingPacksError;
 
-  const allHydratedPacks = await hydratePublicPacks([...listedPacks, ...(missingPacks || [])]);
-  const packs = allHydratedPacks.filter((pack) => listedPackIds.has(pack.id));
+  const allPackSummaries = await summarizePublicPacks([...listedPacks, ...(missingPacks || [])]);
+  const packs = allPackSummaries.filter((pack) => listedPackIds.has(pack.id));
 
-  const packById = new Map(allHydratedPacks.map((pack) => [pack.id, pack]));
+  const packById = new Map(allPackSummaries.map((pack) => [pack.id, pack]));
   const ownerIds = [...new Set((cubesResult.data || []).map((cube) => cube.user_id).filter(Boolean))];
   const { data: cubeOwners } = ownerIds.length
     ? await supabase.rpc("get_public_usernames", { requested_user_ids: ownerIds })

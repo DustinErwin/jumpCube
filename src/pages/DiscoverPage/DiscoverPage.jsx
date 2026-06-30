@@ -60,29 +60,65 @@ export default function DiscoverPage({ user, onAuthRequired, onLibraryChanged })
   const [library, setLibrary] = useState({ packs: [], cubes: [] });
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copyStates, setCopyStates] = useState({});
+  const [hasLoadedLibrary, setHasLoadedLibrary] = useState(false);
+
+  function handleSearchChange(event) {
+    const nextSearch = event.target.value;
+
+    setSearch(nextSearch);
+
+    if (!nextSearch.trim()) {
+      setLoading(false);
+      setError("");
+      setLibrary({ packs: [], cubes: [] });
+      setHasLoadedLibrary(false);
+    }
+  }
 
   useEffect(() => {
     let active = true;
+    const query = search.trim();
 
-    loadPublicLibrary()
-      .then((result) => {
-        if (active) setLibrary(result);
-      })
-      .catch((loadError) => {
-        console.error("Error loading public library:", loadError);
-        if (active) setError(loadError.message || "The public library could not be loaded.");
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+    if (!query) {
+      return () => {
+        active = false;
+      };
+    }
+
+    if (hasLoadedLibrary) {
+      return () => {
+        active = false;
+      };
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setLoading(true);
+      setError("");
+
+      loadPublicLibrary()
+        .then((result) => {
+          if (active) {
+            setLibrary(result);
+            setHasLoadedLibrary(true);
+          }
+        })
+        .catch((loadError) => {
+          console.error("Error loading public library:", loadError);
+          if (active) setError(loadError.message || "The public library could not be loaded.");
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }, 300);
 
     return () => {
       active = false;
+      window.clearTimeout(timeoutId);
     };
-  }, []);
+  }, [hasLoadedLibrary, search]);
 
   const items = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -147,7 +183,7 @@ export default function DiscoverPage({ user, onAuthRequired, onLibraryChanged })
         <input
           type="search"
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={handleSearchChange}
           placeholder="Search names, creators, descriptions, or tags"
         />
         <div className="discoverFilters">
@@ -169,9 +205,11 @@ export default function DiscoverPage({ user, onAuthRequired, onLibraryChanged })
       </section>
 
       {error && <p className="discoverError" role="alert">{error}</p>}
-      {loading ? (
+      {!search.trim() ? (
+        <p className="discoverStatus">Search to browse public packs and cubes.</p>
+      ) : loading ? (
         <p className="discoverStatus">Loading the community library...</p>
-      ) : items.length === 0 ? (
+      ) : hasLoadedLibrary && items.length === 0 ? (
         <p className="discoverStatus">No public packs or cubes match that search.</p>
       ) : (
         <section className="discoveryGrid" aria-label="Public packs and cubes">
