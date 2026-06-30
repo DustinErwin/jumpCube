@@ -534,6 +534,25 @@ export function usePackBuilder(user, refreshPacks, {
       loadedFormatId,
       loadedCommanderCardId,
     );
+
+    return {
+      id: pack.id,
+      savedPackId: pack.id,
+      name: normalizePackName(pack.name, DRAFT_PACK_NAME),
+      description: sanitizeDescription(pack.description),
+      archetypeTags: normalizeArchetypeTags(loadedTags),
+      visibility: normalizeVisibility(pack.visibility),
+      formatId: loadedFormatId,
+      commanderCardId: loadedCommanderCardId,
+      cardCount: getPackCardCount(selectedPackCards),
+      colorIdentity: [
+        ...new Set(
+          selectedPackCards.flatMap((card) => card.color_identity || []),
+        ),
+      ],
+      cards: selectedPackCards,
+      cardsHydrated: true,
+    };
   }, []);
 
   function decreaseCardQuantity(cardId) {

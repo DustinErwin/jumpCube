@@ -348,6 +348,109 @@
   white-space: pre-wrap;
 }
 
+.cardOracleManaSymbol {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 0.08em;
+  vertical-align: -0.12em;
+  font-size: 0.98em;
+  line-height: 1;
+}
+
+.cardOracleHybridBadge {
+  position: relative;
+  display: inline-block;
+  width: 1.18em;
+  height: 1.18em;
+  margin: 0 0.11em;
+  border-radius: 50%;
+  background: linear-gradient(
+    135deg,
+    var(--hybrid-top) 0%,
+    var(--hybrid-top) 50%,
+    var(--hybrid-bottom) 50%,
+    var(--hybrid-bottom) 100%
+  );
+  box-shadow:
+    inset 0 0 0 0.08em rgba(30, 30, 30, 0.65),
+    0 0.03em 0.08em rgba(0, 0, 0, 0.35);
+  vertical-align: -0.2em;
+}
+
+.cardOracleHybridTop,
+.cardOracleHybridBottom {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 0.5em;
+  height: 0.5em;
+  color: #1e1e1e;
+  font-size: 0.66em;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 0 0.02em rgba(255, 255, 255, 0.5);
+}
+
+.cardOracleHybridTop {
+  top: 0.04em;
+  left: 0.12em;
+  transform: translate(0.08em, 0.08em);
+}
+
+.cardOracleHybridBottom {
+  right: 0.1em;
+  bottom: 0.04em;
+  transform: translate(-0.4em, -0.4em);
+}
+
+.cardOracleHybridTop .ms,
+.cardOracleHybridBottom .ms {
+  font-size: 0.82em;
+  line-height: 1;
+}
+
+.cardOraclePhyrexianBadge {
+  position: relative;
+  display: inline-block;
+  width: 1.18em;
+  height: 1.18em;
+  margin: 0 0.1em;
+  border-radius: 50%;
+  background: var(--phyrexian-color);
+  box-shadow:
+    inset 0 0 0 0.08em rgba(30, 30, 30, 0.65),
+    0 0.03em 0.08em rgba(0, 0, 0, 0.35);
+  vertical-align: -0.2em;
+}
+
+.cardOraclePhyrexianColor,
+.cardOraclePhyrexianMark {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  color: #1e1e1e;
+  line-height: 1;
+  transform: translateY(0.12em);
+}
+
+.cardOraclePhyrexianColor::before,
+.cardOraclePhyrexianMark::before {
+  transform: translateY(0.12em);
+}
+
+.cardOraclePhyrexianColor {
+  top: 0.04em;
+  left: 0.08em;
+  font-size: 0.62em;
+}
+
+.cardOraclePhyrexianMark {
+  right: 0.08em;
+  bottom: 0.02em;
+  font-size: 0.7em;
+}
+
 .cardLegalities h3 {
   margin: 0 0 5px;
   font-size: 13px;

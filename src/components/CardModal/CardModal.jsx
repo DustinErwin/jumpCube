@@ -45,6 +45,53 @@ const SCRYFALL_FORMATS = [
   { key: "tlr", label: "TLR" },
   { key: "vintage", label: "Vintage" },
 ];
+const MANA_COLOR_ORDER = ["W", "U", "B", "R", "G"];
+const HYBRID_CLASS_BY_COLORS = {
+  WU: "wu",
+  WB: "wb",
+  UB: "ub",
+  UR: "ur",
+  BR: "br",
+  BG: "bg",
+  RG: "rg",
+  WG: "gw",
+  WR: "rw",
+  UG: "gu",
+};
+const SPECIAL_MANA_SYMBOL_CLASSES = {
+  T: "tap",
+  Q: "untap",
+  E: "e",
+  TK: "tk",
+  CHAOS: "chaos",
+  PW: "planeswalker",
+  A: "acorn",
+  S: "s-mtga",
+  P: "p",
+  X: "x",
+  Y: "y",
+  Z: "z",
+  "∞": "infinity",
+  INFINITY: "infinity",
+  "1/2": "1-2",
+  "½": "half",
+};
+const HYBRID_MANA_SYMBOL_CLASSES = new Set([
+  ...Object.values(HYBRID_CLASS_BY_COLORS),
+  ...MANA_COLOR_ORDER.map((color) => `2${color.toLowerCase()}`),
+  ...MANA_COLOR_ORDER.map((color) => `c${color.toLowerCase()}`),
+  ...Object.values(HYBRID_CLASS_BY_COLORS).map((symbolClass) => `${symbolClass}p`),
+]);
+const HYBRID_PART_BACKGROUNDS = {
+  W: "#f0f2c0",
+  U: "#b5cde3",
+  B: "#aca29a",
+  R: "#db8664",
+  G: "#93b483",
+  C: "#d0d2d4",
+  2: "#d6d6d6",
+  P: "#d6d6d6",
+};
 
 function getImage(card) {
   return (
@@ -145,6 +192,191 @@ function getOracleText(card, showBack = false) {
     .map((face) => face.oracle_text)
     .filter(Boolean)
     .join("\n\n");
+}
+
+function getHybridClass(parts) {
+  const colorParts = parts.filter((part) => MANA_COLOR_ORDER.includes(part));
+  const hasTwo = parts.includes("2");
+  const hasColorless = parts.includes("C");
+  const hasPhyrexian = parts.includes("P");
+
+  if (colorParts.length === 1 && hasTwo) {
+    return `2${colorParts[0].toLowerCase()}`;
+  }
+  if (colorParts.length === 1 && hasColorless) {
+    return `c${colorParts[0].toLowerCase()}`;
+  }
+  if (colorParts.length === 1 && hasPhyrexian) {
+    return `${colorParts[0].toLowerCase()}p`;
+  }
+
+  if (colorParts.length === 2) {
+    const colorKey = [...colorParts]
+      .sort(
+        (colorA, colorB) =>
+          MANA_COLOR_ORDER.indexOf(colorA) - MANA_COLOR_ORDER.indexOf(colorB),
+      )
+      .join("");
+    const baseClass = HYBRID_CLASS_BY_COLORS[colorKey];
+
+    if (!baseClass) return "";
+
+    return hasPhyrexian ? `${baseClass}p` : baseClass;
+  }
+
+  return "";
+}
+
+function getManaSymbolClass(symbol) {
+  const normalizedSymbol = String(symbol || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "");
+
+  if (!normalizedSymbol) return "";
+  if (SPECIAL_MANA_SYMBOL_CLASSES[normalizedSymbol]) {
+    return SPECIAL_MANA_SYMBOL_CLASSES[normalizedSymbol];
+  }
+  if (/^\d+$/.test(normalizedSymbol)) return normalizedSymbol;
+  if (/^\d+X$/.test(normalizedSymbol)) return normalizedSymbol.toLowerCase();
+  if (/^[WUBRGC]$/.test(normalizedSymbol)) {
+    return normalizedSymbol.toLowerCase();
+  }
+  if (normalizedSymbol.includes("/")) {
+    return getHybridClass(normalizedSymbol.split("/"));
+  }
+
+  return normalizedSymbol.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+}
+
+function getHybridSymbolDetails(symbol) {
+  const parts = String(symbol || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .split("/");
+
+  if (parts.length !== 2) return null;
+
+  const symbolClass = getHybridClass(parts);
+
+  if (!symbolClass) return null;
+
+  return {
+    symbolClass,
+    topPart: parts[0],
+    bottomPart: parts[1],
+  };
+}
+
+function getSinglePhyrexianSymbolDetails(symbol) {
+  const parts = String(symbol || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .split("/");
+
+  if (parts.length !== 2 || !parts.includes("P")) return null;
+
+  const colorPart = parts.find((part) => MANA_COLOR_ORDER.includes(part));
+
+  if (!colorPart) return null;
+
+  return { colorPart };
+}
+
+function getHybridPartContent(part) {
+  if (MANA_COLOR_ORDER.includes(part) || part === "C" || part === "P") {
+    return <i aria-hidden="true" className={`ms ms-${part.toLowerCase()}`} />;
+  }
+
+  return <span aria-hidden="true">{part}</span>;
+}
+
+function renderTextWithManaSymbols(text, keyPrefix, {
+  useCompleatedPhyrexianBadge = false,
+} = {}) {
+  return String(text)
+    .split(/(\{[^}]+\})/g)
+    .filter((part) => part !== "")
+    .map((part, index) => {
+      const symbolMatch = part.match(/^\{([^}]+)\}$/);
+
+      if (!symbolMatch) return part;
+
+      const symbol = symbolMatch[1];
+      const compleatedPhyrexianDetails = useCompleatedPhyrexianBadge
+        ? getSinglePhyrexianSymbolDetails(symbol)
+        : null;
+
+      if (compleatedPhyrexianDetails) {
+        const { colorPart } = compleatedPhyrexianDetails;
+
+        return (
+          <span
+            aria-label={symbol}
+            className="cardOraclePhyrexianBadge"
+            key={`${keyPrefix}:${index}:${symbol}`}
+            style={{
+              "--phyrexian-color":
+                HYBRID_PART_BACKGROUNDS[colorPart] || "#d6d6d6",
+            }}
+            title={symbol}
+          >
+            <i
+              aria-hidden="true"
+              className={`ms ms-${colorPart.toLowerCase()} cardOraclePhyrexianColor`}
+            />
+            <i
+              aria-hidden="true"
+              className="ms ms-p cardOraclePhyrexianMark"
+            />
+          </span>
+        );
+      }
+
+      const symbolClass = getManaSymbolClass(symbol);
+
+      if (!symbolClass) return part;
+
+      const hybridSymbolDetails = HYBRID_MANA_SYMBOL_CLASSES.has(symbolClass)
+        ? getHybridSymbolDetails(symbol)
+        : null;
+
+      if (hybridSymbolDetails) {
+        const { topPart, bottomPart } = hybridSymbolDetails;
+
+        return (
+          <span
+            aria-label={symbol}
+            className="cardOracleHybridBadge"
+            key={`${keyPrefix}:${index}:${symbol}`}
+            style={{
+              "--hybrid-top": HYBRID_PART_BACKGROUNDS[topPart] || "#d6d6d6",
+              "--hybrid-bottom":
+                HYBRID_PART_BACKGROUNDS[bottomPart] || "#d6d6d6",
+            }}
+            title={symbol}
+          >
+            <span className="cardOracleHybridTop">
+              {getHybridPartContent(topPart)}
+            </span>
+            <span className="cardOracleHybridBottom">
+              {getHybridPartContent(bottomPart)}
+            </span>
+          </span>
+        );
+      }
+
+      return (
+        <i
+          aria-label={symbol}
+          className={`ms ms-cost ms-${symbolClass} cardOracleManaSymbol`}
+          key={`${keyPrefix}:${index}:${symbol}`}
+          title={symbol}
+        />
+      );
+    });
 }
 
 function getVersionLabel(card) {
@@ -594,7 +826,13 @@ export default function CardModal({
           {oracleText && (
             <div className="cardOracleText">
               {oracleText.split("\n").map((line, index) => (
-                <p key={`${line}:${index}`}>{line || "\u00a0"}</p>
+                <p key={`${line}:${index}`}>
+                  {line
+                    ? renderTextWithManaSymbols(line, `oracle:${index}`, {
+                        useCompleatedPhyrexianBadge: /\bcompleated\b/i.test(line),
+                      })
+                    : "\u00a0"}
+                </p>
               ))}
             </div>
           )}

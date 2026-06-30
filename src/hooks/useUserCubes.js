@@ -59,6 +59,7 @@ function buildPackSummary(pack, position = 0, hydratedCards = null) {
     cardCount,
     colorIdentity,
     cards,
+    cardsHydrated: Boolean(hydratedCards),
     position,
   };
 }
@@ -195,7 +196,10 @@ export function useUserCubes(user) {
     return actualCubeId;
   }, [loadCubes, user]);
 
-  const loadPackSummaries = useCallback(async function loadPackSummaries(packIds) {
+  const loadPackSummaries = useCallback(async function loadPackSummaries(
+    packIds,
+    { hydrateCards = false } = {},
+  ) {
     const uniquePackIds = [...new Set((packIds || []).filter(Boolean))];
 
     if (uniquePackIds.length === 0) return [];
@@ -231,13 +235,16 @@ export function useUserCubes(user) {
 
     const packsById = new Map((packRows || []).map((pack) => [pack.id, pack]));
     const tagsByPackId = await loadPackTagsByPackId(uniquePackIds);
-    const hydratedPacks = await Promise.all(
+    const loadedPacks = await Promise.all(
       uniquePackIds.map(async (packId, position) => {
         const pack = packsById.get(packId);
 
         if (!pack) return null;
 
-        const hydratedCards = await hydrateCubePackCards(pack.pack_cards || []);
+        const hydratedCards = hydrateCards
+          ? await hydrateCubePackCards(pack.pack_cards || [])
+          : null;
+
         return buildPackSummary(
           { ...pack, packTags: tagsByPackId.get(pack.id) },
           position,
@@ -246,11 +253,12 @@ export function useUserCubes(user) {
       }),
     );
 
-    return hydratedPacks.filter(Boolean);
+    return loadedPacks.filter(Boolean);
   }, []);
 
   const loadCube = useCallback(async function loadCube(cubeId) {
-    // Hydrates one cube with its packs and cards for opening in JumpCubeBox.
+    // Loads one cube with lightweight pack summaries. Individual pack cards
+    // hydrate lazily only when a pack is opened or a print workflow needs them.
     const { data: cube, error: cubeError } = await supabase
       .from("cubes")
       .select("*")
@@ -298,28 +306,21 @@ export function useUserCubes(user) {
       (cubePacks || []).map((row) => row.packs?.id),
     );
 
-    const hydratedPacks = await Promise.all(
-      (cubePacks || [])
-        .filter((row) => row.packs)
-        .map(async (row) => {
-          const hydratedCards = await hydrateCubePackCards(
-            row.packs.pack_cards || [],
-          );
-
-          return buildPackSummary(
-            {
-              ...row.packs,
-              packTags: tagsByPackId.get(row.packs.id),
-            },
-            row.position,
-            hydratedCards,
-          );
-        }),
+    const loadedPacks = (cubePacks || [])
+      .filter((row) => row.packs)
+      .map((row) =>
+        buildPackSummary(
+          {
+            ...row.packs,
+            packTags: tagsByPackId.get(row.packs.id),
+          },
+          row.position,
+        ),
     );
 
     return {
       ...cube,
-      packs: hydratedPacks,
+      packs: loadedPacks,
     };
   }, []);
 

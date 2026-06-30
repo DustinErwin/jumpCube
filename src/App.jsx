@@ -382,6 +382,10 @@ function App() {
       return undefined;
     }
 
+    if (location.pathname !== "/create") {
+      return undefined;
+    }
+
     if (
       !packsLoaded ||
       packsLoadedUserId !== user.id ||
@@ -412,6 +416,7 @@ function App() {
   }, [
     clearActivePack,
     loadActivePack,
+    location.pathname,
     packs,
     packsLoaded,
     packsLoadedUserId,
@@ -430,7 +435,9 @@ function App() {
         return;
       }
 
-      const packSummaries = await loadPackSummaries(packIds);
+      const packSummaries = await loadPackSummaries(packIds, {
+        hydrateCards: true,
+      });
 
       if (isCurrent) {
         setPrintableSavedPacks(packSummaries);
@@ -651,14 +658,24 @@ function App() {
       (selectedPack) =>
         String(selectedPack.savedPackId || selectedPack.id) === String(packId),
     );
-    const hasHydratedCubePackCards = (cubePack?.cards || []).some(
-      (card) => card?.name || card?.image_url || card?.scryfall_id,
-    );
+    const hasHydratedCubePackCards = Boolean(cubePack?.cardsHydrated);
 
     if (hasHydratedCubePackCards) {
       pack.openSavedPackFromSummary(cubePack);
     } else {
-      await pack.loadPack(packId);
+      const hydratedPack = await pack.loadPack(packId);
+
+      if (hydratedPack) {
+        setSelectedPacks((currentPacks) =>
+          currentPacks.map((selectedPack) => {
+            const selectedPackId = selectedPack.savedPackId || selectedPack.id;
+
+            return String(selectedPackId) === String(packId)
+              ? { ...selectedPack, ...hydratedPack }
+              : selectedPack;
+          }),
+        );
+      }
     }
     setIsPackBoxOpen(true);
 
@@ -793,6 +810,10 @@ function App() {
       return undefined;
     }
 
+    if (location.pathname !== "/create") {
+      return undefined;
+    }
+
     if (
       !userCubes.cubesLoaded ||
       userCubes.cubesLoadedUserId !== user.id ||
@@ -822,6 +843,7 @@ function App() {
     };
   }, [
     clearActiveCube,
+    location.pathname,
     openCube,
     user,
     userCubes.cubes,
