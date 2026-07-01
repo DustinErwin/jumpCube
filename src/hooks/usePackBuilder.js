@@ -213,6 +213,13 @@ function getPackCubeStatsMigrationMessage(error) {
 function getPackCardSaveMigrationMessage(error) {
   const message = String(error?.message || "");
 
+  if (
+    error?.code === "42883" ||
+    message.includes("replace_pack_cards")
+  ) {
+    return "Pack saving needs the latest database migration. Run 202607010001_replace_pack_cards_transaction.sql so card replacements are saved atomically.";
+  }
+
   if (!message.includes("Pack cannot contain more than 20 cards")) return null;
 
   return "Commander packs need the latest pack format migration. Run 202606260002_add_pack_format_identity.sql so the database allows 30-card Commander packs.";
@@ -794,6 +801,7 @@ export function usePackBuilder(user, refreshPacks, {
     setSaveErrorMessage("");
 
     let actualPackId = packId;
+    const isNewPackSave = !actualPackId;
 
     if (!actualPackId) {
       // First save creates the packs row and stores user ownership for RLS.
@@ -861,7 +869,6 @@ export function usePackBuilder(user, refreshPacks, {
     }
 
     const packCards = cardsToSave.map((card) => ({
-      pack_id: actualPackId,
       card_id: null,
       card_search_id: null,
       variant_id: null,
@@ -871,32 +878,22 @@ export function usePackBuilder(user, refreshPacks, {
       manual_mechanic_bucket: card.manualMechanicBucket || null,
     }));
 
-    const { error: deleteCardsError } = await supabase
-      .from("pack_cards")
-      .delete()
-      .eq("pack_id", actualPackId);
+    const { error: cardsError } = await supabase.rpc("replace_pack_cards", {
+      requested_pack_id: actualPackId,
+      requested_cards: packCards,
+    });
 
-    if (deleteCardsError) {
-      console.error("Error clearing pack cards:", deleteCardsError);
-      setSaveErrorMessage("Pack cards could not be updated.");
+    if (cardsError) {
+      console.error("Error saving pack cards:", cardsError);
+      if (isNewPackSave) {
+        await supabase.from("packs").delete().eq("id", actualPackId);
+      }
+      setSaveErrorMessage(
+        getPackCardSaveMigrationMessage(cardsError) ||
+          "Pack cards could not be saved.",
+      );
       setSaveStatus("error");
       return null;
-    }
-
-    if (packCards.length > 0) {
-      const { error: cardsError } = await supabase
-        .from("pack_cards")
-        .insert(packCards);
-
-      if (cardsError) {
-        console.error("Error saving pack cards:", cardsError);
-        setSaveErrorMessage(
-          getPackCardSaveMigrationMessage(cardsError) ||
-            "Pack cards could not be saved.",
-        );
-        setSaveStatus("error");
-        return null;
-      }
     }
 
     try {
